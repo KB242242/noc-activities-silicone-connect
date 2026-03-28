@@ -1,0 +1,300 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// User model with role-based access
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String
+  firstName     String?  @map("first_name")
+  lastName      String?  @map("last_name")
+  role          Role     @default(AGENT)
+  shiftId       String?  @map("shift_id")
+  avatar        String?
+  isActive      Boolean  @default(true) @map("is_active")
+  lastActiveAt  DateTime? @map("last_active_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  
+  shift         Shift?         @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+  activities    Activity[]
+  overtimes     Overtime[]
+  responsibilities Responsibility[]
+  individualRests IndividualRest[]
+  dayAssignments DayAssignment[]
+  tasks         Task[]
+  graphSchedules GraphSchedule[]
+  handovers     Handover[]
+  
+  @@index([email])
+  @@map("users")
+}
+
+enum Role {
+  ADMIN
+  SUPERVISOR
+  AGENT
+}
+
+// Shift model (A, B, C)
+model Shift {
+  id          String   @id @default(cuid())
+  name        String   @unique // "A", "B", "C"
+  color       String   // "blue", "yellow", "green"
+  colorCode   String   @map("color_code") // Hex color code
+  description String?
+  members     User[]
+  cycles      ShiftCycle[]
+  
+  @@map("shifts")
+}
+
+// Shift Cycle - represents a work period (6 work days + 3 rest days)
+model ShiftCycle {
+  id            String   @id @default(cuid())
+  shiftId       String   @map("shift_id")
+  startDate     DateTime @map("start_date")
+  endDate       DateTime @map("end_date")
+  cycleNumber   Int      @map("cycle_number") // Sequential cycle number
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at")
+  
+  shift         Shift         @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  workDays      WorkDay[]
+  individualRests IndividualRest[]
+  
+  @@index([shiftId, startDate])
+  @@map("shift_cycles")
+}
+
+// Work Day - each day within a cycle
+model WorkDay {
+  id            String     @id @default(cuid())
+  cycleId       String     @map("cycle_id")
+  date          DateTime
+  dayType       DayType    @map("day_type")
+  startHour     Int        @map("start_hour") // 7 or 19
+  endHour       Int        @map("end_hour") // 19 or 7
+  dayNumber     Int        @map("day_number") // 1-6 within the cycle (work days only)
+  createdAt     DateTime   @default(now()) @map("created_at")
+  
+  cycle         ShiftCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  assignments   DayAssignment[]
+  
+  @@unique([cycleId, date])
+  @@map("work_days")
+}
+
+enum DayType {
+  DAY_SHIFT    // 07h-19h
+  NIGHT_SHIFT  // 19h-07h
+  REST_DAY     // Collective rest
+}
+
+// Day Assignment - who works on what role each day
+model DayAssignment {
+  id               String           @id @default(cuid())
+  workDayId        String           @map("work_day_id")
+  userId           String           @map("user_id")
+  responsibility   ResponsibilityType?
+  isResting        Boolean          @default(false) @map("is_resting")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  
+  workDay          WorkDay          @relation(fields: [workDayId], references: [id], onDelete: Cascade)
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([workDayId, userId])
+  @@map("day_assignments")
+}
+
+enum ResponsibilityType {
+  CALL_CENTER
+  MONITORING
+  REPORTING_1
+  REPORTING_2
+}
+
+// Individual Rest - rotating rest days
+model IndividualRest {
+  id          String   @id @default(cuid())
+  cycleId     String   @map("cycle_id")
+  userId      String   @map("user_id")
+  restDay     Int      @map("rest_day") // Which day of the cycle (3, 4, 5, or 6)
+  createdAt   DateTime @default(now()) @map("created_at")
+  
+  cycle       ShiftCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([cycleId, userId])
+  @@map("individual_rests")
+}
+
+// Activity tracking
+model Activity {
+  id          String       @id @default(cuid())
+  userId      String       @map("user_id")
+  type        ActivityType
+  category    String       // "Monitoring", "Call Center", "Reporting"
+  description String
+  metadata    String?      // JSON for additional data
+  createdAt   DateTime     @default(now()) @map("created_at")
+  
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId, createdAt])
+  @@map("activities")
+}
+
+enum ActivityType {
+  CLIENT_DOWN
+  INTERFACE_UNSTABLE
+  RECURRENT_PROBLEM
+  EQUIPMENT_ALERT
+  OTHER_MONITORING
+  TICKET_CREATED
+  CLIENT_CALL
+  ESCALATION
+  INCIDENT_FOLLOWUP
+  CLIENT_INFO
+  GRAPH_SENT
+  ALERT_PUBLISHED
+  HANDOVER_WRITTEN
+  INCIDENT_HISTORY
+  REPORT_GENERATED
+  TICKET_UPDATED
+  TICKET_CLOSED
+  RFO_CREATED
+  ARCHIVE_DONE
+}
+
+// Task management
+model Task {
+  id              String       @id @default(cuid())
+  userId          String       @map("user_id")
+  title           String
+  description     String?
+  status          TaskStatus   @default(PENDING)
+  category        String       // "Monitoring", "Call Center", "Reporting 1", "Reporting 2"
+  responsibility  ResponsibilityType?
+  scheduledTime   String?      @map("scheduled_time")
+  completedAt     DateTime?    @map("completed_at")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+  
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId, status])
+  @@map("tasks")
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  ON_HOLD
+}
+
+// Graph Schedule for Reporting 1
+model GraphSchedule {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  date        DateTime
+  time        String   // "09:00", "12:00", etc.
+  sent        Boolean  @default(false)
+  recipients  String?  // JSON array of recipients
+  createdAt   DateTime @default(now()) @map("created_at")
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("graph_schedules")
+}
+
+// Handover reports
+model Handover {
+  id            String   @id @default(cuid())
+  userId        String   @map("user_id")
+  shiftId       String   @map("shift_id")
+  date          DateTime
+  content       String?  @db.Text
+  incidents     String?  @db.Text // JSON array
+  escalations   String?  @db.Text // JSON array
+  pendingTasks  String?  @db.Text @map("pending_tasks") // JSON array
+  createdAt     DateTime @default(now()) @map("created_at")
+  
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("handovers")
+}
+
+// Overtime tracking
+model Overtime {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  date        DateTime
+  duration    Int      @default(120) // Always 2 hours = 120 minutes
+  shiftType   String   @map("shift_type") // "jour" or "nuit"
+  reason      String   @default("Supervision NOC")
+  approvedBy  String   @default("Daddy AZUMY") @map("approved_by")
+  month       Int
+  year        Int
+  createdAt   DateTime @default(now()) @map("created_at")
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, date])
+  @@index([userId, month, year])
+  @@map("overtimes")
+}
+
+// Responsibility history for rotation tracking
+model Responsibility {
+  id              String             @id @default(cuid())
+  userId          String             @map("user_id")
+  responsibility  ResponsibilityType
+  startDate       DateTime           @map("start_date")
+  endDate         DateTime?          @map("end_date")
+  isActive        Boolean            @default(true) @map("is_active")
+  createdAt       DateTime           @default(now()) @map("created_at")
+  
+  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("responsibilities")
+}
+
+// External Links / Tools
+model ExternalLink {
+  id          String   @id @default(cuid())
+  name        String
+  url         String
+  category    String   // "Monitoring", "Communication", "Tickets", "Vehicles"
+  icon        String?
+  description String?
+  order       Int      @default(0)
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  
+  @@map("external_links")
+}
+
+// System settings
+model SystemSetting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String?  @db.Text
+  description String?
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  
+  @@map("system_settings")
+}
