@@ -57,7 +57,7 @@ type ResponsibilityType = 'CALL_CENTER' | 'MONITORING' | 'REPORTING_1' | 'REPORT
 
 // Types pour le gestionnaire de tâches NOC
 type TaskPriority = 'low' | 'medium' | 'high' | 'critical';
-type TaskCategory = 'incident' | 'maintenance' | 'surveillance' | 'administrative' | 'other';
+type TaskCategory = 'incident' | 'maintenance' | 'surveillance' | 'administrative' | 'other' | 'Monitoring' | 'Reporting 1' | 'Reporting 2' | 'Call Center';
 type AlertType = 'warning' | 'critical' | 'info' | 'success';
 
 // Password validation result
@@ -207,6 +207,7 @@ interface Task {
   priority: TaskPriority;
   responsibility?: ResponsibilityType;
   shiftName?: string;
+  scheduledTime?: string;
   startTime: Date;
   estimatedEndTime: Date;
   actualEndTime?: Date;
@@ -245,7 +246,7 @@ interface NotificationItem {
 // TYPES MESSAGERIE INTERNE (GMAIL-LIKE)
 // ============================================
 
-type MessageFolder = 'inbox' | 'sent' | 'drafts' | 'spam' | 'trash' | 'starred';
+type MessageFolder = 'inbox' | 'sent' | 'drafts' | 'spam' | 'trash' | 'starred' | 'archived';
 type MessageStatus = 'unread' | 'read' | 'important' | 'archived';
 type MessagePriority = 'normal' | 'important' | 'urgent';
 
@@ -529,9 +530,6 @@ interface TicketItem {
   resolvedAt?: Date;
   closedAt?: Date;
   dueDate?: Date;
-  etr?: Date; // Estimated Time of Resolution
-  sla?: string; // Service Level Agreement (e.g., "4h", "24h")
-  slr?: string; // Service Level Resolution
   isDeleted: boolean;
   deletedAt?: Date;
   deletedBy?: string;
@@ -601,7 +599,11 @@ const TASK_CATEGORIES: Record<TaskCategory, { label: string; icon: typeof AlertT
   maintenance: { label: 'Maintenance', icon: Wrench },
   surveillance: { label: 'Surveillance', icon: Eye },
   administrative: { label: 'Administratif', icon: ClipboardList },
-  other: { label: 'Autre', icon: Pin }
+  other: { label: 'Autre', icon: Pin },
+  'Monitoring': { label: 'Monitoring', icon: Activity },
+  'Reporting 1': { label: 'Reporting 1', icon: FileText },
+  'Reporting 2': { label: 'Reporting 2', icon: FileSpreadsheet },
+  'Call Center': { label: 'Call Center', icon: Phone }
 };
 
 const TASK_STATUSES: Record<TaskStatus, { label: string; color: string; bgColor: string }> = {
@@ -659,7 +661,9 @@ const STATUS_COLORS: Record<TaskStatus, { bg: string; text: string }> = {
   pending: { bg: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400', text: 'En attente' },
   in_progress: { bg: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400', text: 'En cours' },
   completed: { bg: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400', text: 'Terminé' },
-  on_hold: { bg: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400', text: 'Suspendu' }
+  on_hold: { bg: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400', text: 'Suspendu' },
+  cancelled: { bg: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400', text: 'Annulé' },
+  late: { bg: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400', text: 'En retard' }
 };
 
 // ============================================
@@ -1029,25 +1033,6 @@ function verifyPassword(password: string, hash: string): boolean {
 // Génération d'ID unique
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-}
-
-// Nettoyer le HTML des divs vides et balises br inutiles
-function cleanEmptyDivs(html: string): string {
-  if (!html) return '';
-  
-  // Remove empty divs with only br tags: <div ...><br></div> or <div ...>&nbsp;</div>
-  let cleaned = html
-    .replace(/<div[^>]*>\s*<br\s*\/?>\s*<\/div>/gi, '')
-    .replace(/<div[^>]*>\s*&nbsp;\s*<\/div>/gi, '')
-    .replace(/<div[^>]*>\s*<\/div>/gi, '')
-    // Remove trailing <br> tags at the end
-    .replace(/(<br\s*\/?>\s*)+$/gi, '')
-    // Remove multiple consecutive br tags
-    .replace(/(<br\s*\/?>\s*){2,}/gi, '<br>')
-    // Trim whitespace
-    .trim();
-  
-  return cleaned;
 }
 
 // Vérification si l'utilisateur est Super Admin
@@ -1442,10 +1427,10 @@ export default function NOCActivityApp() {
   const [loginError, setLoginError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [currentMonth, setCurrentMonth] = useState(new Date(2026, 1, 1));
   const [tasks, setTasks] = useState<Task[]>([]);
   const [activities, setActivities] = useState<ActivityLog[]>([]);
-  const [overtimeMonth, setOvertimeMonth] = useState(new Date());
+  const [overtimeMonth, setOvertimeMonth] = useState(new Date(2026, 1, 1));
   const [restDialogOpen, setRestDialogOpen] = useState(false);
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -1824,7 +1809,6 @@ export default function NOCActivityApp() {
   // ============================================
 
   const [tickets, setTickets] = useState<TicketItem[]>([]);
-  const [gedDocuments, setGedDocuments] = useState<any[]>([]);
   const [selectedTicket, setSelectedTicket] = useState<TicketItem | null>(null);
   const [ticketDialogOpen, setTicketDialogOpen] = useState(false);
   const [ticketDetailOpen, setTicketDetailOpen] = useState(false);
@@ -1844,11 +1828,7 @@ export default function NOCActivityApp() {
     category: 'incident' as TicketCategory,
     site: '',
     localite: '',
-    technicien: '',
-    dueDate: null as Date | null,
-    etr: null as Date | null,
-    sla: '',
-    slr: ''
+    technicien: ''
   });
   const [newTicketComment, setNewTicketComment] = useState('');
   const [isPrivateComment, setIsPrivateComment] = useState(false);
@@ -1898,10 +1878,17 @@ export default function NOCActivityApp() {
   useEffect(() => {
     if (isAuthenticated && tasks.length === 0) {
       const timer = setTimeout(() => {
+        const now = new Date();
         setTasks([
-          { id: 't1', userId: 'agent-a1', userName: 'Alaine', title: 'Vérifier alarmes Zabbix', description: 'Monitoring alerts', status: 'in_progress', category: 'Monitoring', createdAt: new Date(), updatedAt: new Date(), scheduledTime: '08:00' },
-          { id: 't2', userId: 'agent-a1', userName: 'Alaine', title: 'Envoyer graphes 09h', description: 'Graphes trafic', status: 'completed', category: 'Reporting 1', createdAt: new Date(), updatedAt: new Date(), scheduledTime: '09:00', completedAt: new Date() },
-          { id: 't3', userId: 'agent-c2', userName: 'Lapreuve', title: 'Appel client ACME', description: 'Suivi incident', status: 'pending', category: 'Call Center', createdAt: new Date(), updatedAt: new Date(), scheduledTime: '10:30' },
+          { 
+            id: 't1', userId: 'agent-a1', userName: 'Alaine', title: 'Vérifier alarmes Zabbix', description: 'Monitoring alerts', status: 'in_progress', category: 'Monitoring', priority: 'high', createdAt: now, updatedAt: now, scheduledTime: '08:00', startTime: now, estimatedEndTime: new Date(now.getTime() + 3600000), estimatedDuration: 60, comments: [], alerts: [], history: [], tags: [], isOverdue: false, isNotified: false 
+          },
+          { 
+            id: 't2', userId: 'agent-a1', userName: 'Alaine', title: 'Envoyer graphes 09h', description: 'Graphes trafic', status: 'completed', category: 'Reporting 1', priority: 'medium', createdAt: now, updatedAt: now, scheduledTime: '09:00', completedAt: now, startTime: now, estimatedEndTime: new Date(now.getTime() + 3600000), estimatedDuration: 60, comments: [], alerts: [], history: [], tags: [], isOverdue: false, isNotified: false 
+          },
+          { 
+            id: 't3', userId: 'agent-c2', userName: 'Lapreuve', title: 'Appel client ACME', description: 'Suivi incident', status: 'pending', category: 'Call Center', priority: 'low', createdAt: now, updatedAt: now, scheduledTime: '10:30', startTime: now, estimatedEndTime: new Date(now.getTime() + 3600000), estimatedDuration: 60, comments: [], alerts: [], history: [], tags: [], isOverdue: false, isNotified: false 
+          },
         ]);
         setActivities([
           { id: 'a1', userId: 'agent-c2', userName: 'Lapreuve', type: 'CLIENT_DOWN', category: 'Monitoring', description: 'Client ACME - Connexion perdue', createdAt: new Date(Date.now() - 3600000) },
@@ -2164,20 +2151,10 @@ export default function NOCActivityApp() {
 
     await new Promise(resolve => setTimeout(resolve, 500));
 
-    // Chercher l'utilisateur par pseudo ou email (insensible à la casse)
-    // D'abord chercher dans allUsers (localStorage), puis dans DEMO_USERS
-    let foundUser = allUsers.find(
-      u => u.username?.toLowerCase() === loginIdentifier.toLowerCase() ||
-           u.email?.toLowerCase() === loginIdentifier.toLowerCase()
+    // Chercher l'utilisateur par pseudo (insensible à la casse)
+    const foundUser = Object.values(DEMO_USERS).find(
+      u => u.username?.toLowerCase() === loginIdentifier.toLowerCase()
     );
-
-    // Si pas trouvé dans allUsers, chercher dans DEMO_USERS
-    if (!foundUser) {
-      foundUser = Object.values(DEMO_USERS).find(
-        u => u.username?.toLowerCase() === loginIdentifier.toLowerCase() ||
-             u.email?.toLowerCase() === loginIdentifier.toLowerCase()
-      );
-    }
 
     // Fonction pour gérer l'échec de connexion
     const handleFailedLogin = () => {
@@ -2199,7 +2176,7 @@ export default function NOCActivityApp() {
         });
       }
 
-      setLoginError('Pseudo/Email ou mot de passe incorrect');
+      setLoginError('Pseudo ou mot de passe incorrect');
       setIsLoading(false);
       toast.error('Erreur de connexion', { description: 'Identifiants invalides' });
     };
@@ -2217,9 +2194,8 @@ export default function NOCActivityApp() {
       return;
     }
 
-    // Vérifier le mot de passe avec la fonction de vérification sécurisée
-    const passwordValid = verifyPassword(password, foundUser.passwordHash || '');
-    if (!passwordValid) {
+    // Vérifier le mot de passe
+    if (foundUser.passwordHash !== password) {
       handleFailedLogin();
       return;
     }
@@ -3217,430 +3193,6 @@ export default function NOCActivityApp() {
     toast.success('PDF généré', { description: 'Le fichier a été téléchargé' });
   }, [user, overtimeMonth]);
 
-  // Planning PDF Generation
-  const generatePlanningPDF = useCallback(async () => {
-    const doc = new jsPDF('l', 'mm', 'a4'); // Landscape orientation
-    const monthNames = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
-    
-    const pageWidth = 297; // A4 landscape width
-    const pageHeight = 210; // A4 landscape height
-    const margin = 10;
-
-    // ============================================
-    // 1. EN-TÊTE - Logo + Titre
-    // ============================================
-    
-    const logoWidth = 18;
-    const titleText = 'SILICONE CONNECT';
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    const titleWidth = doc.getTextWidth(titleText);
-    const totalHeaderWidth = logoWidth + 5 + titleWidth;
-    const headerStartX = (pageWidth - totalHeaderWidth) / 2;
-    
-    // Logo
-    try {
-      const logoImg = new Image();
-      logoImg.src = '/faicone_sc.png';
-      await new Promise((resolve) => {
-        logoImg.onload = resolve;
-        logoImg.onerror = resolve;
-      });
-      
-      if (logoImg.complete && logoImg.naturalWidth > 0) {
-        doc.addImage(logoImg, 'PNG', headerStartX, 8, logoWidth, 18);
-      }
-    } catch (e) {
-      doc.setFillColor(59, 130, 246);
-      doc.roundedRect(headerStartX, 8, logoWidth, 18, 2, 2, 'F');
-    }
-
-    // Titre SILICONE CONNECT
-    doc.setTextColor(0, 0, 0);
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.text(titleText, headerStartX + logoWidth + 5, 20);
-
-    // ============================================
-    // 2. TITRE DU DOCUMENT
-    // ============================================
-    
-    doc.setFontSize(16);
-    doc.setFont('helvetica', 'bold');
-    doc.text('PLANNING DES AGENTS NOC', pageWidth / 2, 35, { align: 'center' });
-    
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`Mois de ${monthNames[currentMonth.getMonth()]} ${currentMonth.getFullYear()}`, pageWidth / 2, 43, { align: 'center' });
-
-    // ============================================
-    // 3. PRÉPARER LES DONNÉES DU PLANNING
-    // ============================================
-    
-    const monthStart = startOfMonth(currentMonth);
-    const monthEnd = endOfMonth(monthStart);
-    const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
-    const numDays = days.length;
-
-    // Couleurs pour les shifts
-    const shiftColors = {
-      'A': { light: [219, 234, 254], dark: [59, 130, 246] }, // Blue
-      'B': { light: [254, 249, 195], dark: [234, 179, 8] },  // Yellow/Amber
-      'C': { light: [220, 252, 231], dark: [34, 197, 94] }   // Green
-    };
-    const restColor = [229, 231, 235]; // Gray for rest days
-    const nightDarkColors = {
-      'A': [30, 64, 175],   // Dark blue
-      'B': [161, 98, 7],    // Dark amber
-      'C': [22, 101, 52]    // Dark green
-    };
-
-    // ============================================
-    // 4. TABLEAU DE PLANNING
-    // ============================================
-    
-    const tableStartY = 52;
-    const rowHeight = 12;
-    const headerHeight = 10;
-    const dayColWidth = (pageWidth - margin * 2 - 30) / numDays; // 30mm for shift name column
-    const shiftColWidth = 30;
-
-    // En-tête du tableau avec les jours
-    doc.setFillColor(59, 130, 246);
-    doc.rect(margin, tableStartY, pageWidth - margin * 2, headerHeight, 'F');
-    
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(7);
-    doc.setFont('helvetica', 'bold');
-    
-    // Première cellule vide (pour les noms de shifts)
-    doc.rect(margin, tableStartY, shiftColWidth, headerHeight);
-    
-    // Jours du mois
-    days.forEach((day, idx) => {
-      const x = margin + shiftColWidth + idx * dayColWidth;
-      const dayNum = format(day, 'd');
-      const dayName = format(day, 'EEE', { locale: fr }).substring(0, 3).toUpperCase();
-      
-      doc.rect(x, tableStartY, dayColWidth, headerHeight);
-      doc.text(`${dayName}`, x + dayColWidth / 2, tableStartY + 4, { align: 'center' });
-      doc.text(`${dayNum}`, x + dayColWidth / 2, tableStartY + 8, { align: 'center' });
-    });
-
-    // Corps du tableau - une ligne par shift
-    const bodyStartY = tableStartY + headerHeight;
-    
-    ['A', 'B', 'C'].forEach((shiftName, shiftIdx) => {
-      const rowY = bodyStartY + shiftIdx * rowHeight;
-      
-      // Alternating row background
-      if (shiftIdx % 2 === 0) {
-        doc.setFillColor(249, 250, 251);
-        doc.rect(margin, rowY, pageWidth - margin * 2, rowHeight, 'F');
-      }
-      
-      // Nom du shift
-      doc.setFillColor(...shiftColors[shiftName as keyof typeof shiftColors].dark);
-      doc.rect(margin, rowY, shiftColWidth, rowHeight, 'F');
-      
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(9);
-      doc.setFont('helvetica', 'bold');
-      doc.text(`Shift ${shiftName}`, margin + shiftColWidth / 2, rowY + rowHeight / 2 + 2, { align: 'center' });
-      
-      // Données pour chaque jour
-      days.forEach((day, dayIdx) => {
-        const x = margin + shiftColWidth + dayIdx * dayColWidth;
-        const schedule = getShiftScheduleForDate(shiftName, day);
-        const restInfo = getIndividualRestAgent(shiftName, day);
-        
-        let bgColor: number[];
-        let textColor: number[] = [0, 0, 0];
-        let cellText = '';
-        
-        if (schedule.isCollectiveRest) {
-          bgColor = restColor;
-          cellText = 'R';
-          textColor = [107, 114, 128];
-        } else if (schedule.dayType === 'DAY_SHIFT') {
-          bgColor = shiftColors[shiftName as keyof typeof shiftColors].light;
-          cellText = 'J';
-        } else {
-          bgColor = nightDarkColors[shiftName as keyof typeof nightDarkColors];
-          cellText = 'N';
-          textColor = [255, 255, 255];
-        }
-        
-        // Draw cell background
-        doc.setFillColor(...bgColor);
-        doc.rect(x, rowY, dayColWidth, rowHeight, 'F');
-        
-        // Draw cell border
-        doc.setDrawColor(200, 200, 200);
-        doc.setLineWidth(0.1);
-        doc.rect(x, rowY, dayColWidth, rowHeight);
-        
-        // Draw cell text
-        doc.setTextColor(...textColor);
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'bold');
-        doc.text(cellText, x + dayColWidth / 2, rowY + rowHeight / 2 + 2, { align: 'center' });
-        
-        // Mark individual rest day with small indicator
-        if (restInfo) {
-          doc.setFontSize(5);
-          doc.setTextColor(234, 88, 12); // Orange
-          doc.text('•', x + dayColWidth / 2, rowY + rowHeight - 2, { align: 'center' });
-        }
-      });
-    });
-
-    // ============================================
-    // 5. LÉGENDE
-    // ============================================
-    
-    const legendY = bodyStartY + 3 * rowHeight + 10;
-    
-    doc.setTextColor(0, 0, 0);
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-    doc.text('LÉGENDE:', margin, legendY);
-    
-    // Légende des types de jours - avec meilleur espacement
-    const legendItems = [
-      { label: 'J = Jour (07h00 - 19h00)', color: [219, 234, 254] },
-      { label: 'N = Nuit (19h00 - 07h00)', color: [30, 64, 175] },
-      { label: 'R = Repos', color: [229, 231, 235] }
-    ];
-    
-    let legendX = margin + 25; // Espace après "LÉGENDE:"
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'normal');
-    
-    legendItems.forEach((item, idx) => {
-      // Color box with border
-      doc.setFillColor(...item.color);
-      doc.setDrawColor(150, 150, 150);
-      doc.setLineWidth(0.2);
-      doc.rect(legendX, legendY + 3, 10, 6, 'FD');
-      
-      // Text - toujours en noir pour lisibilité
-      doc.setTextColor(0, 0, 0);
-      doc.text(item.label, legendX + 12, legendY + 7.5);
-      
-      legendX += 70; // Espacement fixe entre les items
-    });
-
-    // ============================================
-    // 6. ÉQUIPES
-    // ============================================
-    
-    const teamsY = legendY + 18;
-    const teamWidth = (pageWidth - margin * 2) / 3;
-    
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'bold');
-    
-    const teams = {
-      'A': ['Alaine ODZONDO', 'Emma-Casimir NDONGO', 'Luca MOUSSOUNDA', 'José NGONKOLI'],
-      'B': ['Sara MADY', 'Séverin NDANDOU', 'Furys DIAMANA', 'Marly POUABOUD'],
-      'C': ['Lapreuve N\'SANA', 'Audrey NDINGA', 'BATA MADINGOU Ange Kevine', 'Lotti SEHOSSOLO']
-    };
-    
-    Object.entries(teams).forEach(([shiftKey, members], idx) => {
-      const x = margin + idx * teamWidth;
-      
-      // Team header with color
-      doc.setFillColor(...shiftColors[shiftKey as keyof typeof shiftColors].dark);
-      doc.rect(x, teamsY, teamWidth - 5, 6, 'F');
-      
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(7);
-      doc.setFont('helvetica', 'bold');
-      doc.text(`ÉQUIPE SHIFT ${shiftKey}:`, x + 2, teamsY + 4);
-      
-      // Team members
-      doc.setTextColor(0, 0, 0);
-      doc.setFont('helvetica', 'normal');
-      members.forEach((member, memberIdx) => {
-        doc.text(`- ${member}`, x + 2, teamsY + 10 + memberIdx * 4);
-      });
-    });
-
-    // ============================================
-    // 7. HEURES DE TRAVAIL PAR SHIFT
-    // ============================================
-    
-    const hoursY = teamsY + 28;
-    const hoursTableWidth = (pageWidth - margin * 2) / 3 - 5;
-    
-    // Calculate hours for each shift
-    // Jour: 07h-19h = 12h total, Nuit: 19h-07h = 12h total
-    // Déduction: 2h pause + 2h sup = 4h
-    // Heures normales: 12h - 2h (pause) - 2h (sup) = 8h par jour
-    // Heures sup: 2h par jour
-    // Heures totales = Heures normales + Heures sup = 10h par jour
-    const calculateShiftHours = (shiftName: string) => {
-      let jourCount = 0;
-      let nuitCount = 0;
-      
-      days.forEach((day) => {
-        const schedule = getShiftScheduleForDate(shiftName, day);
-        if (!schedule.isCollectiveRest) {
-          if (schedule.dayType === 'DAY_SHIFT') {
-            jourCount++;
-          } else {
-            nuitCount++;
-          }
-        }
-      });
-      
-      const workingDays = jourCount + nuitCount;
-      
-      // Heures normales: 8h par jour travaillé (12h - 2h pause - 2h sup)
-      const heuresNormales = workingDays * 8;
-      
-      // Heures supplémentaires: 2h par jour travaillé
-      const heuresSup = workingDays * 2;
-      
-      // Heures totales: somme des heures normales et heures sup
-      const heuresTotales = heuresNormales + heuresSup;
-      
-      return { 
-        jourCount, 
-        nuitCount, 
-        workingDays, 
-        heuresNormales, 
-        heuresSup, 
-        heuresTotales 
-      };
-    };
-    
-    // Header for hours section
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(0, 0, 0);
-    doc.text('RÉCAPITULATIF DES HEURES DE TRAVAIL', margin, hoursY);
-    
-    const hoursHeaderY = hoursY + 4;
-    
-    // Draw hours table for each shift
-    ['A', 'B', 'C'].forEach((shiftName, idx) => {
-      const x = margin + idx * (hoursTableWidth + 5);
-      const hours = calculateShiftHours(shiftName);
-      
-      // Shift header
-      doc.setFillColor(...shiftColors[shiftName as keyof typeof shiftColors].dark);
-      doc.rect(x, hoursHeaderY, hoursTableWidth, 5, 'F');
-      
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(6);
-      doc.setFont('helvetica', 'bold');
-      doc.text(`SHIFT ${shiftName}`, x + hoursTableWidth / 2, hoursHeaderY + 3.5, { align: 'center' });
-      
-      // Table header row - en-têtes sur 1 ligne
-      const tableBodyY = hoursHeaderY + 5;
-      doc.setFillColor(245, 245, 245);
-      doc.rect(x, tableBodyY, hoursTableWidth / 3, 5, 'F');
-      doc.rect(x + hoursTableWidth / 3, tableBodyY, hoursTableWidth / 3, 5, 'F');
-      doc.rect(x + 2 * hoursTableWidth / 3, tableBodyY, hoursTableWidth / 3, 5, 'F');
-      
-      doc.setDrawColor(180, 180, 180);
-      doc.setLineWidth(0.1);
-      doc.rect(x, tableBodyY, hoursTableWidth, 5);
-      doc.line(x + hoursTableWidth / 3, tableBodyY, x + hoursTableWidth / 3, tableBodyY + 5);
-      doc.line(x + 2 * hoursTableWidth / 3, tableBodyY, x + 2 * hoursTableWidth / 3, tableBodyY + 5);
-      
-      doc.setTextColor(60, 60, 60);
-      doc.setFontSize(5.5);
-      doc.setFont('helvetica', 'bold');
-      doc.text('HEURES NORMALES', x + hoursTableWidth / 6, tableBodyY + 3.5, { align: 'center' });
-      doc.text('HEURES SUP', x + hoursTableWidth / 2, tableBodyY + 3.5, { align: 'center' });
-      doc.text('HEURES TOTALES', x + 5 * hoursTableWidth / 6, tableBodyY + 3.5, { align: 'center' });
-      
-      // Values row
-      const valuesY = tableBodyY + 5;
-      doc.setFillColor(255, 255, 255);
-      doc.rect(x, valuesY, hoursTableWidth, 6, 'F');
-      
-      doc.setDrawColor(180, 180, 180);
-      doc.rect(x, valuesY, hoursTableWidth, 6);
-      doc.line(x + hoursTableWidth / 3, valuesY, x + hoursTableWidth / 3, valuesY + 6);
-      doc.line(x + 2 * hoursTableWidth / 3, valuesY, x + 2 * hoursTableWidth / 3, valuesY + 6);
-      
-      // Heures normales - bleu
-      doc.setTextColor(59, 130, 246);
-      doc.setFontSize(8);
-      doc.setFont('helvetica', 'bold');
-      doc.text(`${hours.heuresNormales}h`, x + hoursTableWidth / 6, valuesY + 4, { align: 'center' });
-      
-      // Heures sup - orange
-      doc.setTextColor(234, 88, 12);
-      doc.text(`${hours.heuresSup}h`, x + hoursTableWidth / 2, valuesY + 4, { align: 'center' });
-      
-      // Heures totales - vert
-      doc.setTextColor(22, 163, 74);
-      doc.text(`${hours.heuresTotales}h`, x + 5 * hoursTableWidth / 6, valuesY + 4, { align: 'center' });
-      
-      // Work days summary
-      doc.setTextColor(100, 100, 100);
-      doc.setFontSize(5);
-      doc.setFont('helvetica', 'normal');
-      doc.text(`${hours.jourCount}J + ${hours.nuitCount}N = ${hours.workingDays}j`, x + hoursTableWidth / 2, valuesY + 10, { align: 'center' });
-    });
-
-    // ============================================
-    // 8. SIGNATURE SUPERVISEUR NOC
-    // ============================================
-    
-    const signatureY = hoursY + 35;
-    
-    // Zone de signature compacte
-    const sigBoxWidth = 55;
-    const sigBoxHeight = 15;
-    const sigBoxX = pageWidth - margin - sigBoxWidth;
-    
-    // Fond léger
-    doc.setFillColor(252, 252, 252);
-    doc.setDrawColor(150, 150, 150);
-    doc.setLineWidth(0.2);
-    doc.rect(sigBoxX, signatureY, sigBoxWidth, sigBoxHeight, 'FD');
-    
-    // Titre
-    doc.setTextColor(0, 0, 0);
-    doc.setFontSize(6);
-    doc.setFont('helvetica', 'bold');
-    doc.text('SUPERVISEUR NOC', sigBoxX + sigBoxWidth / 2, signatureY + 4, { align: 'center' });
-    
-    // Ligne de signature
-    doc.setDrawColor(100, 100, 100);
-    doc.setLineWidth(0.15);
-    doc.line(sigBoxX + 5, signatureY + 9, sigBoxX + sigBoxWidth - 5, signatureY + 9);
-    
-    // Nom du superviseur en noir
-    doc.setTextColor(0, 0, 0);
-    doc.setFontSize(6);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Thérésia BABINDAMANA', sigBoxX + sigBoxWidth / 2, signatureY + 13, { align: 'center' });
-
-    // ============================================
-    // 9. PIED DE PAGE
-    // ============================================
-    
-    const now = new Date();
-    const footerY = pageHeight - 8;
-    
-    doc.setFontSize(7);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(107, 114, 128);
-    
-    doc.text(`Généré le ${format(now, 'dd/MM/yyyy')} à ${format(now, 'HH:mm')}`, margin, footerY);
-
-    // Sauvegarder
-    doc.save(`planning_noc_${format(currentMonth, 'MM_yyyy')}.pdf`);
-    toast.success('PDF généré', { description: 'Le planning a été téléchargé' });
-  }, [currentMonth]);
-
   // Planning generation
   const planning = useCallback(() => {
     const monthStart = startOfMonth(currentMonth);
@@ -4021,28 +3573,6 @@ export default function NOCActivityApp() {
     <>
       <Toaster position="top-right" richColors closeButton />
       <div className="min-h-screen bg-background">
-        {/* Bannière d'avertissement - Mot de passe à changer */}
-        {user?.mustChangePassword && (
-          <div className="sticky top-0 z-[60] w-full bg-gradient-to-r from-amber-500 to-orange-500 text-white px-4 py-2">
-            <div className="flex items-center justify-center gap-3 max-w-7xl mx-auto">
-              <AlertTriangle className="w-5 h-5 flex-shrink-0 animate-pulse" />
-              <div className="flex-1 text-center">
-                <span className="font-semibold">⚠️ SÉCURITÉ REQUISE :</span>{' '}
-                <span>Pour des raisons de sécurité, vous devez changer votre mot de passe avant de continuer.</span>
-              </div>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={openSecurityDialog}
-                className="bg-white text-orange-600 hover:bg-orange-50 font-semibold"
-              >
-                <Lock className="w-4 h-4 mr-2" />
-                Changer maintenant
-              </Button>
-            </div>
-          </div>
-        )}
-
         {/* Header */}
         <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur">
           <div className="flex h-14 items-center px-4 gap-4">
@@ -4232,11 +3762,6 @@ export default function NOCActivityApp() {
                 </Button>
                 <Button variant={currentTab === 'ged' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTab('ged')}>
                   <FileText className="w-5 h-5" /> {!sidebarCollapsed && 'GED Documents'}
-                  {!sidebarCollapsed && gedDocuments.filter(d => d.status === 'en_attente').length > 0 && (
-                    <Badge className="ml-auto bg-orange-500 text-white text-xs px-1.5 py-0.5 min-w-[20px] justify-center">
-                      {gedDocuments.filter(d => d.status === 'en_attente').length}
-                    </Badge>
-                  )}
                 </Button>
                 
                 {(user?.role === 'RESPONSABLE' || user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && (
@@ -4284,9 +3809,7 @@ export default function NOCActivityApp() {
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
                       <h1 className="text-2xl lg:text-3xl font-bold">Tableau de bord</h1>
-                      <p className="text-muted-foreground">
-                        Bienvenue, {user?.firstName && user?.lastName ? `${user.firstName} ${user.lastName}` : user?.name} • {format(new Date(), 'EEEE d MMMM yyyy', { locale: fr })}
-                      </p>
+                      <p className="text-muted-foreground">Bienvenue, {user?.name} • {format(new Date(), 'EEEE d MMMM yyyy', { locale: fr })}</p>
                     </div>
                     <Button variant="outline" onClick={() => toast.success('Données actualisées')}>
                       <RefreshCw className="w-4 h-4 mr-2" /> Actualiser
@@ -4529,9 +4052,6 @@ export default function NOCActivityApp() {
                       </span>
                       <Button variant="outline" size="icon" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}>
                         <ChevronRight className="h-4 w-4" />
-                      </Button>
-                      <Button onClick={generatePlanningPDF} className="gap-2 ml-2">
-                        <FileDown className="w-4 h-4" /> Générer PDF
                       </Button>
                     </div>
                   </div>
@@ -5205,8 +4725,6 @@ export default function NOCActivityApp() {
                                           if (audioRef.current && message.mediaData) {
                                             const rect = e.currentTarget.getBoundingClientRect();
                                             const percent = ((e.clientX - rect.left) / rect.width);
-                                            const audio = new Audio(message.mediaData);
-                                            audio.duration = message.duration || 0;
                                             if (audioRef.current.duration) {
                                               audioRef.current.currentTime = percent * audioRef.current.duration;
                                               setAudioProgress(prev => ({...prev, [message.id]: percent * 100}));
@@ -5293,12 +4811,12 @@ export default function NOCActivityApp() {
                                 
                                 // URL detection and linking
                                 const urlRegex = /(https?:\/\/[^\s]+)/g;
-                                const parts = content.split(urlRegex);
+                                const parts = content.split(urlRegex).filter(p => p);
                                 const contentWithLinks = parts.map((part, i) => {
                                   if (part.match(urlRegex)) {
                                     return (
                                       <a 
-                                        key={i} 
+                                        key={`link-${i}`} 
                                         href={part} 
                                         target="_blank" 
                                         rel="noopener noreferrer"
@@ -5314,23 +4832,23 @@ export default function NOCActivityApp() {
                                 // Apply mention highlighting
                                 const contentWithMentions = contentWithLinks.flat().map((part, i) => {
                                   if (typeof part === 'string') {
-                                    const mentionParts = part.split(/(@\w+)/g);
+                                    const mentionParts = part.split(/(@\w+)/g).filter(p => p);
                                     return mentionParts.map((mentionPart, j) => {
                                       if (mentionPart.startsWith('@')) {
-                                        return <span key={`${i}-${j}`} className="text-cyan-600 dark:text-cyan-400 font-medium bg-cyan-50 dark:bg-cyan-900/30 px-1 rounded">{mentionPart}</span>;
+                                        return <span key={`mention-${i}-${j}`} className="text-cyan-600 dark:text-cyan-400 font-medium bg-cyan-50 dark:bg-cyan-900/30 px-1 rounded">{mentionPart}</span>;
                                       }
                                       // Apply search highlighting
                                       if (chatSearchMessageQuery && mentionPart.toLowerCase().includes(chatSearchMessageQuery.toLowerCase())) {
                                         const regex = new RegExp(`(${chatSearchMessageQuery})`, 'gi');
-                                        const searchParts = mentionPart.split(regex);
+                                        const searchParts = mentionPart.split(regex).filter(p => p);
                                         return searchParts.map((searchPart, k) => {
                                           if (searchPart.toLowerCase() === chatSearchMessageQuery.toLowerCase()) {
-                                            return <span key={`${i}-${j}-${k}`} className="bg-yellow-300 dark:bg-yellow-600 rounded px-0.5">{searchPart}</span>;
+                                            return <span key={`search-${i}-${j}-${k}`} className="bg-yellow-300 dark:bg-yellow-600 rounded px-0.5">{searchPart}</span>;
                                           }
-                                          return searchPart;
+                                          return <span key={`text-${i}-${j}-${k}`}>{searchPart}</span>;
                                         });
                                       }
-                                      return mentionPart;
+                                      return <span key={`text-${i}-${j}`}>{mentionPart}</span>;
                                     });
                                   }
                                   return part;
@@ -7803,7 +7321,7 @@ export default function NOCActivityApp() {
                             <Plus className="w-5 h-5 mr-2" /> Créer un ticket
                           </Button>
                         </DialogTrigger>
-                        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-white dark:bg-slate-900 border-2 dark:border-slate-700">
+                        <DialogContent className="max-w-2xl bg-white dark:bg-slate-900 border-2 dark:border-slate-700">
                           <DialogHeader>
                             <DialogTitle className="text-xl text-foreground">Créer un nouveau ticket</DialogTitle>
                             <DialogDescription>Remplissez les informations du ticket</DialogDescription>
@@ -7826,9 +7344,17 @@ export default function NOCActivityApp() {
                                     <SelectValue />
                                   </SelectTrigger>
                                   <SelectContent className="bg-white dark:bg-slate-800">
-                                    {Object.entries(TICKET_CATEGORIES).map(([key, val]) => (
-                                      <SelectItem key={key} value={key}>{val.icon} {val.label}</SelectItem>
-                                    ))}
+                                    {Object.entries(TICKET_CATEGORIES).map(([key, val]) => {
+                                      const IconComponent = val.icon;
+                                      return (
+                                        <SelectItem key={key} value={key}>
+                                          <span className="flex items-center gap-2">
+                                            <IconComponent className="w-4 h-4" />
+                                            {val.label}
+                                          </span>
+                                        </SelectItem>
+                                      );
+                                    })}
                                   </SelectContent>
                                 </Select>
                               </div>
@@ -7893,53 +7419,6 @@ export default function NOCActivityApp() {
                                 className="border-2 dark:border-slate-600 dark:bg-slate-800"
                               />
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="grid gap-2">
-                                <Label className="text-foreground font-medium">Date d'échéance (Due Date)</Label>
-                                <Input
-                                  type="datetime-local"
-                                  value={newTicket.dueDate ? format(newTicket.dueDate, "yyyy-MM-dd'T'HH:mm") : ''}
-                                  onChange={(e) => setNewTicket({ ...newTicket, dueDate: e.target.value ? new Date(e.target.value) : null })}
-                                  className="border-2 dark:border-slate-600 dark:bg-slate-800"
-                                />
-                              </div>
-                              <div className="grid gap-2">
-                                <Label className="text-foreground font-medium">ETR (Est. Time Resolution)</Label>
-                                <Input
-                                  type="datetime-local"
-                                  value={newTicket.etr ? format(newTicket.etr, "yyyy-MM-dd'T'HH:mm") : ''}
-                                  onChange={(e) => setNewTicket({ ...newTicket, etr: e.target.value ? new Date(e.target.value) : null })}
-                                  className="border-2 dark:border-slate-600 dark:bg-slate-800"
-                                />
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="grid gap-2">
-                                <Label className="text-foreground font-medium">SLA (Service Level Agreement)</Label>
-                                <Select value={newTicket.sla} onValueChange={(v) => setNewTicket({ ...newTicket, sla: v })}>
-                                  <SelectTrigger className="border-2 dark:border-slate-600 dark:bg-slate-800">
-                                    <SelectValue placeholder="Sélectionner" />
-                                  </SelectTrigger>
-                                  <SelectContent className="bg-white dark:bg-slate-800">
-                                    <SelectItem value="1h">1 heure</SelectItem>
-                                    <SelectItem value="4h">4 heures</SelectItem>
-                                    <SelectItem value="8h">8 heures</SelectItem>
-                                    <SelectItem value="24h">24 heures</SelectItem>
-                                    <SelectItem value="48h">48 heures</SelectItem>
-                                    <SelectItem value="72h">72 heures</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <div className="grid gap-2">
-                                <Label className="text-foreground font-medium">SLR (Service Level Resolution)</Label>
-                                <Input
-                                  value={newTicket.slr}
-                                  onChange={(e) => setNewTicket({ ...newTicket, slr: e.target.value })}
-                                  placeholder="Ex: 95%, 99%"
-                                  className="border-2 dark:border-slate-600 dark:bg-slate-800"
-                                />
-                              </div>
-                            </div>
                           </div>
                           <DialogFooter>
                             <DialogClose asChild>
@@ -7978,14 +7457,10 @@ export default function NOCActivityApp() {
                                   tags: [],
                                   createdAt: new Date(),
                                   updatedAt: new Date(),
-                                  dueDate: newTicket.dueDate || undefined,
-                                  etr: newTicket.etr || undefined,
-                                  sla: newTicket.sla || undefined,
-                                  slr: newTicket.slr || undefined,
                                   isDeleted: false
                                 };
                                 setTickets(prev => [ticket, ...prev]);
-                                setNewTicket({ objet: '', description: '', priority: 'medium', category: 'incident', site: '', localite: '', technicien: '', dueDate: null, etr: null, sla: '', slr: '' });
+                                setNewTicket({ objet: '', description: '', priority: 'medium', category: 'incident', site: '', localite: '', technicien: '' });
                                 setCreateTicketOpen(false);
                                 toast.success('Ticket créé', { description: `Le ticket ${ticket.numero} a été créé` });
                               }}
@@ -8094,7 +7569,7 @@ export default function NOCActivityApp() {
                                   return true;
                                 })
                                 .map(ticket => (
-                                  <tr key={ticket.id} className="group border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer" onClick={() => { setSelectedTicket(ticket); setTicketDetailOpen(true); }}>
+                                  <tr key={ticket.id} className="border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer" onClick={() => { setSelectedTicket(ticket); setTicketDetailOpen(true); }}>
                                     <td className="p-3 font-mono font-semibold text-cyan-600 dark:text-cyan-400">{ticket.numero}</td>
                                     <td className="p-3 max-w-[200px] truncate text-foreground">{ticket.objet}</td>
                                     <td className="p-3">
@@ -8111,7 +7586,7 @@ export default function NOCActivityApp() {
                                     <td className="p-3 text-foreground">{ticket.technicien || '-'}</td>
                                     <td className="p-3 text-muted-foreground text-sm">{format(ticket.createdAt, 'dd/MM/yyyy HH:mm')}</td>
                                     <td className="p-3">
-                                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                                      <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                                         <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-blue-100 dark:hover:bg-blue-900/40" onClick={() => { setSelectedTicket(ticket); setTicketDetailOpen(true); }}>
                                           <Eye className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                                         </Button>
@@ -8251,15 +7726,11 @@ export default function NOCActivityApp() {
                               </CardContent>
                             </Card>
                             <Card className="border dark:border-slate-700">
-                              <CardHeader className="pb-2"><CardTitle className="text-sm">Dates et SLA</CardTitle></CardHeader>
+                              <CardHeader className="pb-2"><CardTitle className="text-sm">Dates</CardTitle></CardHeader>
                               <CardContent className="space-y-2 text-sm">
                                 <p><span className="font-medium text-muted-foreground">Créé le:</span> {format(selectedTicket.createdAt, 'dd/MM/yyyy à HH:mm')}</p>
                                 <p><span className="font-medium text-muted-foreground">Par:</span> {selectedTicket.reporterName}</p>
                                 <p><span className="font-medium text-muted-foreground">Mis à jour:</span> {format(selectedTicket.updatedAt, 'dd/MM/yyyy à HH:mm')}</p>
-                                {selectedTicket.dueDate && <p><span className="font-medium text-muted-foreground">Date d'échéance:</span> {format(selectedTicket.dueDate, 'dd/MM/yyyy à HH:mm')}</p>}
-                                {selectedTicket.etr && <p><span className="font-medium text-muted-foreground">ETR:</span> {format(selectedTicket.etr, 'dd/MM/yyyy à HH:mm')}</p>}
-                                {selectedTicket.sla && <p><span className="font-medium text-muted-foreground">SLA:</span> <Badge variant="outline">{selectedTicket.sla}</Badge></p>}
-                                {selectedTicket.slr && <p><span className="font-medium text-muted-foreground">SLR:</span> {selectedTicket.slr}</p>}
                                 {selectedTicket.resolvedAt && <p><span className="font-medium text-muted-foreground">Résolu le:</span> {format(selectedTicket.resolvedAt, 'dd/MM/yyyy à HH:mm')}</p>}
                               </CardContent>
                             </Card>
@@ -10785,8 +10256,9 @@ export default function NOCActivityApp() {
                       },
                       to: newEmail.to,
                       cc: newEmail.cc,
+                      bcc: newEmail.bcc,
                       subject: newEmail.subject,
-                      body: cleanEmptyDivs(newEmail.body),
+                      body: newEmail.body,
                       attachments: newEmail.attachments,
                       folder: 'sent',
                       status: 'read',
@@ -10818,6 +10290,7 @@ export default function NOCActivityApp() {
                     setNewEmail({
                       to: [],
                       cc: [],
+                      bcc: [],
                       subject: '',
                       body: '',
                       attachments: [],
@@ -10887,8 +10360,9 @@ export default function NOCActivityApp() {
                       },
                       to: newEmail.to,
                       cc: newEmail.cc,
+                      bcc: newEmail.bcc,
                       subject: newEmail.subject,
-                      body: cleanEmptyDivs(newEmail.body),
+                      body: newEmail.body,
                       attachments: newEmail.attachments,
                       folder: 'drafts',
                       status: 'unread',

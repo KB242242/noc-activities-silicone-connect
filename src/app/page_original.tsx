@@ -42,7 +42,7 @@ import {
   Volume2, VolumeX, Smile, Image as ImageIcon, Film, File, MoreVertical, PhoneOff, UserPlus,
   Hash, AtSign, Pin, Archive, BellOff, Check, RotateCcw, Reply, Forward, Megaphone, Heart, Eye as EyeIcon,
   CheckSquare, Bold, Italic, Underline, Link as LinkIcon, List, ListOrdered, Type, AlignLeft, AlignCenter, AlignRight, Paperclip as AttachIcon, Square, UserX,
-  Minus, Maximize2, Minimize2, Highlighter, Tag, Wrench, Trophy, Flag, MapPin
+  Minus, Maximize2, Minimize2, Highlighter, Tag
 } from 'lucide-react';
 import EmojiPicker, { Theme as EmojiPickerTheme, EmojiClickData } from 'emoji-picker-react';
 
@@ -464,80 +464,6 @@ interface MessagingStats {
 }
 
 // ============================================
-// TYPES GESTION TICKETS
-// ============================================
-
-type TicketStatus = 'open' | 'in_progress' | 'pending' | 'resolved' | 'closed';
-type TicketPriority = 'low' | 'medium' | 'high' | 'critical';
-type TicketCategory = 'incident' | 'request' | 'problem' | 'change' | 'other';
-
-interface TicketComment {
-  id: string;
-  ticketId: string;
-  userId: string;
-  userName: string;
-  content: string;
-  isPrivate: boolean;
-  createdAt: Date;
-  updatedAt?: Date;
-}
-
-interface TicketAttachment {
-  id: string;
-  ticketId: string;
-  fileName: string;
-  fileSize: number;
-  fileType: string;
-  fileData: string;
-  uploadedBy: string;
-  uploadedAt: Date;
-}
-
-interface TicketHistory {
-  id: string;
-  ticketId: string;
-  userId: string;
-  userName: string;
-  action: string;
-  field?: string;
-  oldValue?: string;
-  newValue?: string;
-  timestamp: Date;
-}
-
-interface TicketItem {
-  id: string;
-  numero: string;
-  objet: string;
-  description: string;
-  status: TicketStatus;
-  priority: TicketPriority;
-  category: TicketCategory;
-  site: string;
-  localite: string;
-  technicien: string;
-  reporterId: string;
-  reporterName: string;
-  assigneeId?: string;
-  assigneeName?: string;
-  comments: TicketComment[];
-  attachments: TicketAttachment[];
-  history: TicketHistory[];
-  tags: string[];
-  createdAt: Date;
-  updatedAt: Date;
-  resolvedAt?: Date;
-  closedAt?: Date;
-  dueDate?: Date;
-  etr?: Date; // Estimated Time of Resolution
-  sla?: string; // Service Level Agreement (e.g., "4h", "24h")
-  slr?: string; // Service Level Resolution
-  isDeleted: boolean;
-  deletedAt?: Date;
-  deletedBy?: string;
-}
-
-// ============================================
 // CONFIGURATION
 // ============================================
 
@@ -589,19 +515,19 @@ const EXTERNAL_LINKS = [
 // CONFIGURATION TÂCHES NOC
 // ============================================
 
-const TASK_PRIORITIES: Record<TaskPriority, { label: string; color: string; bgColor: string; icon: typeof Flag }> = {
-  low: { label: 'Faible', color: 'text-slate-600', bgColor: 'bg-slate-100 dark:bg-slate-800', icon: Flag },
-  medium: { label: 'Moyenne', color: 'text-blue-600', bgColor: 'bg-blue-100 dark:bg-blue-900/30', icon: Flag },
-  high: { label: 'Haute', color: 'text-orange-600', bgColor: 'bg-orange-100 dark:bg-orange-900/30', icon: Flag },
-  critical: { label: 'Critique', color: 'text-red-600', bgColor: 'bg-red-100 dark:bg-red-900/30', icon: AlertTriangle }
+const TASK_PRIORITIES: Record<TaskPriority, { label: string; color: string; bgColor: string }> = {
+  low: { label: 'Faible', color: 'text-slate-600', bgColor: 'bg-slate-100 dark:bg-slate-800' },
+  medium: { label: 'Moyenne', color: 'text-blue-600', bgColor: 'bg-blue-100 dark:bg-blue-900/30' },
+  high: { label: 'Haute', color: 'text-orange-600', bgColor: 'bg-orange-100 dark:bg-orange-900/30' },
+  critical: { label: 'Critique', color: 'text-red-600', bgColor: 'bg-red-100 dark:bg-red-900/30' }
 };
 
-const TASK_CATEGORIES: Record<TaskCategory, { label: string; icon: typeof AlertTriangle }> = {
-  incident: { label: 'Incident', icon: AlertTriangle },
-  maintenance: { label: 'Maintenance', icon: Wrench },
-  surveillance: { label: 'Surveillance', icon: Eye },
-  administrative: { label: 'Administratif', icon: ClipboardList },
-  other: { label: 'Autre', icon: Pin }
+const TASK_CATEGORIES: Record<TaskCategory, { label: string; icon: string }> = {
+  incident: { label: 'Incident', icon: '🚨' },
+  maintenance: { label: 'Maintenance', icon: '🔧' },
+  surveillance: { label: 'Surveillance', icon: '👁️' },
+  administrative: { label: 'Administratif', icon: '📋' },
+  other: { label: 'Autre', icon: '📌' }
 };
 
 const TASK_STATUSES: Record<TaskStatus, { label: string; color: string; bgColor: string }> = {
@@ -613,11 +539,11 @@ const TASK_STATUSES: Record<TaskStatus, { label: string; color: string; bgColor:
   late: { label: 'En retard', color: 'text-red-600', bgColor: 'bg-red-100 dark:bg-red-900/30' }
 };
 
-const BADGE_CONFIG: Record<string, { label: string; icon: typeof Trophy; color: string }> = {
-  exemplary: { label: 'Agent Exemplaire', icon: Trophy, color: 'text-yellow-500' },
-  reliable: { label: 'Agent Fiable', icon: Star, color: 'text-blue-500' },
-  improving: { label: 'En Progression', icon: TrendingUp, color: 'text-green-500' },
-  needs_attention: { label: 'À Surveiller', icon: AlertTriangle, color: 'text-orange-500' }
+const BADGE_CONFIG: Record<string, { label: string; icon: string; color: string }> = {
+  exemplary: { label: 'Agent Exemplaire', icon: '🏆', color: 'text-yellow-500' },
+  reliable: { label: 'Agent Fiable', icon: '⭐', color: 'text-blue-500' },
+  improving: { label: 'En Progression', icon: '📈', color: 'text-green-500' },
+  needs_attention: { label: 'À Surveiller', icon: '⚠️', color: 'text-orange-500' }
 };
 
 // Seuils d'alerte
@@ -661,36 +587,6 @@ const STATUS_COLORS: Record<TaskStatus, { bg: string; text: string }> = {
   completed: { bg: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400', text: 'Terminé' },
   on_hold: { bg: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400', text: 'Suspendu' }
 };
-
-// ============================================
-// CONFIGURATION TICKETS
-// ============================================
-
-const TICKET_STATUSES: Record<TicketStatus, { label: string; color: string; bgColor: string; borderColor: string }> = {
-  open: { label: 'Ouvert', color: 'text-red-700 dark:text-red-400', bgColor: 'bg-red-100 dark:bg-red-900/40', borderColor: 'border-red-300 dark:border-red-700' },
-  in_progress: { label: 'En cours', color: 'text-blue-700 dark:text-blue-400', bgColor: 'bg-blue-100 dark:bg-blue-900/40', borderColor: 'border-blue-300 dark:border-blue-700' },
-  pending: { label: 'En attente', color: 'text-yellow-700 dark:text-yellow-400', bgColor: 'bg-yellow-100 dark:bg-yellow-900/40', borderColor: 'border-yellow-300 dark:border-yellow-700' },
-  resolved: { label: 'Résolu', color: 'text-green-700 dark:text-green-400', bgColor: 'bg-green-100 dark:bg-green-900/40', borderColor: 'border-green-300 dark:border-green-700' },
-  closed: { label: 'Fermé', color: 'text-slate-700 dark:text-slate-400', bgColor: 'bg-slate-100 dark:bg-slate-800', borderColor: 'border-slate-300 dark:border-slate-600' }
-};
-
-const TICKET_PRIORITIES: Record<TicketPriority, { label: string; color: string; bgColor: string }> = {
-  low: { label: 'Faible', color: 'text-slate-700 dark:text-slate-300', bgColor: 'bg-slate-100 dark:bg-slate-800' },
-  medium: { label: 'Moyenne', color: 'text-blue-700 dark:text-blue-300', bgColor: 'bg-blue-100 dark:bg-blue-900/40' },
-  high: { label: 'Haute', color: 'text-orange-700 dark:text-orange-300', bgColor: 'bg-orange-100 dark:bg-orange-900/40' },
-  critical: { label: 'Critique', color: 'text-red-700 dark:text-red-300', bgColor: 'bg-red-100 dark:bg-red-900/40' }
-};
-
-const TICKET_CATEGORIES: Record<TicketCategory, { label: string; icon: typeof AlertTriangle }> = {
-  incident: { label: 'Incident', icon: AlertTriangle },
-  request: { label: 'Demande', icon: Inbox },
-  problem: { label: 'Problème', icon: AlertCircle },
-  change: { label: 'Changement', icon: RefreshCw },
-  other: { label: 'Autre', icon: Pin }
-};
-
-const SITES_LIST = ['Site A', 'Site B', 'Site C', 'Site D', 'Site E', 'Bureau Central'];
-const LOCALITES_LIST = ['Kinshasa', 'Lubumbashi', 'Goma', 'Mbuji-Mayi', 'Kananga', 'Kisangani'];
 
 const DEMO_USERS: Record<string, UserProfile> = {
   'secureadmin@siliconeconnect.com': { 
@@ -1029,25 +925,6 @@ function verifyPassword(password: string, hash: string): boolean {
 // Génération d'ID unique
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-}
-
-// Nettoyer le HTML des divs vides et balises br inutiles
-function cleanEmptyDivs(html: string): string {
-  if (!html) return '';
-  
-  // Remove empty divs with only br tags: <div ...><br></div> or <div ...>&nbsp;</div>
-  let cleaned = html
-    .replace(/<div[^>]*>\s*<br\s*\/?>\s*<\/div>/gi, '')
-    .replace(/<div[^>]*>\s*&nbsp;\s*<\/div>/gi, '')
-    .replace(/<div[^>]*>\s*<\/div>/gi, '')
-    // Remove trailing <br> tags at the end
-    .replace(/(<br\s*\/?>\s*)+$/gi, '')
-    // Remove multiple consecutive br tags
-    .replace(/(<br\s*\/?>\s*){2,}/gi, '<br>')
-    // Trim whitespace
-    .trim();
-  
-  return cleaned;
 }
 
 // Vérification si l'utilisateur est Super Admin
@@ -1442,10 +1319,10 @@ export default function NOCActivityApp() {
   const [loginError, setLoginError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [currentMonth, setCurrentMonth] = useState(new Date(2026, 1, 1));
   const [tasks, setTasks] = useState<Task[]>([]);
   const [activities, setActivities] = useState<ActivityLog[]>([]);
-  const [overtimeMonth, setOvertimeMonth] = useState(new Date());
+  const [overtimeMonth, setOvertimeMonth] = useState(new Date(2026, 1, 1));
   const [restDialogOpen, setRestDialogOpen] = useState(false);
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -1632,6 +1509,34 @@ export default function NOCActivityApp() {
     highlightColor: '#ffffff',
     align: 'left' as 'left' | 'center' | 'right'
   });
+  
+  // Rich Text Editor States
+  const editorRef = useRef<HTMLDivElement | null>(null);
+  const [editorFontFamily, setEditorFontFamily] = useState('Arial');
+  const [editorFontSize, setEditorFontSize] = useState('3');
+  const [editorTextColor, setEditorTextColor] = useState('#000000');
+  const [editorHighlightColor, setEditorHighlightColor] = useState('#ffffff');
+  const [editorFormats, setEditorFormats] = useState({
+    bold: false,
+    italic: false,
+    underline: false
+  });
+  const [linkUrl, setLinkUrl] = useState('');
+  
+  // Format text function
+  const formatText = (command: string, value?: string) => {
+    document.execCommand(command, false, value);
+    if (editorRef.current) {
+      editorRef.current.focus();
+    }
+    // Update format states
+    setEditorFormats({
+      bold: document.queryCommandState('bold'),
+      italic: document.queryCommandState('italic'),
+      underline: document.queryCommandState('underline')
+    });
+  };
+  
   const [emailNotifications, setEmailNotifications] = useState({
     soundEnabled: true,
     browserNotifications: false,
@@ -1819,42 +1724,6 @@ export default function NOCActivityApp() {
   // Reply to message - keep reference after sending
   const [lastReplyTo, setLastReplyTo] = useState<ChatMessage | null>(null);
 
-  // ============================================
-  // États pour la Gestion des Tickets
-  // ============================================
-
-  const [tickets, setTickets] = useState<TicketItem[]>([]);
-  const [gedDocuments, setGedDocuments] = useState<any[]>([]);
-  const [selectedTicket, setSelectedTicket] = useState<TicketItem | null>(null);
-  const [ticketDialogOpen, setTicketDialogOpen] = useState(false);
-  const [ticketDetailOpen, setTicketDetailOpen] = useState(false);
-  const [createTicketOpen, setCreateTicketOpen] = useState(false);
-  const [ticketViewMode, setTicketViewMode] = useState<'list' | 'card'>('list');
-  const [ticketSearchQuery, setTicketSearchQuery] = useState('');
-  const [ticketStatusFilter, setTicketStatusFilter] = useState<TicketStatus | 'all'>('all');
-  const [ticketPriorityFilter, setTicketPriorityFilter] = useState<TicketPriority | 'all'>('all');
-  const [ticketSiteFilter, setTicketSiteFilter] = useState<string>('all');
-  const [ticketLocaliteFilter, setTicketLocaliteFilter] = useState<string>('all');
-  const [ticketTechnicienFilter, setTicketTechnicienFilter] = useState<string>('all');
-  const [showDeletedTickets, setShowDeletedTickets] = useState(false);
-  const [newTicket, setNewTicket] = useState({
-    objet: '',
-    description: '',
-    priority: 'medium' as TicketPriority,
-    category: 'incident' as TicketCategory,
-    site: '',
-    localite: '',
-    technicien: '',
-    dueDate: null as Date | null,
-    etr: null as Date | null,
-    sla: '',
-    slr: ''
-  });
-  const [newTicketComment, setNewTicketComment] = useState('');
-  const [isPrivateComment, setIsPrivateComment] = useState(false);
-  const [editingTicket, setEditingTicket] = useState<TicketItem | null>(null);
-  const [editTicketOpen, setEditTicketOpen] = useState(false);
-
   // Typing indicator simulation
   const [simulatedTyping, setSimulatedTyping] = useState<{ userId: string; userName: string; isRecording: boolean } | null>(null);
 
@@ -1918,7 +1787,7 @@ export default function NOCActivityApp() {
     }
   }, [isAuthenticated, tasks.length]);
 
-  // Charger les utilisateurs, logs et tickets depuis localStorage
+  // Charger les utilisateurs et logs depuis localStorage
   useEffect(() => {
     const loadData = () => {
       const storedUsers = localStorage.getItem('noc_all_users');
@@ -1945,42 +1814,12 @@ export default function NOCActivityApp() {
           }
         } catch { /* ignore */ }
       }
-
-      // Charger les tickets depuis localStorage
-      const storedTickets = localStorage.getItem('noc_tickets');
-      if (storedTickets) {
-        try {
-          const parsed = JSON.parse(storedTickets);
-          if (parsed.length > 0) {
-            // Convertir les dates
-            const ticketsWithDates = parsed.map((t: any) => ({
-              ...t,
-              createdAt: new Date(t.createdAt),
-              updatedAt: new Date(t.updatedAt),
-              resolvedAt: t.resolvedAt ? new Date(t.resolvedAt) : undefined,
-              closedAt: t.closedAt ? new Date(t.closedAt) : undefined,
-              dueDate: t.dueDate ? new Date(t.dueDate) : undefined,
-              deletedAt: t.deletedAt ? new Date(t.deletedAt) : undefined,
-              comments: t.comments?.map((c: any) => ({...c, createdAt: new Date(c.createdAt), updatedAt: c.updatedAt ? new Date(c.updatedAt) : undefined})) || [],
-              history: t.history?.map((h: any) => ({...h, timestamp: new Date(h.timestamp)})) || [],
-            }));
-            setTickets(ticketsWithDates);
-          }
-        } catch { /* ignore */ }
-      }
     };
     
     // Utiliser un timeout pour éviter le setState synchrone
     const timer = setTimeout(loadData, 0);
     return () => clearTimeout(timer);
   }, []);
-
-  // Sauvegarder les tickets dans localStorage à chaque modification
-  useEffect(() => {
-    if (tickets.length > 0) {
-      localStorage.setItem('noc_tickets', JSON.stringify(tickets));
-    }
-  }, [tickets]);
 
   // Initialiser les conversations de démo pour la messagerie WhatsApp
   useEffect(() => {
@@ -2164,20 +2003,10 @@ export default function NOCActivityApp() {
 
     await new Promise(resolve => setTimeout(resolve, 500));
 
-    // Chercher l'utilisateur par pseudo ou email (insensible à la casse)
-    // D'abord chercher dans allUsers (localStorage), puis dans DEMO_USERS
-    let foundUser = allUsers.find(
-      u => u.username?.toLowerCase() === loginIdentifier.toLowerCase() ||
-           u.email?.toLowerCase() === loginIdentifier.toLowerCase()
+    // Chercher l'utilisateur par pseudo (insensible à la casse)
+    const foundUser = Object.values(DEMO_USERS).find(
+      u => u.username?.toLowerCase() === loginIdentifier.toLowerCase()
     );
-
-    // Si pas trouvé dans allUsers, chercher dans DEMO_USERS
-    if (!foundUser) {
-      foundUser = Object.values(DEMO_USERS).find(
-        u => u.username?.toLowerCase() === loginIdentifier.toLowerCase() ||
-             u.email?.toLowerCase() === loginIdentifier.toLowerCase()
-      );
-    }
 
     // Fonction pour gérer l'échec de connexion
     const handleFailedLogin = () => {
@@ -2199,7 +2028,7 @@ export default function NOCActivityApp() {
         });
       }
 
-      setLoginError('Pseudo/Email ou mot de passe incorrect');
+      setLoginError('Pseudo ou mot de passe incorrect');
       setIsLoading(false);
       toast.error('Erreur de connexion', { description: 'Identifiants invalides' });
     };
@@ -2217,9 +2046,8 @@ export default function NOCActivityApp() {
       return;
     }
 
-    // Vérifier le mot de passe avec la fonction de vérification sécurisée
-    const passwordValid = verifyPassword(password, foundUser.passwordHash || '');
-    if (!passwordValid) {
+    // Vérifier le mot de passe
+    if (foundUser.passwordHash !== password) {
       handleFailedLogin();
       return;
     }
@@ -3217,430 +3045,6 @@ export default function NOCActivityApp() {
     toast.success('PDF généré', { description: 'Le fichier a été téléchargé' });
   }, [user, overtimeMonth]);
 
-  // Planning PDF Generation
-  const generatePlanningPDF = useCallback(async () => {
-    const doc = new jsPDF('l', 'mm', 'a4'); // Landscape orientation
-    const monthNames = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
-    
-    const pageWidth = 297; // A4 landscape width
-    const pageHeight = 210; // A4 landscape height
-    const margin = 10;
-
-    // ============================================
-    // 1. EN-TÊTE - Logo + Titre
-    // ============================================
-    
-    const logoWidth = 18;
-    const titleText = 'SILICONE CONNECT';
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    const titleWidth = doc.getTextWidth(titleText);
-    const totalHeaderWidth = logoWidth + 5 + titleWidth;
-    const headerStartX = (pageWidth - totalHeaderWidth) / 2;
-    
-    // Logo
-    try {
-      const logoImg = new Image();
-      logoImg.src = '/faicone_sc.png';
-      await new Promise((resolve) => {
-        logoImg.onload = resolve;
-        logoImg.onerror = resolve;
-      });
-      
-      if (logoImg.complete && logoImg.naturalWidth > 0) {
-        doc.addImage(logoImg, 'PNG', headerStartX, 8, logoWidth, 18);
-      }
-    } catch (e) {
-      doc.setFillColor(59, 130, 246);
-      doc.roundedRect(headerStartX, 8, logoWidth, 18, 2, 2, 'F');
-    }
-
-    // Titre SILICONE CONNECT
-    doc.setTextColor(0, 0, 0);
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.text(titleText, headerStartX + logoWidth + 5, 20);
-
-    // ============================================
-    // 2. TITRE DU DOCUMENT
-    // ============================================
-    
-    doc.setFontSize(16);
-    doc.setFont('helvetica', 'bold');
-    doc.text('PLANNING DES AGENTS NOC', pageWidth / 2, 35, { align: 'center' });
-    
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`Mois de ${monthNames[currentMonth.getMonth()]} ${currentMonth.getFullYear()}`, pageWidth / 2, 43, { align: 'center' });
-
-    // ============================================
-    // 3. PRÉPARER LES DONNÉES DU PLANNING
-    // ============================================
-    
-    const monthStart = startOfMonth(currentMonth);
-    const monthEnd = endOfMonth(monthStart);
-    const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
-    const numDays = days.length;
-
-    // Couleurs pour les shifts
-    const shiftColors = {
-      'A': { light: [219, 234, 254], dark: [59, 130, 246] }, // Blue
-      'B': { light: [254, 249, 195], dark: [234, 179, 8] },  // Yellow/Amber
-      'C': { light: [220, 252, 231], dark: [34, 197, 94] }   // Green
-    };
-    const restColor = [229, 231, 235]; // Gray for rest days
-    const nightDarkColors = {
-      'A': [30, 64, 175],   // Dark blue
-      'B': [161, 98, 7],    // Dark amber
-      'C': [22, 101, 52]    // Dark green
-    };
-
-    // ============================================
-    // 4. TABLEAU DE PLANNING
-    // ============================================
-    
-    const tableStartY = 52;
-    const rowHeight = 12;
-    const headerHeight = 10;
-    const dayColWidth = (pageWidth - margin * 2 - 30) / numDays; // 30mm for shift name column
-    const shiftColWidth = 30;
-
-    // En-tête du tableau avec les jours
-    doc.setFillColor(59, 130, 246);
-    doc.rect(margin, tableStartY, pageWidth - margin * 2, headerHeight, 'F');
-    
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(7);
-    doc.setFont('helvetica', 'bold');
-    
-    // Première cellule vide (pour les noms de shifts)
-    doc.rect(margin, tableStartY, shiftColWidth, headerHeight);
-    
-    // Jours du mois
-    days.forEach((day, idx) => {
-      const x = margin + shiftColWidth + idx * dayColWidth;
-      const dayNum = format(day, 'd');
-      const dayName = format(day, 'EEE', { locale: fr }).substring(0, 3).toUpperCase();
-      
-      doc.rect(x, tableStartY, dayColWidth, headerHeight);
-      doc.text(`${dayName}`, x + dayColWidth / 2, tableStartY + 4, { align: 'center' });
-      doc.text(`${dayNum}`, x + dayColWidth / 2, tableStartY + 8, { align: 'center' });
-    });
-
-    // Corps du tableau - une ligne par shift
-    const bodyStartY = tableStartY + headerHeight;
-    
-    ['A', 'B', 'C'].forEach((shiftName, shiftIdx) => {
-      const rowY = bodyStartY + shiftIdx * rowHeight;
-      
-      // Alternating row background
-      if (shiftIdx % 2 === 0) {
-        doc.setFillColor(249, 250, 251);
-        doc.rect(margin, rowY, pageWidth - margin * 2, rowHeight, 'F');
-      }
-      
-      // Nom du shift
-      doc.setFillColor(...shiftColors[shiftName as keyof typeof shiftColors].dark);
-      doc.rect(margin, rowY, shiftColWidth, rowHeight, 'F');
-      
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(9);
-      doc.setFont('helvetica', 'bold');
-      doc.text(`Shift ${shiftName}`, margin + shiftColWidth / 2, rowY + rowHeight / 2 + 2, { align: 'center' });
-      
-      // Données pour chaque jour
-      days.forEach((day, dayIdx) => {
-        const x = margin + shiftColWidth + dayIdx * dayColWidth;
-        const schedule = getShiftScheduleForDate(shiftName, day);
-        const restInfo = getIndividualRestAgent(shiftName, day);
-        
-        let bgColor: number[];
-        let textColor: number[] = [0, 0, 0];
-        let cellText = '';
-        
-        if (schedule.isCollectiveRest) {
-          bgColor = restColor;
-          cellText = 'R';
-          textColor = [107, 114, 128];
-        } else if (schedule.dayType === 'DAY_SHIFT') {
-          bgColor = shiftColors[shiftName as keyof typeof shiftColors].light;
-          cellText = 'J';
-        } else {
-          bgColor = nightDarkColors[shiftName as keyof typeof nightDarkColors];
-          cellText = 'N';
-          textColor = [255, 255, 255];
-        }
-        
-        // Draw cell background
-        doc.setFillColor(...bgColor);
-        doc.rect(x, rowY, dayColWidth, rowHeight, 'F');
-        
-        // Draw cell border
-        doc.setDrawColor(200, 200, 200);
-        doc.setLineWidth(0.1);
-        doc.rect(x, rowY, dayColWidth, rowHeight);
-        
-        // Draw cell text
-        doc.setTextColor(...textColor);
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'bold');
-        doc.text(cellText, x + dayColWidth / 2, rowY + rowHeight / 2 + 2, { align: 'center' });
-        
-        // Mark individual rest day with small indicator
-        if (restInfo) {
-          doc.setFontSize(5);
-          doc.setTextColor(234, 88, 12); // Orange
-          doc.text('•', x + dayColWidth / 2, rowY + rowHeight - 2, { align: 'center' });
-        }
-      });
-    });
-
-    // ============================================
-    // 5. LÉGENDE
-    // ============================================
-    
-    const legendY = bodyStartY + 3 * rowHeight + 10;
-    
-    doc.setTextColor(0, 0, 0);
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-    doc.text('LÉGENDE:', margin, legendY);
-    
-    // Légende des types de jours - avec meilleur espacement
-    const legendItems = [
-      { label: 'J = Jour (07h00 - 19h00)', color: [219, 234, 254] },
-      { label: 'N = Nuit (19h00 - 07h00)', color: [30, 64, 175] },
-      { label: 'R = Repos', color: [229, 231, 235] }
-    ];
-    
-    let legendX = margin + 25; // Espace après "LÉGENDE:"
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'normal');
-    
-    legendItems.forEach((item, idx) => {
-      // Color box with border
-      doc.setFillColor(...item.color);
-      doc.setDrawColor(150, 150, 150);
-      doc.setLineWidth(0.2);
-      doc.rect(legendX, legendY + 3, 10, 6, 'FD');
-      
-      // Text - toujours en noir pour lisibilité
-      doc.setTextColor(0, 0, 0);
-      doc.text(item.label, legendX + 12, legendY + 7.5);
-      
-      legendX += 70; // Espacement fixe entre les items
-    });
-
-    // ============================================
-    // 6. ÉQUIPES
-    // ============================================
-    
-    const teamsY = legendY + 18;
-    const teamWidth = (pageWidth - margin * 2) / 3;
-    
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'bold');
-    
-    const teams = {
-      'A': ['Alaine ODZONDO', 'Emma-Casimir NDONGO', 'Luca MOUSSOUNDA', 'José NGONKOLI'],
-      'B': ['Sara MADY', 'Séverin NDANDOU', 'Furys DIAMANA', 'Marly POUABOUD'],
-      'C': ['Lapreuve N\'SANA', 'Audrey NDINGA', 'BATA MADINGOU Ange Kevine', 'Lotti SEHOSSOLO']
-    };
-    
-    Object.entries(teams).forEach(([shiftKey, members], idx) => {
-      const x = margin + idx * teamWidth;
-      
-      // Team header with color
-      doc.setFillColor(...shiftColors[shiftKey as keyof typeof shiftColors].dark);
-      doc.rect(x, teamsY, teamWidth - 5, 6, 'F');
-      
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(7);
-      doc.setFont('helvetica', 'bold');
-      doc.text(`ÉQUIPE SHIFT ${shiftKey}:`, x + 2, teamsY + 4);
-      
-      // Team members
-      doc.setTextColor(0, 0, 0);
-      doc.setFont('helvetica', 'normal');
-      members.forEach((member, memberIdx) => {
-        doc.text(`- ${member}`, x + 2, teamsY + 10 + memberIdx * 4);
-      });
-    });
-
-    // ============================================
-    // 7. HEURES DE TRAVAIL PAR SHIFT
-    // ============================================
-    
-    const hoursY = teamsY + 28;
-    const hoursTableWidth = (pageWidth - margin * 2) / 3 - 5;
-    
-    // Calculate hours for each shift
-    // Jour: 07h-19h = 12h total, Nuit: 19h-07h = 12h total
-    // Déduction: 2h pause + 2h sup = 4h
-    // Heures normales: 12h - 2h (pause) - 2h (sup) = 8h par jour
-    // Heures sup: 2h par jour
-    // Heures totales = Heures normales + Heures sup = 10h par jour
-    const calculateShiftHours = (shiftName: string) => {
-      let jourCount = 0;
-      let nuitCount = 0;
-      
-      days.forEach((day) => {
-        const schedule = getShiftScheduleForDate(shiftName, day);
-        if (!schedule.isCollectiveRest) {
-          if (schedule.dayType === 'DAY_SHIFT') {
-            jourCount++;
-          } else {
-            nuitCount++;
-          }
-        }
-      });
-      
-      const workingDays = jourCount + nuitCount;
-      
-      // Heures normales: 8h par jour travaillé (12h - 2h pause - 2h sup)
-      const heuresNormales = workingDays * 8;
-      
-      // Heures supplémentaires: 2h par jour travaillé
-      const heuresSup = workingDays * 2;
-      
-      // Heures totales: somme des heures normales et heures sup
-      const heuresTotales = heuresNormales + heuresSup;
-      
-      return { 
-        jourCount, 
-        nuitCount, 
-        workingDays, 
-        heuresNormales, 
-        heuresSup, 
-        heuresTotales 
-      };
-    };
-    
-    // Header for hours section
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(0, 0, 0);
-    doc.text('RÉCAPITULATIF DES HEURES DE TRAVAIL', margin, hoursY);
-    
-    const hoursHeaderY = hoursY + 4;
-    
-    // Draw hours table for each shift
-    ['A', 'B', 'C'].forEach((shiftName, idx) => {
-      const x = margin + idx * (hoursTableWidth + 5);
-      const hours = calculateShiftHours(shiftName);
-      
-      // Shift header
-      doc.setFillColor(...shiftColors[shiftName as keyof typeof shiftColors].dark);
-      doc.rect(x, hoursHeaderY, hoursTableWidth, 5, 'F');
-      
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(6);
-      doc.setFont('helvetica', 'bold');
-      doc.text(`SHIFT ${shiftName}`, x + hoursTableWidth / 2, hoursHeaderY + 3.5, { align: 'center' });
-      
-      // Table header row - en-têtes sur 1 ligne
-      const tableBodyY = hoursHeaderY + 5;
-      doc.setFillColor(245, 245, 245);
-      doc.rect(x, tableBodyY, hoursTableWidth / 3, 5, 'F');
-      doc.rect(x + hoursTableWidth / 3, tableBodyY, hoursTableWidth / 3, 5, 'F');
-      doc.rect(x + 2 * hoursTableWidth / 3, tableBodyY, hoursTableWidth / 3, 5, 'F');
-      
-      doc.setDrawColor(180, 180, 180);
-      doc.setLineWidth(0.1);
-      doc.rect(x, tableBodyY, hoursTableWidth, 5);
-      doc.line(x + hoursTableWidth / 3, tableBodyY, x + hoursTableWidth / 3, tableBodyY + 5);
-      doc.line(x + 2 * hoursTableWidth / 3, tableBodyY, x + 2 * hoursTableWidth / 3, tableBodyY + 5);
-      
-      doc.setTextColor(60, 60, 60);
-      doc.setFontSize(5.5);
-      doc.setFont('helvetica', 'bold');
-      doc.text('HEURES NORMALES', x + hoursTableWidth / 6, tableBodyY + 3.5, { align: 'center' });
-      doc.text('HEURES SUP', x + hoursTableWidth / 2, tableBodyY + 3.5, { align: 'center' });
-      doc.text('HEURES TOTALES', x + 5 * hoursTableWidth / 6, tableBodyY + 3.5, { align: 'center' });
-      
-      // Values row
-      const valuesY = tableBodyY + 5;
-      doc.setFillColor(255, 255, 255);
-      doc.rect(x, valuesY, hoursTableWidth, 6, 'F');
-      
-      doc.setDrawColor(180, 180, 180);
-      doc.rect(x, valuesY, hoursTableWidth, 6);
-      doc.line(x + hoursTableWidth / 3, valuesY, x + hoursTableWidth / 3, valuesY + 6);
-      doc.line(x + 2 * hoursTableWidth / 3, valuesY, x + 2 * hoursTableWidth / 3, valuesY + 6);
-      
-      // Heures normales - bleu
-      doc.setTextColor(59, 130, 246);
-      doc.setFontSize(8);
-      doc.setFont('helvetica', 'bold');
-      doc.text(`${hours.heuresNormales}h`, x + hoursTableWidth / 6, valuesY + 4, { align: 'center' });
-      
-      // Heures sup - orange
-      doc.setTextColor(234, 88, 12);
-      doc.text(`${hours.heuresSup}h`, x + hoursTableWidth / 2, valuesY + 4, { align: 'center' });
-      
-      // Heures totales - vert
-      doc.setTextColor(22, 163, 74);
-      doc.text(`${hours.heuresTotales}h`, x + 5 * hoursTableWidth / 6, valuesY + 4, { align: 'center' });
-      
-      // Work days summary
-      doc.setTextColor(100, 100, 100);
-      doc.setFontSize(5);
-      doc.setFont('helvetica', 'normal');
-      doc.text(`${hours.jourCount}J + ${hours.nuitCount}N = ${hours.workingDays}j`, x + hoursTableWidth / 2, valuesY + 10, { align: 'center' });
-    });
-
-    // ============================================
-    // 8. SIGNATURE SUPERVISEUR NOC
-    // ============================================
-    
-    const signatureY = hoursY + 35;
-    
-    // Zone de signature compacte
-    const sigBoxWidth = 55;
-    const sigBoxHeight = 15;
-    const sigBoxX = pageWidth - margin - sigBoxWidth;
-    
-    // Fond léger
-    doc.setFillColor(252, 252, 252);
-    doc.setDrawColor(150, 150, 150);
-    doc.setLineWidth(0.2);
-    doc.rect(sigBoxX, signatureY, sigBoxWidth, sigBoxHeight, 'FD');
-    
-    // Titre
-    doc.setTextColor(0, 0, 0);
-    doc.setFontSize(6);
-    doc.setFont('helvetica', 'bold');
-    doc.text('SUPERVISEUR NOC', sigBoxX + sigBoxWidth / 2, signatureY + 4, { align: 'center' });
-    
-    // Ligne de signature
-    doc.setDrawColor(100, 100, 100);
-    doc.setLineWidth(0.15);
-    doc.line(sigBoxX + 5, signatureY + 9, sigBoxX + sigBoxWidth - 5, signatureY + 9);
-    
-    // Nom du superviseur en noir
-    doc.setTextColor(0, 0, 0);
-    doc.setFontSize(6);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Thérésia BABINDAMANA', sigBoxX + sigBoxWidth / 2, signatureY + 13, { align: 'center' });
-
-    // ============================================
-    // 9. PIED DE PAGE
-    // ============================================
-    
-    const now = new Date();
-    const footerY = pageHeight - 8;
-    
-    doc.setFontSize(7);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(107, 114, 128);
-    
-    doc.text(`Généré le ${format(now, 'dd/MM/yyyy')} à ${format(now, 'HH:mm')}`, margin, footerY);
-
-    // Sauvegarder
-    doc.save(`planning_noc_${format(currentMonth, 'MM_yyyy')}.pdf`);
-    toast.success('PDF généré', { description: 'Le planning a été téléchargé' });
-  }, [currentMonth]);
-
   // Planning generation
   const planning = useCallback(() => {
     const monthStart = startOfMonth(currentMonth);
@@ -3998,18 +3402,6 @@ export default function NOCActivityApp() {
             <span>© {new Date().getFullYear()} Silicone Connect</span>
             <span className="w-8 h-[1px] bg-slate-300 dark:bg-slate-700" />
           </motion.p>
-
-          {/* Bouton Télécharger le projet */}
-          <motion.a
-            href="/api/download-project"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 1, duration: 0.4 }}
-            className="mt-4 flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-sm font-medium rounded-lg hover:from-cyan-400 hover:to-blue-500 transition-all shadow-lg"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
-            Télécharger le projet (ZIP)
-          </motion.a>
         </motion.div>
       </div>
     );
@@ -4021,28 +3413,6 @@ export default function NOCActivityApp() {
     <>
       <Toaster position="top-right" richColors closeButton />
       <div className="min-h-screen bg-background">
-        {/* Bannière d'avertissement - Mot de passe à changer */}
-        {user?.mustChangePassword && (
-          <div className="sticky top-0 z-[60] w-full bg-gradient-to-r from-amber-500 to-orange-500 text-white px-4 py-2">
-            <div className="flex items-center justify-center gap-3 max-w-7xl mx-auto">
-              <AlertTriangle className="w-5 h-5 flex-shrink-0 animate-pulse" />
-              <div className="flex-1 text-center">
-                <span className="font-semibold">⚠️ SÉCURITÉ REQUISE :</span>{' '}
-                <span>Pour des raisons de sécurité, vous devez changer votre mot de passe avant de continuer.</span>
-              </div>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={openSecurityDialog}
-                className="bg-white text-orange-600 hover:bg-orange-50 font-semibold"
-              >
-                <Lock className="w-4 h-4 mr-2" />
-                Changer maintenant
-              </Button>
-            </div>
-          </div>
-        )}
-
         {/* Header */}
         <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur">
           <div className="flex h-14 items-center px-4 gap-4">
@@ -4179,62 +3549,40 @@ export default function NOCActivityApp() {
 
         <div className="flex">
           {/* Sidebar */}
-          <aside className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} fixed lg:sticky top-14 left-0 z-40 ${sidebarCollapsed ? 'lg:w-16' : 'lg:w-60'} w-60 h-[calc(100vh-3.5rem)] border-r bg-background transition-all duration-300 lg:translate-x-0`}>
-            {/* Collapse/Expand Toggle - Desktop only */}
-            <div className="hidden lg:flex justify-end p-2 border-b">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 w-8 p-0"
-                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              >
-                {sidebarCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-              </Button>
-            </div>
+          <aside className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} fixed lg:sticky top-14 left-0 z-40 w-60 h-[calc(100vh-3.5rem)] border-r bg-background transition-transform duration-300 lg:translate-x-0`}>
             <ScrollArea className="h-full">
               <nav className="p-3 space-y-1">
-                <Button variant={currentTab === 'dashboard' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTab('dashboard')}>
-                  <LayoutDashboard className="w-5 h-5" /> {!sidebarCollapsed && 'Tableau de bord'}
+                <Button variant={currentTab === 'dashboard' ? 'secondary' : 'ghost'} className="w-full justify-start gap-3 h-10" onClick={() => setCurrentTab('dashboard')}>
+                  <LayoutDashboard className="w-5 h-5" /> Tableau de bord
                 </Button>
-                <Button variant={currentTab === 'planning' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTab('planning')}>
-                  <Calendar className="w-5 h-5" /> {!sidebarCollapsed && 'Planning'}
+                <Button variant={currentTab === 'planning' ? 'secondary' : 'ghost'} className="w-full justify-start gap-3 h-10" onClick={() => setCurrentTab('planning')}>
+                  <Calendar className="w-5 h-5" /> Planning
                 </Button>
-                <Button variant={currentTab === 'tasks' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTab('tasks')}>
-                  <ClipboardList className="w-5 h-5" /> {!sidebarCollapsed && 'Mes Tâches'}
+                <Button variant={currentTab === 'tasks' ? 'secondary' : 'ghost'} className="w-full justify-start gap-3 h-10" onClick={() => setCurrentTab('tasks')}>
+                  <ClipboardList className="w-5 h-5" /> Mes Tâches
                 </Button>
-                <Button variant={currentTab === 'activities' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTab('activities')}>
-                  <Activity className="w-5 h-5" /> {!sidebarCollapsed && 'Activités'}
+                <Button variant={currentTab === 'activities' ? 'secondary' : 'ghost'} className="w-full justify-start gap-3 h-10" onClick={() => setCurrentTab('activities')}>
+                  <Activity className="w-5 h-5" /> Activités
                 </Button>
-                <Button variant={currentTab === 'tickets' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTab('tickets')}>
-                  <Ticket className="w-5 h-5" /> {!sidebarCollapsed && 'Gestion Tickets'}
+                <Button variant={currentTab === 'overtime' ? 'secondary' : 'ghost'} className="w-full justify-start gap-3 h-10" onClick={() => setCurrentTab('overtime')}>
+                  <Clock className="w-5 h-5" /> Heures Sup.
                 </Button>
-                <Button variant={currentTab === 'overtime' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTab('overtime')}>
-                  <Clock className="w-5 h-5" /> {!sidebarCollapsed && 'Heures Sup.'}
+                <Button variant={currentTab === 'links' ? 'secondary' : 'ghost'} className="w-full justify-start gap-3 h-10" onClick={() => setCurrentTab('links')}>
+                  <ExternalLink className="w-5 h-5" /> Liens Externes
                 </Button>
-                <Button variant={currentTab === 'links' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTab('links')}>
-                  <ExternalLink className="w-5 h-5" /> {!sidebarCollapsed && 'Liens Externes'}
-                </Button>
-                <Button variant={currentTab === 'email' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTab('email')}>
-                  <MessageCircle className="w-5 h-5" /> {!sidebarCollapsed && 'Chats'}
-                  {!sidebarCollapsed && conversations.reduce((acc, c) => acc + c.unreadCount, 0) > 0 && (
+                <Button variant={currentTab === 'email' ? 'secondary' : 'ghost'} className="w-full justify-start gap-3 h-10" onClick={() => setCurrentTab('email')}>
+                  <MessageCircle className="w-5 h-5" /> Chats
+                  {conversations.reduce((acc, c) => acc + c.unreadCount, 0) > 0 && (
                     <Badge className="ml-auto bg-green-500 text-white text-xs px-1.5 py-0.5 min-w-[20px] justify-center">
                       {conversations.reduce((acc, c) => acc + c.unreadCount, 0)}
                     </Badge>
                   )}
                 </Button>
-                <Button variant={currentTab === 'messagerie' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTab('messagerie')}>
-                  <Mail className="w-5 h-5" /> {!sidebarCollapsed && 'Messagerie'}
-                  {!sidebarCollapsed && messages.filter(m => m.folder === 'inbox' && !m.isRead).length > 0 && (
+                <Button variant={currentTab === 'messagerie' ? 'secondary' : 'ghost'} className="w-full justify-start gap-3 h-10" onClick={() => setCurrentTab('messagerie')}>
+                  <Mail className="w-5 h-5" /> Messagerie
+                  {messages.filter(m => m.folder === 'inbox' && !m.isRead).length > 0 && (
                     <Badge className="ml-auto bg-red-500 text-white text-xs px-1.5 py-0.5 min-w-[20px] justify-center">
                       {messages.filter(m => m.folder === 'inbox' && !m.isRead).length}
-                    </Badge>
-                  )}
-                </Button>
-                <Button variant={currentTab === 'ged' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTab('ged')}>
-                  <FileText className="w-5 h-5" /> {!sidebarCollapsed && 'GED Documents'}
-                  {!sidebarCollapsed && gedDocuments.filter(d => d.status === 'en_attente').length > 0 && (
-                    <Badge className="ml-auto bg-orange-500 text-white text-xs px-1.5 py-0.5 min-w-[20px] justify-center">
-                      {gedDocuments.filter(d => d.status === 'en_attente').length}
                     </Badge>
                   )}
                 </Button>
@@ -4242,21 +3590,21 @@ export default function NOCActivityApp() {
                 {(user?.role === 'RESPONSABLE' || user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && (
                   <>
                     <Separator className="my-2" />
-                    <Button variant={currentTab === 'supervision' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTab('supervision')}>
-                      <Eye className="w-5 h-5" /> {!sidebarCollapsed && 'Supervision'}
+                    <Button variant={currentTab === 'supervision' ? 'secondary' : 'ghost'} className="w-full justify-start gap-3 h-10" onClick={() => setCurrentTab('supervision')}>
+                      <Eye className="w-5 h-5" /> Supervision
                     </Button>
                   </>
                 )}
                 
                 {user?.role === 'ADMIN' && (
-                  <Button variant={currentTab === 'admin' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTab('admin')}>
-                    <Settings className="w-5 h-5" /> {!sidebarCollapsed && 'Administration'}
+                  <Button variant={currentTab === 'admin' ? 'secondary' : 'ghost'} className="w-full justify-start gap-3 h-10" onClick={() => setCurrentTab('admin')}>
+                    <Settings className="w-5 h-5" /> Administration
                   </Button>
                 )}
               </nav>
             </ScrollArea>
             
-            {user?.shift && !sidebarCollapsed && (
+            {user?.shift && (
               <div className="absolute bottom-3 left-3 right-3">
                 <Card className="border-2" style={{ borderColor: getShiftColor(user.shift.name) }}>
                   <CardContent className="p-3">
@@ -4284,9 +3632,7 @@ export default function NOCActivityApp() {
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
                       <h1 className="text-2xl lg:text-3xl font-bold">Tableau de bord</h1>
-                      <p className="text-muted-foreground">
-                        Bienvenue, {user?.firstName && user?.lastName ? `${user.firstName} ${user.lastName}` : user?.name} • {format(new Date(), 'EEEE d MMMM yyyy', { locale: fr })}
-                      </p>
+                      <p className="text-muted-foreground">Bienvenue, {user?.name} • {format(new Date(), 'EEEE d MMMM yyyy', { locale: fr })}</p>
                     </div>
                     <Button variant="outline" onClick={() => toast.success('Données actualisées')}>
                       <RefreshCw className="w-4 h-4 mr-2" /> Actualiser
@@ -4529,9 +3875,6 @@ export default function NOCActivityApp() {
                       </span>
                       <Button variant="outline" size="icon" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}>
                         <ChevronRight className="h-4 w-4" />
-                      </Button>
-                      <Button onClick={generatePlanningPDF} className="gap-2 ml-2">
-                        <FileDown className="w-4 h-4" /> Générer PDF
                       </Button>
                     </div>
                   </div>
@@ -7242,17 +6585,10 @@ export default function NOCActivityApp() {
                                 <Select value={newTask.priority} onValueChange={(v) => setNewTask({...newTask, priority: v as TaskPriority})}>
                                   <SelectTrigger><SelectValue /></SelectTrigger>
                                   <SelectContent>
-                                    {Object.entries(TASK_PRIORITIES).map(([key, val]) => {
-                                      const IconComponent = val.icon;
-                                      return (
-                                        <SelectItem key={key} value={key}>
-                                          <div className="flex items-center gap-2">
-                                            <IconComponent className={`w-4 h-4 ${val.color}`} />
-                                            {val.label}
-                                          </div>
-                                        </SelectItem>
-                                      );
-                                    })}
+                                    <SelectItem value="low">🟢 Faible</SelectItem>
+                                    <SelectItem value="medium">🔵 Moyenne</SelectItem>
+                                    <SelectItem value="high">🟠 Haute</SelectItem>
+                                    <SelectItem value="critical">🔴 Critique</SelectItem>
                                   </SelectContent>
                                 </Select>
                               </div>
@@ -7261,17 +6597,11 @@ export default function NOCActivityApp() {
                                 <Select value={newTask.category} onValueChange={(v) => setNewTask({...newTask, category: v as TaskCategory})}>
                                   <SelectTrigger><SelectValue /></SelectTrigger>
                                   <SelectContent>
-                                    {Object.entries(TASK_CATEGORIES).map(([key, val]) => {
-                                      const IconComponent = val.icon;
-                                      return (
-                                        <SelectItem key={key} value={key}>
-                                          <div className="flex items-center gap-2">
-                                            <IconComponent className="w-4 h-4" />
-                                            {val.label}
-                                          </div>
-                                        </SelectItem>
-                                      );
-                                    })}
+                                    <SelectItem value="incident">🚨 Incident</SelectItem>
+                                    <SelectItem value="maintenance">🔧 Maintenance</SelectItem>
+                                    <SelectItem value="surveillance">👁️ Surveillance</SelectItem>
+                                    <SelectItem value="administrative">📋 Administratif</SelectItem>
+                                    <SelectItem value="other">📌 Autre</SelectItem>
                                   </SelectContent>
                                 </Select>
                               </div>
@@ -7444,11 +6774,11 @@ export default function NOCActivityApp() {
                             <SelectValue placeholder="Filtrer" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="my"><div className="flex items-center gap-2"><ClipboardList className="w-4 h-4" /> Mes tâches</div></SelectItem>
-                            <SelectItem value="all"><div className="flex items-center gap-2"><Users className="w-4 h-4" /> Toutes</div></SelectItem>
-                            <SelectItem value="pending"><div className="flex items-center gap-2"><Clock3 className="w-4 h-4" /> En attente</div></SelectItem>
-                            <SelectItem value="late"><div className="flex items-center gap-2"><AlertTriangle className="w-4 h-4 text-red-500" /> En retard</div></SelectItem>
-                            <SelectItem value="critical"><div className="flex items-center gap-2"><AlertCircle className="w-4 h-4 text-yellow-500" /> Critiques</div></SelectItem>
+                            <SelectItem value="my">📋 Mes tâches</SelectItem>
+                            <SelectItem value="all">👥 Toutes</SelectItem>
+                            <SelectItem value="pending">⏳ En attente</SelectItem>
+                            <SelectItem value="late">🔴 En retard</SelectItem>
+                            <SelectItem value="critical">⚡ Critiques</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -7525,9 +6855,7 @@ export default function NOCActivityApp() {
                                     <Badge className={`${TASK_PRIORITIES[task.priority].bgColor} ${TASK_PRIORITIES[task.priority].color} text-xs`}>
                                       {TASK_PRIORITIES[task.priority].label}
                                     </Badge>
-                                    <span className="text-lg flex items-center">
-                                      {(() => { const IconComp = TASK_CATEGORIES[task.category].icon; return <IconComp className="w-4 h-4" />; })()}
-                                    </span>
+                                    <span className="text-lg">{TASK_CATEGORIES[task.category].icon}</span>
                                   </div>
                                   {task.description && (
                                     <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{task.description}</p>
@@ -7652,7 +6980,7 @@ export default function NOCActivityApp() {
                               </div>
                               <div className="text-center">
                                 <div className="flex items-center justify-center gap-1">
-                                  {(() => { const BadgeIcon = BADGE_CONFIG[perf.badge || 'needs_attention']?.icon; return BadgeIcon ? <BadgeIcon className="w-6 h-6" /> : null; })()}
+                                  <span className="text-2xl">{BADGE_CONFIG[perf.badge || 'needs_attention']?.icon}</span>
                                 </div>
                                 <p className="text-sm text-muted-foreground">{BADGE_CONFIG[perf.badge || 'needs_attention']?.label}</p>
                               </div>
@@ -7769,735 +7097,7 @@ export default function NOCActivityApp() {
                   </Card>
                 </motion.div>
               )}
-
-              {/* Gestion Tickets */}
-              {currentTab === 'tickets' && (
-                <motion.div key="tickets" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-4">
-                  {/* Header avec bouton créer bien visible */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div>
-                      <h1 className="text-2xl lg:text-3xl font-bold text-foreground">Gestion des Tickets</h1>
-                      <p className="text-muted-foreground">Suivi et création de tickets</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={() => setTicketViewMode(ticketViewMode === 'list' ? 'card' : 'list')}
-                        className="border-2 border-cyan-500 dark:border-cyan-400"
-                        title={ticketViewMode === 'list' ? 'Vue cartes' : 'Vue liste'}
-                      >
-                        {ticketViewMode === 'list' ? <LayoutDashboard className="w-4 h-4" /> : <ClipboardList className="w-4 h-4" />}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => setShowDeletedTickets(!showDeletedTickets)}
-                        className={`border-2 ${showDeletedTickets ? 'border-red-500 text-red-600 dark:text-red-400' : 'border-slate-300 dark:border-slate-600'}`}
-                      >
-                        <Trash2 className="w-4 h-4 mr-2" />
-                        {showDeletedTickets ? 'Masquer corbeille' : 'Corbeille'}
-                      </Button>
-                      <Dialog open={createTicketOpen} onOpenChange={setCreateTicketOpen}>
-                        <DialogTrigger asChild>
-                          <Button className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-semibold shadow-lg px-6 py-2 text-base">
-                            <Plus className="w-5 h-5 mr-2" /> Créer un ticket
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-white dark:bg-slate-900 border-2 dark:border-slate-700">
-                          <DialogHeader>
-                            <DialogTitle className="text-xl text-foreground">Créer un nouveau ticket</DialogTitle>
-                            <DialogDescription>Remplissez les informations du ticket</DialogDescription>
-                          </DialogHeader>
-                          <div className="grid gap-4 py-4">
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="grid gap-2">
-                                <Label className="text-foreground font-medium">Objet *</Label>
-                                <Input
-                                  value={newTicket.objet}
-                                  onChange={(e) => setNewTicket({ ...newTicket, objet: e.target.value })}
-                                  placeholder="Objet du ticket"
-                                  className="border-2 dark:border-slate-600 dark:bg-slate-800"
-                                />
-                              </div>
-                              <div className="grid gap-2">
-                                <Label className="text-foreground font-medium">Catégorie</Label>
-                                <Select value={newTicket.category} onValueChange={(v: TicketCategory) => setNewTicket({ ...newTicket, category: v })}>
-                                  <SelectTrigger className="border-2 dark:border-slate-600 dark:bg-slate-800">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent className="bg-white dark:bg-slate-800">
-                                    {Object.entries(TICKET_CATEGORIES).map(([key, val]) => (
-                                      <SelectItem key={key} value={key}>{val.icon} {val.label}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            </div>
-                            <div className="grid gap-2">
-                              <Label className="text-foreground font-medium">Description</Label>
-                              <Textarea
-                                value={newTicket.description}
-                                onChange={(e) => setNewTicket({ ...newTicket, description: e.target.value })}
-                                placeholder="Décrivez le problème ou la demande..."
-                                rows={3}
-                                className="border-2 dark:border-slate-600 dark:bg-slate-800"
-                              />
-                            </div>
-                            <div className="grid grid-cols-3 gap-4">
-                              <div className="grid gap-2">
-                                <Label className="text-foreground font-medium">Priorité</Label>
-                                <Select value={newTicket.priority} onValueChange={(v: TicketPriority) => setNewTicket({ ...newTicket, priority: v })}>
-                                  <SelectTrigger className="border-2 dark:border-slate-600 dark:bg-slate-800">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent className="bg-white dark:bg-slate-800">
-                                    {Object.entries(TICKET_PRIORITIES).map(([key, val]) => (
-                                      <SelectItem key={key} value={key}>{val.label}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <div className="grid gap-2">
-                                <Label className="text-foreground font-medium">Site</Label>
-                                <Select value={newTicket.site} onValueChange={(v) => setNewTicket({ ...newTicket, site: v })}>
-                                  <SelectTrigger className="border-2 dark:border-slate-600 dark:bg-slate-800">
-                                    <SelectValue placeholder="Sélectionner" />
-                                  </SelectTrigger>
-                                  <SelectContent className="bg-white dark:bg-slate-800">
-                                    {SITES_LIST.map(site => (
-                                      <SelectItem key={site} value={site}>{site}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <div className="grid gap-2">
-                                <Label className="text-foreground font-medium">Localité</Label>
-                                <Select value={newTicket.localite} onValueChange={(v) => setNewTicket({ ...newTicket, localite: v })}>
-                                  <SelectTrigger className="border-2 dark:border-slate-600 dark:bg-slate-800">
-                                    <SelectValue placeholder="Sélectionner" />
-                                  </SelectTrigger>
-                                  <SelectContent className="bg-white dark:bg-slate-800">
-                                    {LOCALITES_LIST.map(loc => (
-                                      <SelectItem key={loc} value={loc}>{loc}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            </div>
-                            <div className="grid gap-2">
-                              <Label className="text-foreground font-medium">Technicien assigné</Label>
-                              <Input
-                                value={newTicket.technicien}
-                                onChange={(e) => setNewTicket({ ...newTicket, technicien: e.target.value })}
-                                placeholder="Nom du technicien"
-                                className="border-2 dark:border-slate-600 dark:bg-slate-800"
-                              />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="grid gap-2">
-                                <Label className="text-foreground font-medium">Date d'échéance (Due Date)</Label>
-                                <Input
-                                  type="datetime-local"
-                                  value={newTicket.dueDate ? format(newTicket.dueDate, "yyyy-MM-dd'T'HH:mm") : ''}
-                                  onChange={(e) => setNewTicket({ ...newTicket, dueDate: e.target.value ? new Date(e.target.value) : null })}
-                                  className="border-2 dark:border-slate-600 dark:bg-slate-800"
-                                />
-                              </div>
-                              <div className="grid gap-2">
-                                <Label className="text-foreground font-medium">ETR (Est. Time Resolution)</Label>
-                                <Input
-                                  type="datetime-local"
-                                  value={newTicket.etr ? format(newTicket.etr, "yyyy-MM-dd'T'HH:mm") : ''}
-                                  onChange={(e) => setNewTicket({ ...newTicket, etr: e.target.value ? new Date(e.target.value) : null })}
-                                  className="border-2 dark:border-slate-600 dark:bg-slate-800"
-                                />
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="grid gap-2">
-                                <Label className="text-foreground font-medium">SLA (Service Level Agreement)</Label>
-                                <Select value={newTicket.sla} onValueChange={(v) => setNewTicket({ ...newTicket, sla: v })}>
-                                  <SelectTrigger className="border-2 dark:border-slate-600 dark:bg-slate-800">
-                                    <SelectValue placeholder="Sélectionner" />
-                                  </SelectTrigger>
-                                  <SelectContent className="bg-white dark:bg-slate-800">
-                                    <SelectItem value="1h">1 heure</SelectItem>
-                                    <SelectItem value="4h">4 heures</SelectItem>
-                                    <SelectItem value="8h">8 heures</SelectItem>
-                                    <SelectItem value="24h">24 heures</SelectItem>
-                                    <SelectItem value="48h">48 heures</SelectItem>
-                                    <SelectItem value="72h">72 heures</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <div className="grid gap-2">
-                                <Label className="text-foreground font-medium">SLR (Service Level Resolution)</Label>
-                                <Input
-                                  value={newTicket.slr}
-                                  onChange={(e) => setNewTicket({ ...newTicket, slr: e.target.value })}
-                                  placeholder="Ex: 95%, 99%"
-                                  className="border-2 dark:border-slate-600 dark:bg-slate-800"
-                                />
-                              </div>
-                            </div>
-                          </div>
-                          <DialogFooter>
-                            <DialogClose asChild>
-                              <Button variant="outline" className="border-2">Annuler</Button>
-                            </DialogClose>
-                            <Button
-                              className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-semibold"
-                              onClick={() => {
-                                if (!newTicket.objet.trim()) {
-                                  toast.error('Erreur', { description: 'L\'objet du ticket est requis' });
-                                  return;
-                                }
-                                const ticket: TicketItem = {
-                                  id: generateId(),
-                                  numero: `TKT-${String(tickets.length + 1).padStart(4, '0')}`,
-                                  objet: newTicket.objet,
-                                  description: newTicket.description,
-                                  status: 'open',
-                                  priority: newTicket.priority,
-                                  category: newTicket.category,
-                                  site: newTicket.site,
-                                  localite: newTicket.localite,
-                                  technicien: newTicket.technicien,
-                                  reporterId: user?.id || '',
-                                  reporterName: user?.name || '',
-                                  comments: [],
-                                  attachments: [],
-                                  history: [{
-                                    id: generateId(),
-                                    ticketId: '',
-                                    userId: user?.id || '',
-                                    userName: user?.name || '',
-                                    action: 'Ticket créé',
-                                    timestamp: new Date()
-                                  }],
-                                  tags: [],
-                                  createdAt: new Date(),
-                                  updatedAt: new Date(),
-                                  dueDate: newTicket.dueDate || undefined,
-                                  etr: newTicket.etr || undefined,
-                                  sla: newTicket.sla || undefined,
-                                  slr: newTicket.slr || undefined,
-                                  isDeleted: false
-                                };
-                                setTickets(prev => [ticket, ...prev]);
-                                setNewTicket({ objet: '', description: '', priority: 'medium', category: 'incident', site: '', localite: '', technicien: '', dueDate: null, etr: null, sla: '', slr: '' });
-                                setCreateTicketOpen(false);
-                                toast.success('Ticket créé', { description: `Le ticket ${ticket.numero} a été créé` });
-                              }}
-                            >
-                              <Plus className="w-4 h-4 mr-2" /> Créer le ticket
-                            </Button>
-                          </DialogFooter>
-                        </DialogContent>
-                      </Dialog>
-                    </div>
-                  </div>
-
-                  {/* Filtres */}
-                  <Card className="border-2 dark:border-slate-700 bg-white dark:bg-slate-900">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-base text-foreground">Filtres</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex flex-wrap gap-3">
-                        <div className="flex-1 min-w-[200px]">
-                          <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                            <Input
-                              placeholder="Rechercher..."
-                              value={ticketSearchQuery}
-                              onChange={(e) => setTicketSearchQuery(e.target.value)}
-                              className="pl-10 border-2 dark:border-slate-600 dark:bg-slate-800"
-                            />
-                          </div>
-                        </div>
-                        <Select value={ticketStatusFilter} onValueChange={(v) => setTicketStatusFilter(v as TicketStatus | 'all')}>
-                          <SelectTrigger className="w-[140px] border-2 dark:border-slate-600 dark:bg-slate-800">
-                            <SelectValue placeholder="Statut" />
-                          </SelectTrigger>
-                          <SelectContent className="bg-white dark:bg-slate-800">
-                            <SelectItem value="all">Tous statuts</SelectItem>
-                            {Object.entries(TICKET_STATUSES).map(([key, val]) => (
-                              <SelectItem key={key} value={key}>{val.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Select value={ticketPriorityFilter} onValueChange={(v) => setTicketPriorityFilter(v as TicketPriority | 'all')}>
-                          <SelectTrigger className="w-[140px] border-2 dark:border-slate-600 dark:bg-slate-800">
-                            <SelectValue placeholder="Priorité" />
-                          </SelectTrigger>
-                          <SelectContent className="bg-white dark:bg-slate-800">
-                            <SelectItem value="all">Toutes priorités</SelectItem>
-                            {Object.entries(TICKET_PRIORITIES).map(([key, val]) => (
-                              <SelectItem key={key} value={key}>{val.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Select value={ticketSiteFilter} onValueChange={setTicketSiteFilter}>
-                          <SelectTrigger className="w-[140px] border-2 dark:border-slate-600 dark:bg-slate-800">
-                            <SelectValue placeholder="Site" />
-                          </SelectTrigger>
-                          <SelectContent className="bg-white dark:bg-slate-800">
-                            <SelectItem value="all">Tous sites</SelectItem>
-                            {SITES_LIST.map(site => (
-                              <SelectItem key={site} value={site}>{site}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Select value={ticketLocaliteFilter} onValueChange={setTicketLocaliteFilter}>
-                          <SelectTrigger className="w-[140px] border-2 dark:border-slate-600 dark:bg-slate-800">
-                            <SelectValue placeholder="Localité" />
-                          </SelectTrigger>
-                          <SelectContent className="bg-white dark:bg-slate-800">
-                            <SelectItem value="all">Toutes localités</SelectItem>
-                            {LOCALITES_LIST.map(loc => (
-                              <SelectItem key={loc} value={loc}>{loc}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Liste des tickets */}
-                  {ticketViewMode === 'list' ? (
-                    <Card className="border-2 dark:border-slate-700 bg-white dark:bg-slate-900">
-                      <CardContent className="p-0">
-                        <div className="overflow-x-auto">
-                          <table className="w-full">
-                            <thead>
-                              <tr className="border-b-2 dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
-                                <th className="text-left p-3 font-semibold text-foreground">N°</th>
-                                <th className="text-left p-3 font-semibold text-foreground">Objet</th>
-                                <th className="text-left p-3 font-semibold text-foreground">Statut</th>
-                                <th className="text-left p-3 font-semibold text-foreground">Priorité</th>
-                                <th className="text-left p-3 font-semibold text-foreground">Site</th>
-                                <th className="text-left p-3 font-semibold text-foreground">Technicien</th>
-                                <th className="text-left p-3 font-semibold text-foreground">Date</th>
-                                <th className="text-left p-3 font-semibold text-foreground">Actions</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {tickets
-                                .filter(t => {
-                                  if (showDeletedTickets !== t.isDeleted) return false;
-                                  if (ticketSearchQuery && !t.objet.toLowerCase().includes(ticketSearchQuery.toLowerCase()) && !t.numero.toLowerCase().includes(ticketSearchQuery.toLowerCase())) return false;
-                                  if (ticketStatusFilter !== 'all' && t.status !== ticketStatusFilter) return false;
-                                  if (ticketPriorityFilter !== 'all' && t.priority !== ticketPriorityFilter) return false;
-                                  if (ticketSiteFilter !== 'all' && t.site !== ticketSiteFilter) return false;
-                                  if (ticketLocaliteFilter !== 'all' && t.localite !== ticketLocaliteFilter) return false;
-                                  return true;
-                                })
-                                .map(ticket => (
-                                  <tr key={ticket.id} className="group border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer" onClick={() => { setSelectedTicket(ticket); setTicketDetailOpen(true); }}>
-                                    <td className="p-3 font-mono font-semibold text-cyan-600 dark:text-cyan-400">{ticket.numero}</td>
-                                    <td className="p-3 max-w-[200px] truncate text-foreground">{ticket.objet}</td>
-                                    <td className="p-3">
-                                      <Badge className={`${TICKET_STATUSES[ticket.status].bgColor} ${TICKET_STATUSES[ticket.status].color} border ${TICKET_STATUSES[ticket.status].borderColor} font-semibold`}>
-                                        {TICKET_STATUSES[ticket.status].label}
-                                      </Badge>
-                                    </td>
-                                    <td className="p-3">
-                                      <Badge className={`${TICKET_PRIORITIES[ticket.priority].bgColor} ${TICKET_PRIORITIES[ticket.priority].color} font-semibold`}>
-                                        {TICKET_PRIORITIES[ticket.priority].label}
-                                      </Badge>
-                                    </td>
-                                    <td className="p-3 text-foreground">{ticket.site || '-'}</td>
-                                    <td className="p-3 text-foreground">{ticket.technicien || '-'}</td>
-                                    <td className="p-3 text-muted-foreground text-sm">{format(ticket.createdAt, 'dd/MM/yyyy HH:mm')}</td>
-                                    <td className="p-3">
-                                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
-                                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-blue-100 dark:hover:bg-blue-900/40" onClick={() => { setSelectedTicket(ticket); setTicketDetailOpen(true); }}>
-                                          <Eye className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                                        </Button>
-                                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-yellow-100 dark:hover:bg-yellow-900/40" onClick={() => { setEditingTicket(ticket); setEditTicketOpen(true); }}>
-                                          <Edit className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />
-                                        </Button>
-                                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-red-100 dark:hover:bg-red-900/40" onClick={() => {
-                                          if (ticket.isDeleted) {
-                                            setTickets(prev => prev.filter(t => t.id !== ticket.id));
-                                            toast.success('Ticket supprimé définitivement');
-                                          } else {
-                                            setTickets(prev => prev.map(t => t.id === ticket.id ? { ...t, isDeleted: true, deletedAt: new Date(), deletedBy: user?.name } : t));
-                                            toast.success('Ticket déplacé dans la corbeille');
-                                          }
-                                        }}>
-                                          <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400" />
-                                        </Button>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                ))}
-                              {tickets.filter(t => showDeletedTickets === t.isDeleted).length === 0 && (
-                                <tr>
-                                  <td colSpan={8} className="p-8 text-center text-muted-foreground">
-                                    {showDeletedTickets ? 'La corbeille est vide' : 'Aucun ticket. Cliquez sur "Créer un ticket" pour commencer.'}
-                                  </td>
-                                </tr>
-                              )}
-                            </tbody>
-                          </table>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {tickets
-                        .filter(t => {
-                          if (showDeletedTickets !== t.isDeleted) return false;
-                          if (ticketSearchQuery && !t.objet.toLowerCase().includes(ticketSearchQuery.toLowerCase())) return false;
-                          if (ticketStatusFilter !== 'all' && t.status !== ticketStatusFilter) return false;
-                          if (ticketPriorityFilter !== 'all' && t.priority !== ticketPriorityFilter) return false;
-                          if (ticketSiteFilter !== 'all' && t.site !== ticketSiteFilter) return false;
-                          return true;
-                        })
-                        .map(ticket => (
-                          <Card key={ticket.id} className={`border-2 ${TICKET_STATUSES[ticket.status].borderColor} bg-white dark:bg-slate-900 hover:shadow-lg transition-shadow cursor-pointer`} onClick={() => { setSelectedTicket(ticket); setTicketDetailOpen(true); }}>
-                            <CardHeader className="pb-2">
-                              <div className="flex items-center justify-between">
-                                <span className="font-mono font-semibold text-cyan-600 dark:text-cyan-400">{ticket.numero}</span>
-                                <Badge className={`${TICKET_STATUSES[ticket.status].bgColor} ${TICKET_STATUSES[ticket.status].color} font-semibold`}>
-                                  {TICKET_STATUSES[ticket.status].label}
-                                </Badge>
-                              </div>
-                              <CardTitle className="text-base text-foreground line-clamp-2">{ticket.objet}</CardTitle>
-                            </CardHeader>
-                            <CardContent className="pb-3">
-                              <div className="space-y-2 text-sm">
-                                <div className="flex items-center gap-2">
-                                  <Badge className={`${TICKET_PRIORITIES[ticket.priority].bgColor} ${TICKET_PRIORITIES[ticket.priority].color} text-xs`}>
-                                    {TICKET_PRIORITIES[ticket.priority].label}
-                                  </Badge>
-                                  <span className="text-muted-foreground flex items-center gap-1">
-                                    {(() => { const CatIcon = TICKET_CATEGORIES[ticket.category].icon; return <CatIcon className="w-4 h-4" />; })()}
-                                    {TICKET_CATEGORIES[ticket.category].label}
-                                  </span>
-                                </div>
-                                {ticket.site && <p className="text-muted-foreground flex items-center gap-1"><MapPin className="w-4 h-4" /> {ticket.site}</p>}
-                                {ticket.technicien && <p className="text-muted-foreground flex items-center gap-1"><User className="w-4 h-4" /> {ticket.technicien}</p>}
-                                <p className="text-muted-foreground text-xs">{format(ticket.createdAt, 'dd/MM/yyyy HH:mm')}</p>
-                              </div>
-                              <div className="flex items-center gap-1 mt-3 pt-3 border-t dark:border-slate-700" onClick={(e) => e.stopPropagation()}>
-                                <Button variant="ghost" size="sm" className="h-8 px-2 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-blue-600 dark:text-blue-400" onClick={() => { setSelectedTicket(ticket); setTicketDetailOpen(true); }}>
-                                  <Eye className="w-4 h-4 mr-1" /> Voir
-                                </Button>
-                                <Button variant="ghost" size="sm" className="h-8 px-2 hover:bg-yellow-100 dark:hover:bg-yellow-900/40 text-yellow-600 dark:text-yellow-400" onClick={() => { setEditingTicket(ticket); setEditTicketOpen(true); }}>
-                                  <Edit className="w-4 h-4 mr-1" /> Modifier
-                                </Button>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        ))}
-                    </div>
-                  )}
-                </motion.div>
-              )}
-
-              {/* Dialog Détail Ticket */}
-              <Dialog open={ticketDetailOpen} onOpenChange={setTicketDetailOpen}>
-                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-white dark:bg-slate-900 border-2 dark:border-slate-700">
-                  {selectedTicket && (
-                    <>
-                      <DialogHeader>
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <DialogTitle className="text-xl flex items-center gap-2">
-                              <span className="font-mono text-cyan-600 dark:text-cyan-400">{selectedTicket.numero}</span>
-                              <Badge className={`${TICKET_STATUSES[selectedTicket.status].bgColor} ${TICKET_STATUSES[selectedTicket.status].color} font-semibold`}>
-                                {TICKET_STATUSES[selectedTicket.status].label}
-                              </Badge>
-                            </DialogTitle>
-                            <DialogDescription className="text-base text-foreground mt-1">{selectedTicket.objet}</DialogDescription>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Button variant="outline" size="sm" className="border-2 dark:border-slate-600" onClick={() => { setEditingTicket(selectedTicket); setEditTicketOpen(true); setTicketDetailOpen(false); }}>
-                              <Edit className="w-4 h-4 mr-1" /> Modifier
-                            </Button>
-                            <Button variant="outline" size="sm" className="border-2 border-red-300 dark:border-red-700 text-red-600 dark:text-red-400" onClick={() => {
-                              setTickets(prev => prev.map(t => t.id === selectedTicket.id ? { ...t, isDeleted: true, deletedAt: new Date(), deletedBy: user?.name } : t));
-                              setTicketDetailOpen(false);
-                              toast.success('Ticket déplacé dans la corbeille');
-                            }}>
-                              <Trash2 className="w-4 h-4 mr-1" /> Supprimer
-                            </Button>
-                          </div>
-                        </div>
-                      </DialogHeader>
-
-                      <Tabs defaultValue="details" className="w-full">
-                        <TabsList className="grid w-full grid-cols-5 bg-slate-100 dark:bg-slate-800">
-                          <TabsTrigger value="details" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700">Détails</TabsTrigger>
-                          <TabsTrigger value="comments" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700">Commentaires ({selectedTicket.comments.length})</TabsTrigger>
-                          <TabsTrigger value="attachments" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700">Pièces ({selectedTicket.attachments.length})</TabsTrigger>
-                          <TabsTrigger value="history" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700">Historique</TabsTrigger>
-                          <TabsTrigger value="resolution" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700">Résolution</TabsTrigger>
-                        </TabsList>
-
-                        <TabsContent value="details" className="space-y-4 mt-4">
-                          <div className="grid grid-cols-2 gap-4">
-                            <Card className="border dark:border-slate-700">
-                              <CardHeader className="pb-2"><CardTitle className="text-sm">Informations générales</CardTitle></CardHeader>
-                              <CardContent className="space-y-2 text-sm">
-                                <p><span className="font-medium text-muted-foreground">Priorité:</span> <Badge className={`${TICKET_PRIORITIES[selectedTicket.priority].bgColor} ${TICKET_PRIORITIES[selectedTicket.priority].color}`}>{TICKET_PRIORITIES[selectedTicket.priority].label}</Badge></p>
-                                <p><span className="font-medium text-muted-foreground">Catégorie:</span> <span className="inline-flex items-center gap-1">{(() => { const CatIcon = TICKET_CATEGORIES[selectedTicket.category].icon; return <CatIcon className="w-4 h-4" />; })()} {TICKET_CATEGORIES[selectedTicket.category].label}</span></p>
-                                <p><span className="font-medium text-muted-foreground">Site:</span> {selectedTicket.site || '-'}</p>
-                                <p><span className="font-medium text-muted-foreground">Localité:</span> {selectedTicket.localite || '-'}</p>
-                                <p><span className="font-medium text-muted-foreground">Technicien:</span> {selectedTicket.technicien || '-'}</p>
-                              </CardContent>
-                            </Card>
-                            <Card className="border dark:border-slate-700">
-                              <CardHeader className="pb-2"><CardTitle className="text-sm">Dates et SLA</CardTitle></CardHeader>
-                              <CardContent className="space-y-2 text-sm">
-                                <p><span className="font-medium text-muted-foreground">Créé le:</span> {format(selectedTicket.createdAt, 'dd/MM/yyyy à HH:mm')}</p>
-                                <p><span className="font-medium text-muted-foreground">Par:</span> {selectedTicket.reporterName}</p>
-                                <p><span className="font-medium text-muted-foreground">Mis à jour:</span> {format(selectedTicket.updatedAt, 'dd/MM/yyyy à HH:mm')}</p>
-                                {selectedTicket.dueDate && <p><span className="font-medium text-muted-foreground">Date d'échéance:</span> {format(selectedTicket.dueDate, 'dd/MM/yyyy à HH:mm')}</p>}
-                                {selectedTicket.etr && <p><span className="font-medium text-muted-foreground">ETR:</span> {format(selectedTicket.etr, 'dd/MM/yyyy à HH:mm')}</p>}
-                                {selectedTicket.sla && <p><span className="font-medium text-muted-foreground">SLA:</span> <Badge variant="outline">{selectedTicket.sla}</Badge></p>}
-                                {selectedTicket.slr && <p><span className="font-medium text-muted-foreground">SLR:</span> {selectedTicket.slr}</p>}
-                                {selectedTicket.resolvedAt && <p><span className="font-medium text-muted-foreground">Résolu le:</span> {format(selectedTicket.resolvedAt, 'dd/MM/yyyy à HH:mm')}</p>}
-                              </CardContent>
-                            </Card>
-                          </div>
-                          <Card className="border dark:border-slate-700">
-                            <CardHeader className="pb-2"><CardTitle className="text-sm">Description</CardTitle></CardHeader>
-                            <CardContent>
-                              <p className="whitespace-pre-wrap text-foreground">{selectedTicket.description || 'Aucune description'}</p>
-                            </CardContent>
-                          </Card>
-                        </TabsContent>
-
-                        <TabsContent value="comments" className="space-y-4 mt-4">
-                          <div className="flex items-center gap-2 mb-4">
-                            <Switch checked={isPrivateComment} onCheckedChange={setIsPrivateComment} />
-                            <Label className="text-sm flex items-center gap-1">{isPrivateComment ? <><Lock className="w-4 h-4" /> Commentaire privé</> : <><Eye className="w-4 h-4" /> Commentaire public</>}</Label>
-                          </div>
-                          <div className="flex gap-2">
-                            <Textarea
-                              value={newTicketComment}
-                              onChange={(e) => setNewTicketComment(e.target.value)}
-                              placeholder="Ajouter un commentaire..."
-                              className="flex-1 border-2 dark:border-slate-600 dark:bg-slate-800"
-                            />
-                            <Button className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white" onClick={() => {
-                              if (!newTicketComment.trim()) return;
-                              const comment: TicketComment = {
-                                id: generateId(),
-                                ticketId: selectedTicket.id,
-                                userId: user?.id || '',
-                                userName: user?.name || '',
-                                content: newTicketComment,
-                                isPrivate: isPrivateComment,
-                                createdAt: new Date()
-                              };
-                              setTickets(prev => prev.map(t => t.id === selectedTicket.id ? { ...t, comments: [...t.comments, comment] } : t));
-                              setSelectedTicket(prev => prev ? { ...prev, comments: [...prev.comments, comment] } : null);
-                              setNewTicketComment('');
-                              toast.success('Commentaire ajouté');
-                            }}>
-                              <Send className="w-4 h-4" />
-                            </Button>
-                          </div>
-                          <ScrollArea className="h-[300px]">
-                            <div className="space-y-3">
-                              {selectedTicket.comments.length === 0 && (
-                                <p className="text-center text-muted-foreground py-8">Aucun commentaire</p>
-                              )}
-                              {selectedTicket.comments.map(comment => (
-                                <div key={comment.id} className={`p-3 rounded-lg border ${comment.isPrivate ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800' : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700'}`}>
-                                  <div className="flex items-center justify-between mb-2">
-                                    <div className="flex items-center gap-2">
-                                      <span className="font-medium text-foreground">{comment.userName}</span>
-                                      {comment.isPrivate && <Badge variant="outline" className="text-xs border-yellow-400 text-yellow-600 dark:text-yellow-400">Privé</Badge>}
-                                    </div>
-                                    <span className="text-xs text-muted-foreground">{format(comment.createdAt, 'dd/MM/yyyy HH:mm')}</span>
-                                  </div>
-                                  <p className="text-foreground">{comment.content}</p>
-                                </div>
-                              ))}
-                            </div>
-                          </ScrollArea>
-                        </TabsContent>
-
-                        <TabsContent value="attachments" className="space-y-4 mt-4">
-                          <div className="border-2 border-dashed dark:border-slate-600 rounded-lg p-8 text-center hover:border-cyan-500 transition-colors cursor-pointer">
-                            <Upload className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
-                            <p className="text-muted-foreground">Glissez-déposez vos fichiers ici ou cliquez pour parcourir</p>
-                            <p className="text-xs text-muted-foreground mt-1">PDF, Images, Documents (max 10MB)</p>
-                          </div>
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                            {selectedTicket.attachments.length === 0 && (
-                              <p className="col-span-full text-center text-muted-foreground py-4">Aucune pièce jointe</p>
-                            )}
-                            {selectedTicket.attachments.map(att => (
-                              <div key={att.id} className="p-3 border rounded-lg dark:border-slate-700 flex items-center gap-2 bg-slate-50 dark:bg-slate-800">
-                                <File className="w-5 h-5 text-cyan-500" />
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-medium truncate text-foreground">{att.fileName}</p>
-                                  <p className="text-xs text-muted-foreground">{(att.fileSize / 1024).toFixed(1)} KB</p>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </TabsContent>
-
-                        <TabsContent value="history" className="space-y-4 mt-4">
-                          <ScrollArea className="h-[300px]">
-                            <div className="relative">
-                              <div className="absolute left-3 top-0 bottom-0 w-0.5 bg-border" />
-                              <div className="space-y-4">
-                                {selectedTicket.history.map((entry, index) => (
-                                  <div key={entry.id} className="relative pl-8">
-                                    <div className="absolute left-1.5 top-2 w-4 h-4 rounded-full bg-cyan-500 border-2 border-white dark:border-slate-900" />
-                                    <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border dark:border-slate-700">
-                                      <div className="flex items-center justify-between">
-                                        <span className="font-medium text-foreground">{entry.action}</span>
-                                        <span className="text-xs text-muted-foreground">{format(entry.timestamp, 'dd/MM/yyyy HH:mm')}</span>
-                                      </div>
-                                      <p className="text-sm text-muted-foreground">par {entry.userName}</p>
-                                      {entry.field && (
-                                        <p className="text-sm text-muted-foreground mt-1">
-                                          {entry.oldValue && <span className="line-through">{entry.oldValue}</span>}
-                                          {entry.oldValue && entry.newValue && ' → '}
-                                          {entry.newValue && <span className="font-medium">{entry.newValue}</span>}
-                                        </p>
-                                      )}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          </ScrollArea>
-                        </TabsContent>
-
-                        <TabsContent value="resolution" className="space-y-4 mt-4">
-                          <Card className="border dark:border-slate-700">
-                            <CardHeader className="pb-2"><CardTitle className="text-sm">Résolution du ticket</CardTitle></CardHeader>
-                            <CardContent className="space-y-4">
-                              <Textarea placeholder="Décrivez la résolution du problème..." rows={4} className="border-2 dark:border-slate-600 dark:bg-slate-800" />
-                              <div className="flex gap-2">
-                                <Button className="bg-green-500 hover:bg-green-600 text-white" onClick={() => {
-                                  setTickets(prev => prev.map(t => t.id === selectedTicket.id ? { ...t, status: 'resolved' as TicketStatus, resolvedAt: new Date() } : t));
-                                  setSelectedTicket(prev => prev ? { ...prev, status: 'resolved', resolvedAt: new Date() } : null);
-                                  toast.success('Ticket marqué comme résolu');
-                                }}>
-                                  <CheckCircle2 className="w-4 h-4 mr-2" /> Marquer résolu
-                                </Button>
-                                <Button variant="outline" className="border-2" onClick={() => {
-                                  setTickets(prev => prev.map(t => t.id === selectedTicket.id ? { ...t, status: 'closed' as TicketStatus, closedAt: new Date() } : t));
-                                  setSelectedTicket(prev => prev ? { ...prev, status: 'closed', closedAt: new Date() } : null);
-                                  toast.success('Ticket fermé');
-                                }}>
-                                  Fermer le ticket
-                                </Button>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        </TabsContent>
-                      </Tabs>
-                    </>
-                  )}
-                </DialogContent>
-              </Dialog>
-
-              {/* Dialog Modifier Ticket */}
-              <Dialog open={editTicketOpen} onOpenChange={setEditTicketOpen}>
-                <DialogContent className="max-w-2xl bg-white dark:bg-slate-900 border-2 dark:border-slate-700">
-                  <DialogHeader>
-                    <DialogTitle className="text-foreground">Modifier le ticket</DialogTitle>
-                  </DialogHeader>
-                  {editingTicket && (
-                    <div className="grid gap-4 py-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="grid gap-2">
-                          <Label className="text-foreground font-medium">Objet</Label>
-                          <Input
-                            value={editingTicket.objet}
-                            onChange={(e) => setEditingTicket({ ...editingTicket, objet: e.target.value })}
-                            className="border-2 dark:border-slate-600 dark:bg-slate-800"
-                          />
-                        </div>
-                        <div className="grid gap-2">
-                          <Label className="text-foreground font-medium">Statut</Label>
-                          <Select value={editingTicket.status} onValueChange={(v: TicketStatus) => setEditingTicket({ ...editingTicket, status: v })}>
-                            <SelectTrigger className="border-2 dark:border-slate-600 dark:bg-slate-800">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent className="bg-white dark:bg-slate-800">
-                              {Object.entries(TICKET_STATUSES).map(([key, val]) => (
-                                <SelectItem key={key} value={key}>{val.label}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-3 gap-4">
-                        <div className="grid gap-2">
-                          <Label className="text-foreground font-medium">Priorité</Label>
-                          <Select value={editingTicket.priority} onValueChange={(v: TicketPriority) => setEditingTicket({ ...editingTicket, priority: v })}>
-                            <SelectTrigger className="border-2 dark:border-slate-600 dark:bg-slate-800">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent className="bg-white dark:bg-slate-800">
-                              {Object.entries(TICKET_PRIORITIES).map(([key, val]) => (
-                                <SelectItem key={key} value={key}>{val.label}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="grid gap-2">
-                          <Label className="text-foreground font-medium">Site</Label>
-                          <Select value={editingTicket.site} onValueChange={(v) => setEditingTicket({ ...editingTicket, site: v })}>
-                            <SelectTrigger className="border-2 dark:border-slate-600 dark:bg-slate-800">
-                              <SelectValue placeholder="Sélectionner" />
-                            </SelectTrigger>
-                            <SelectContent className="bg-white dark:bg-slate-800">
-                              {SITES_LIST.map(site => (
-                                <SelectItem key={site} value={site}>{site}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="grid gap-2">
-                          <Label className="text-foreground font-medium">Technicien</Label>
-                          <Input
-                            value={editingTicket.technicien}
-                            onChange={(e) => setEditingTicket({ ...editingTicket, technicien: e.target.value })}
-                            className="border-2 dark:border-slate-600 dark:bg-slate-800"
-                          />
-                        </div>
-                      </div>
-                      <div className="grid gap-2">
-                        <Label className="text-foreground font-medium">Description</Label>
-                        <Textarea
-                          value={editingTicket.description}
-                          onChange={(e) => setEditingTicket({ ...editingTicket, description: e.target.value })}
-                          rows={3}
-                          className="border-2 dark:border-slate-600 dark:bg-slate-800"
-                        />
-                      </div>
-                    </div>
-                  )}
-                  <DialogFooter>
-                    <Button variant="outline" className="border-2" onClick={() => setEditTicketOpen(false)}>Annuler</Button>
-                    <Button className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white" onClick={() => {
-                      if (editingTicket) {
-                        setTickets(prev => prev.map(t => t.id === editingTicket.id ? { ...editingTicket, updatedAt: new Date() } : t));
-                        setEditTicketOpen(false);
-                        toast.success('Ticket modifié');
-                      }
-                    }}>
-                      Sauvegarder
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-
+              
               {/* Gmail Clone - Messagerie Interne */}
               {currentTab === 'messagerie' && (
                 <motion.div key="messagerie" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="h-[calc(100vh-7rem)]">
@@ -10334,10 +8934,10 @@ export default function NOCActivityApp() {
                     <SelectValue placeholder="Sélectionner une fonction" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="CALL_CENTER"><div className="flex items-center gap-2"><Phone className="w-4 h-4" /> Call Center</div></SelectItem>
-                    <SelectItem value="MONITORING"><div className="flex items-center gap-2"><Activity className="w-4 h-4" /> Monitoring</div></SelectItem>
-                    <SelectItem value="REPORTING_1"><div className="flex items-center gap-2"><TrendingUp className="w-4 h-4" /> Reporting 1</div></SelectItem>
-                    <SelectItem value="REPORTING_2"><div className="flex items-center gap-2"><ClipboardList className="w-4 h-4" /> Reporting 2</div></SelectItem>
+                    <SelectItem value="CALL_CENTER">📞 Call Center</SelectItem>
+                    <SelectItem value="MONITORING">📊 Monitoring</SelectItem>
+                    <SelectItem value="REPORTING_1">📈 Reporting 1</SelectItem>
+                    <SelectItem value="REPORTING_2">📋 Reporting 2</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -10615,30 +9215,41 @@ export default function NOCActivityApp() {
           </Dialog>
         )}
 
-        {/* Dialog Composition Email - Style Gmail */}
+        {/* Dialog Composition Email - Style Gmail Exact */}
         <Dialog open={composeOpen} onOpenChange={setComposeOpen}>
-          <DialogContent className="sm:max-w-[700px] p-0 gap-0">
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 bg-slate-100 dark:bg-slate-800 rounded-t-lg">
-              <h3 className="font-medium">Nouveau message</h3>
+          <DialogContent className="sm:max-w-[600px] p-0 gap-0 overflow-hidden">
+            {/* Header - Style Gmail */}
+            <div className="flex items-center justify-between px-4 py-2 bg-[#404040] text-white">
+              <h3 className="font-medium text-sm">Nouveau message</h3>
               <div className="flex items-center gap-1">
-                <Button variant="ghost" size="icon" className="h-8 w-8">
-                  <Paperclip className="w-4 h-4" />
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-white hover:bg-white/10">
+                  <Minimize2 className="w-4 h-4" />
                 </Button>
-                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setComposeOpen(false)}>
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-white hover:bg-white/10">
+                  <Maximize2 className="w-4 h-4" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-white hover:bg-white/10" onClick={() => setComposeOpen(false)}>
                   <X className="w-4 h-4" />
                 </Button>
               </div>
             </div>
             
-            {/* Form */}
-            <div className="p-4 space-y-3">
+            {/* Form Container with scroll */}
+            <div className="max-h-[400px] overflow-y-auto">
               {/* To field */}
-              <div className="flex items-center border-b pb-2">
-                <span className="text-sm text-slate-500 w-12">À:</span>
-                <div className="flex-1 flex flex-wrap gap-1">
+              <div className="flex items-center px-4 py-2 border-b min-h-[40px]">
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <span>De:</span>
+                  <span className="text-gray-700 dark:text-gray-300">{user?.email || 'moi@siliconeconnect.com'}</span>
+                </div>
+              </div>
+              
+              {/* To field */}
+              <div className="flex items-center px-4 py-2 border-b min-h-[40px]">
+                <span className="text-sm text-gray-500 w-8">À:</span>
+                <div className="flex-1 flex flex-wrap items-center gap-1">
                   {newEmail.to.map((recipient, index) => (
-                    <span key={index} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full text-sm">
+                    <span key={index} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded text-sm">
                       {recipient.name}
                       <button onClick={() => setNewEmail(prev => ({...prev, to: prev.to.filter((_, i) => i !== index)}))}>
                         <X className="w-3 h-3" />
@@ -10650,62 +9261,31 @@ export default function NOCActivityApp() {
                     value={toInput}
                     onChange={(e) => setToInput(e.target.value)}
                     onFocus={() => setShowSuggestions('to')}
-                    className="flex-1 outline-none text-sm bg-transparent"
-                    placeholder={newEmail.to.length === 0 ? "Rechercher un destinataire..." : ""}
+                    className="flex-1 outline-none text-sm bg-transparent min-w-[150px]"
+                    placeholder=""
                   />
                 </div>
                 <button 
                   onClick={() => setShowCc(!showCc)}
-                  className="text-sm text-blue-600 hover:underline ml-2"
+                  className={`text-sm px-2 py-1 rounded ${showCc ? 'text-blue-700 bg-blue-50' : 'text-blue-600 hover:bg-blue-50'}`}
                 >
                   Cc
                 </button>
+                <button 
+                  onClick={() => setShowBcc(!showBcc)}
+                  className={`text-sm px-2 py-1 rounded ${showBcc ? 'text-blue-700 bg-blue-50' : 'text-blue-600 hover:bg-blue-50'}`}
+                >
+                  Cci
+                </button>
               </div>
-              
-              {/* Suggestions */}
-              {showSuggestions && toInput && (
-                <div className="border rounded-lg bg-white dark:bg-slate-900 shadow-lg max-h-40 overflow-auto">
-                  {Object.values(DEMO_USERS)
-                    .filter(u => 
-                      u.name.toLowerCase().includes(toInput.toLowerCase()) ||
-                      u.email.toLowerCase().includes(toInput.toLowerCase())
-                    )
-                    .filter(u => !newEmail.to.some(t => t.id === u.id))
-                    .slice(0, 5)
-                    .map((u) => (
-                      <button
-                        key={u.id}
-                        onClick={() => {
-                          setNewEmail(prev => ({
-                            ...prev,
-                            to: [...prev.to, { id: u.id, name: u.name, email: u.email }]
-                          }));
-                          setToInput('');
-                          setShowSuggestions(null);
-                        }}
-                        className="w-full flex items-center gap-2 p-2 hover:bg-slate-100 dark:hover:bg-slate-800 text-left"
-                      >
-                        <Avatar className="w-6 h-6">
-                          <AvatarFallback className="text-xs bg-blue-600 text-white">
-                            {u.name.split(' ').map(n => n[0]).join('').toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <div className="text-sm font-medium">{u.name}</div>
-                          <div className="text-xs text-slate-500">{u.email}</div>
-                        </div>
-                      </button>
-                    ))}
-                </div>
-              )}
               
               {/* Cc field */}
               {showCc && (
-                <div className="flex items-center border-b pb-2">
-                  <span className="text-sm text-slate-500 w-12">Cc:</span>
-                  <div className="flex-1 flex flex-wrap gap-1">
+                <div className="flex items-center px-4 py-2 border-b min-h-[40px]">
+                  <span className="text-sm text-gray-500 w-8">Cc:</span>
+                  <div className="flex-1 flex flex-wrap items-center gap-1">
                     {newEmail.cc.map((recipient, index) => (
-                      <span key={index} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full text-sm">
+                      <span key={index} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded text-sm">
                         {recipient.name}
                         <button onClick={() => setNewEmail(prev => ({...prev, cc: prev.cc.filter((_, i) => i !== index)}))}>
                           <X className="w-3 h-3" />
@@ -10716,197 +9296,491 @@ export default function NOCActivityApp() {
                       type="text"
                       value={ccInput}
                       onChange={(e) => setCcInput(e.target.value)}
-                      onFocus={() => setShowSuggestions('cc')}
-                      className="flex-1 outline-none text-sm bg-transparent"
-                      placeholder={newEmail.cc.length === 0 ? "Ajouter Cc..." : ""}
+                      className="flex-1 outline-none text-sm bg-transparent min-w-[150px]"
+                      placeholder=""
+                    />
+                  </div>
+                </div>
+              )}
+              
+              {/* Bcc (Cci) field */}
+              {showBcc && (
+                <div className="flex items-center px-4 py-2 border-b min-h-[40px]">
+                  <span className="text-sm text-gray-500 w-8">Cci:</span>
+                  <div className="flex-1 flex flex-wrap items-center gap-1">
+                    {newEmail.bcc.map((recipient, index) => (
+                      <span key={index} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded text-sm">
+                        {recipient.name}
+                        <button onClick={() => setNewEmail(prev => ({...prev, bcc: prev.bcc.filter((_, i) => i !== index)}))}>
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                    <input
+                      type="text"
+                      value={bccInput}
+                      onChange={(e) => setBccInput(e.target.value)}
+                      className="flex-1 outline-none text-sm bg-transparent min-w-[150px]"
+                      placeholder=""
                     />
                   </div>
                 </div>
               )}
               
               {/* Subject */}
-              <div className="flex items-center border-b pb-2">
-                <span className="text-sm text-slate-500 w-12">Objet:</span>
+              <div className="flex items-center px-4 py-2 border-b min-h-[40px]">
+                <span className="text-sm text-gray-500 w-16">Objet:</span>
                 <input
                   type="text"
                   value={newEmail.subject}
                   onChange={(e) => setNewEmail(prev => ({...prev, subject: e.target.value}))}
                   className="flex-1 outline-none text-sm bg-transparent"
-                  placeholder="Objet du message"
+                  placeholder="(sans objet)"
                 />
               </div>
               
-              {/* Body */}
-              <Textarea
-                value={newEmail.body}
-                onChange={(e) => setNewEmail(prev => ({...prev, body: e.target.value}))}
-                className="min-h-[200px] border-0 resize-none focus-visible:ring-0"
-                placeholder="Écrivez votre message..."
+              {/* Rich Text Editor Toolbar */}
+              <div className="flex items-center gap-0.5 px-4 py-1 border-b bg-gray-50 dark:bg-gray-900 flex-wrap">
+                {/* Font Family */}
+                <Select value={editorFontFamily} onValueChange={setEditorFontFamily}>
+                  <SelectTrigger className="h-7 w-24 text-xs border-0 bg-transparent">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Arial">Arial</SelectItem>
+                    <SelectItem value="Georgia">Georgia</SelectItem>
+                    <SelectItem value="Times New Roman">Times</SelectItem>
+                    <SelectItem value="Courier New">Courier</SelectItem>
+                    <SelectItem value="Verdana">Verdana</SelectItem>
+                  </SelectContent>
+                </Select>
+                
+                {/* Font Size */}
+                <Select value={editorFontSize} onValueChange={setEditorFontSize}>
+                  <SelectTrigger className="h-7 w-16 text-xs border-0 bg-transparent">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">Petit</SelectItem>
+                    <SelectItem value="3">Normal</SelectItem>
+                    <SelectItem value="5">Grand</SelectItem>
+                    <SelectItem value="7">Très grand</SelectItem>
+                  </SelectContent>
+                </Select>
+                
+                <div className="w-px h-5 bg-gray-300 dark:bg-gray-600 mx-1" />
+                
+                {/* Bold */}
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className={`h-7 w-7 p-0 ${editorFormats.bold ? 'bg-gray-200 dark:bg-gray-700' : ''}`}
+                  onClick={() => formatText('bold')}
+                >
+                  <Bold className="w-4 h-4" />
+                </Button>
+                
+                {/* Italic */}
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className={`h-7 w-7 p-0 ${editorFormats.italic ? 'bg-gray-200 dark:bg-gray-700' : ''}`}
+                  onClick={() => formatText('italic')}
+                >
+                  <Italic className="w-4 h-4" />
+                </Button>
+                
+                {/* Underline */}
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className={`h-7 w-7 p-0 ${editorFormats.underline ? 'bg-gray-200 dark:bg-gray-700' : ''}`}
+                  onClick={() => formatText('underline')}
+                >
+                  <Underline className="w-4 h-4" />
+                </Button>
+                
+                <div className="w-px h-5 bg-gray-300 dark:bg-gray-600 mx-1" />
+                
+                {/* Text Color */}
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                      <div className="flex flex-col items-center">
+                        <span className="text-[10px] font-bold">A</span>
+                        <div className="w-4 h-1 rounded" style={{ backgroundColor: editorTextColor }} />
+                      </div>
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-48 p-2">
+                    <div className="grid grid-cols-8 gap-1">
+                      {['#000000', '#434343', '#666666', '#999999', '#b7b7b7', '#cccccc', '#d9d9d9', '#efefef',
+                        '#980000', '#ff0000', '#ff9900', '#ffff00', '#00ff00', '#00ffff', '#4a86e8', '#0000ff',
+                        '#9900ff', '#ff00ff', '#e6b8af', '#f4cccc', '#fce5cd', '#fff2cc', '#d9ead3', '#d0e0e3',
+                        '#c9daf8', '#cfe2f3', '#d9d2e9', '#ead1dc', '#dd7e6b', '#ea9999', '#f9cb9c', '#ffe599'].map((color) => (
+                        <button
+                          key={color}
+                          className="w-4 h-4 rounded border hover:scale-110 transition-transform"
+                          style={{ backgroundColor: color }}
+                          onClick={() => {
+                            setEditorTextColor(color);
+                            formatText('foreColor', color);
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+                
+                {/* Highlight Color */}
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                      <Highlighter className="w-4 h-4" style={{ color: editorHighlightColor }} />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-48 p-2">
+                    <div className="grid grid-cols-8 gap-1">
+                      {['#ffffff', '#c9daf8', '#fce5cd', '#fff2cc', '#d9ead3', '#d0e0e3', '#e6b8af', '#ead1dc',
+                        '#cfe2f3', '#d9d2e9', '#f4cccc', '#ffe599', '#d9ead3', '#b6d7a8', '#a2c4c9', '#b4a7d6'].map((color) => (
+                        <button
+                          key={color}
+                          className="w-4 h-4 rounded border hover:scale-110 transition-transform"
+                          style={{ backgroundColor: color }}
+                          onClick={() => {
+                            setEditorHighlightColor(color);
+                            formatText('hiliteColor', color);
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+                
+                <div className="w-px h-5 bg-gray-300 dark:bg-gray-600 mx-1" />
+                
+                {/* Alignment */}
+                <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => formatText('justifyLeft')}>
+                  <AlignLeft className="w-4 h-4" />
+                </Button>
+                <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => formatText('justifyCenter')}>
+                  <AlignCenter className="w-4 h-4" />
+                </Button>
+                <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => formatText('justifyRight')}>
+                  <AlignRight className="w-4 h-4" />
+                </Button>
+                
+                <div className="w-px h-5 bg-gray-300 dark:bg-gray-600 mx-1" />
+                
+                {/* Lists */}
+                <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => formatText('insertUnorderedList')}>
+                  <List className="w-4 h-4" />
+                </Button>
+                <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => formatText('insertOrderedList')}>
+                  <ListOrdered className="w-4 h-4" />
+                </Button>
+                
+                <div className="w-px h-5 bg-gray-300 dark:bg-gray-600 mx-1" />
+                
+                {/* Link */}
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                      <LinkIcon className="w-4 h-4" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-64 p-2">
+                    <div className="space-y-2">
+                      <Input
+                        placeholder="URL du lien"
+                        value={linkUrl}
+                        onChange={(e) => setLinkUrl(e.target.value)}
+                        className="h-8"
+                      />
+                      <Button size="sm" className="w-full" onClick={() => {
+                        if (linkUrl) {
+                          formatText('createLink', linkUrl);
+                          setLinkUrl('');
+                        }
+                      }}>
+                        Insérer
+                      </Button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+                
+                {/* Remove formatting */}
+                <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => formatText('removeFormat')}>
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+              
+              {/* Body - ContentEditable */}
+              <div 
+                ref={editorRef}
+                contentEditable
+                className="min-h-[150px] p-4 outline-none text-sm leading-relaxed overflow-y-auto"
+                style={{ maxHeight: '200px', fontFamily: editorFontFamily }}
+                onInput={(e) => {
+                  setNewEmail(prev => ({...prev, body: e.currentTarget.innerHTML}));
+                }}
+                data-placeholder="Écrivez votre message..."
+                dangerouslySetInnerHTML={{ __html: newEmail.body || '' }}
               />
               
-              {/* Attachments */}
+              {/* Attachments Preview */}
               {newEmail.attachments.length > 0 && (
-                <div className="flex flex-wrap gap-2 pt-2 border-t">
-                  {newEmail.attachments.map((att, index) => (
-                    <div key={index} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg">
-                      <Paperclip className="w-4 h-4 text-slate-500" />
-                      <span className="text-sm">{att.fileName}</span>
-                      <button onClick={() => setNewEmail(prev => ({...prev, attachments: prev.attachments.filter((_, i) => i !== index)}))}>
-                        <X className="w-3 h-3 text-slate-400" />
-                      </button>
-                    </div>
-                  ))}
+                <div className="px-4 py-2 border-t bg-gray-50 dark:bg-gray-900">
+                  <div className="flex flex-wrap gap-2">
+                    {newEmail.attachments.map((att, index) => (
+                      <div key={index} className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-gray-800 rounded-lg border text-sm">
+                        <File className="w-4 h-4 text-blue-500" />
+                        <span className="truncate max-w-[150px]">{att.fileName}</span>
+                        <span className="text-xs text-gray-400">{(att.fileSize / 1024).toFixed(1)}KB</span>
+                        <button 
+                          onClick={() => setNewEmail(prev => ({...prev, attachments: prev.attachments.filter((_, i) => i !== index)}))}
+                          className="text-gray-400 hover:text-red-500"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
             
-            {/* Footer */}
-            <div className="flex items-center justify-between px-4 py-3 border-t bg-slate-50 dark:bg-slate-900/50 rounded-b-lg">
-              <div className="flex items-center gap-2">
-                <Button 
-                  onClick={() => {
-                    if (newEmail.to.length === 0) {
-                      toast.error('Erreur', { description: 'Veuillez ajouter au moins un destinataire' });
-                      return;
-                    }
-                    if (!newEmail.subject.trim()) {
-                      toast.error('Erreur', { description: 'Veuillez ajouter un objet' });
-                      return;
-                    }
-                    
-                    // Create the message
-                    const message: InternalMessage = {
-                      id: generateId(),
-                      from: {
-                        id: user?.id || '',
-                        name: user?.name || '',
-                        email: user?.email || '',
-                        avatar: user?.avatar
-                      },
-                      to: newEmail.to,
-                      cc: newEmail.cc,
-                      subject: newEmail.subject,
-                      body: cleanEmptyDivs(newEmail.body),
-                      attachments: newEmail.attachments,
-                      folder: 'sent',
-                      status: 'read',
-                      priority: newEmail.priority,
-                      isStarred: false,
-                      isRead: true,
-                      labels: [],
-                      sentAt: new Date(),
-                      createdAt: new Date(),
-                      updatedAt: new Date(),
-                      isDraft: false
-                    };
-                    
-                    // Add to sent folder for sender
-                    setMessages(prev => [message, ...prev]);
-                    
-                    // Simulate delivery to recipients (in real app, this would be server-side)
-                    const deliveredMessage: InternalMessage = {
-                      ...message,
-                      id: generateId(),
-                      folder: 'inbox',
-                      status: 'unread',
-                      isRead: false,
-                      receivedAt: new Date()
-                    };
-                    setMessages(prev => [deliveredMessage, ...prev]);
-                    
-                    // Reset and close
-                    setNewEmail({
-                      to: [],
-                      cc: [],
-                      subject: '',
-                      body: '',
-                      attachments: [],
-                      priority: 'normal',
-                      scheduledAt: null
-                    });
-                    setToInput('');
-                    setCcInput('');
-                    setComposeOpen(false);
-                    
-                    toast.success('Message envoyé', { description: `Envoyé à ${newEmail.to.map(t => t.name).join(', ')}` });
-                  }}
-                  className="gap-2 bg-blue-600 hover:bg-blue-700"
-                >
-                  <Send className="w-4 h-4" /> Envoyer
-                </Button>
-                
-                {/* Attachment upload */}
-                <label className="cursor-pointer">
-                  <input
-                    type="file"
-                    className="hidden"
-                    multiple
-                    onChange={(e) => {
-                      const files = e.target.files;
-                      if (files) {
-                        Array.from(files).forEach(file => {
-                          const reader = new FileReader();
-                          reader.onload = () => {
-                            const attachment: EmailAttachment = {
-                              id: generateId(),
-                              messageId: '',
-                              fileName: file.name,
-                              fileSize: file.size,
-                              fileType: file.type,
-                              fileData: reader.result as string,
-                              uploadedAt: new Date()
-                            };
-                            setNewEmail(prev => ({
-                              ...prev,
-                              attachments: [...prev.attachments, attachment]
-                            }));
-                          };
-                          reader.readAsDataURL(file);
-                        });
-                      }
-                    }}
-                  />
-                  <Button variant="ghost" size="icon" type="button">
-                    <Paperclip className="w-4 h-4" />
-                  </Button>
-                </label>
-              </div>
+            {/* Footer Toolbar - Style Gmail */}
+            <div className="flex items-center gap-1 px-4 py-2 border-t bg-white dark:bg-gray-900">
+              {/* Send Button */}
+              <Button 
+                onClick={() => {
+                  if (newEmail.to.length === 0) {
+                    toast.error('Erreur', { description: 'Veuillez ajouter au moins un destinataire' });
+                    return;
+                  }
+                  
+                  const message: InternalMessage = {
+                    id: generateId(),
+                    from: {
+                      id: user?.id || '',
+                      name: user?.name || '',
+                      email: user?.email || ''
+                    },
+                    to: newEmail.to,
+                    cc: newEmail.cc,
+                    bcc: newEmail.bcc,
+                    subject: newEmail.subject,
+                    body: newEmail.body,
+                    attachments: newEmail.attachments,
+                    folder: 'sent',
+                    status: 'read',
+                    priority: newEmail.priority,
+                    isStarred: false,
+                    isRead: true,
+                    labels: [],
+                    sentAt: new Date(),
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                    isDraft: false
+                  };
+                  
+                  setMessages(prev => [message, ...prev]);
+                  
+                  // Reset
+                  setNewEmail({
+                    to: [],
+                    cc: [],
+                    bcc: [],
+                    subject: '',
+                    body: '',
+                    attachments: [],
+                    priority: 'normal',
+                    scheduledAt: null
+                  });
+                  setToInput('');
+                  setCcInput('');
+                  setBccInput('');
+                  if (editorRef.current) {
+                    editorRef.current.innerHTML = '';
+                  }
+                  setComposeOpen(false);
+                  
+                  toast.success('Message envoyé');
+                }}
+                className="gap-1 bg-[#0b57d0] hover:bg-[#0842a0] text-white px-4"
+              >
+                <Send className="w-4 h-4" />
+                <span>Envoyer</span>
+                <ChevronDown className="w-3 h-3 ml-1" />
+              </Button>
               
+              {/* Formatting toggle */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-gray-600 hover:bg-gray-100">
+                    <span className="font-bold underline">A</span>
+                  </Button>
+                </PopoverTrigger>
+              </Popover>
+              
+              {/* Attachment */}
+              <label className="cursor-pointer">
+                <input
+                  type="file"
+                  className="hidden"
+                  multiple
+                  onChange={(e) => {
+                    const files = e.target.files;
+                    if (files) {
+                      Array.from(files).forEach(file => {
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                          const attachment: EmailAttachment = {
+                            id: generateId(),
+                            messageId: '',
+                            fileName: file.name,
+                            fileSize: file.size,
+                            fileType: file.type,
+                            fileData: reader.result as string,
+                            uploadedAt: new Date()
+                          };
+                          setNewEmail(prev => ({
+                            ...prev,
+                            attachments: [...prev.attachments, attachment]
+                          }));
+                        };
+                        reader.readAsDataURL(file);
+                      });
+                    }
+                  }}
+                />
+                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-gray-600 hover:bg-gray-100" type="button">
+                  <Paperclip className="w-5 h-5" />
+                </Button>
+              </label>
+              
+              {/* Link */}
+              <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-gray-600 hover:bg-gray-100">
+                <LinkIcon className="w-5 h-5" />
+              </Button>
+              
+              {/* Emoji */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-gray-600 hover:bg-gray-100">
+                    <Smile className="w-5 h-5" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-72 p-2">
+                  <div className="grid grid-cols-8 gap-1">
+                    {['😀', '😂', '😍', '🥰', '😎', '🤔', '👍', '👎', '❤️', '🔥', '🎉', '✅', '⏰', '📞', '📧', '💻', '🔧', '📊', '📈', '✨', '🌟', '💪', '🙏', '👋'].map((emoji) => (
+                      <button
+                        key={emoji}
+                        className="text-xl hover:bg-gray-100 rounded p-1"
+                        onClick={() => {
+                          if (editorRef.current) {
+                            editorRef.current.focus();
+                            document.execCommand('insertText', false, emoji);
+                          }
+                        }}
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
+              
+              {/* Google Drive */}
+              <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-gray-600 hover:bg-gray-100">
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12.01 1.485c-2.082 0-3.754.02-3.743.047.01.02 1.708 3.001 3.774 6.62l3.76 6.574h3.76c2.081 0 3.753-.02 3.742-.047-.005-.02-1.708-3.001-3.775-6.62l-3.76-6.574h-3.758zm-5.735 1.04l-6.27 10.89 1.88 3.298 1.88 3.297h3.77l-1.893-3.297-1.893-3.298 4.38-7.59 2.19-3.8h-.005c-1.15 0-2.59.02-4.04.05z"/>
+                </svg>
+              </Button>
+              
+              {/* Photo */}
+              <label className="cursor-pointer">
+                <input type="file" className="hidden" accept="image/*" multiple onChange={(e) => {
+                  const files = e.target.files;
+                  if (files) {
+                    Array.from(files).forEach(file => {
+                      const reader = new FileReader();
+                      reader.onload = () => {
+                        const attachment: EmailAttachment = {
+                          id: generateId(),
+                          messageId: '',
+                          fileName: file.name,
+                          fileSize: file.size,
+                          fileType: file.type,
+                          fileData: reader.result as string,
+                          uploadedAt: new Date()
+                        };
+                        setNewEmail(prev => ({
+                          ...prev,
+                          attachments: [...prev.attachments, attachment]
+                        }));
+                      };
+                      reader.readAsDataURL(file);
+                    });
+                  }
+                }} />
+                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-gray-600 hover:bg-gray-100" type="button">
+                  <ImageIcon className="w-5 h-5" />
+                </Button>
+              </label>
+              
+              {/* Confidential mode */}
+              <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-gray-600 hover:bg-gray-100">
+                <Lock className="w-5 h-5" />
+              </Button>
+              
+              {/* More options */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-gray-600 hover:bg-gray-100">
+                    <MoreVertical className="w-5 h-5" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-48 p-1">
+                  <button className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded" onClick={() => setNewEmail(prev => ({...prev, priority: 'important'}))}>
+                    Marquer comme important
+                  </button>
+                  <button className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded">
+                    Demander un accusé de réception
+                  </button>
+                  <button className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded">
+                    Planifier l'envoi
+                  </button>
+                </PopoverContent>
+              </Popover>
+              
+              {/* Spacer */}
+              <div className="flex-1" />
+              
+              {/* Trash / Delete draft */}
               <Button 
                 variant="ghost" 
-                size="sm"
+                size="sm" 
+                className="h-8 w-8 p-0 text-gray-600 hover:bg-gray-100"
                 onClick={() => {
-                  // Save as draft
-                  if (newEmail.subject || newEmail.body || newEmail.to.length > 0) {
-                    const draft: InternalMessage = {
-                      id: generateId(),
-                      from: {
-                        id: user?.id || '',
-                        name: user?.name || '',
-                        email: user?.email || ''
-                      },
-                      to: newEmail.to,
-                      cc: newEmail.cc,
-                      subject: newEmail.subject,
-                      body: cleanEmptyDivs(newEmail.body),
-                      attachments: newEmail.attachments,
-                      folder: 'drafts',
-                      status: 'unread',
-                      priority: 'normal',
-                      isStarred: false,
-                      isRead: true,
-                      labels: [],
-                      createdAt: new Date(),
-                      updatedAt: new Date(),
-                      isDraft: true
-                    };
-                    setMessages(prev => [draft, ...prev]);
-                    toast.success('Brouillon sauvegardé');
+                  setNewEmail({
+                    to: [],
+                    cc: [],
+                    bcc: [],
+                    subject: '',
+                    body: '',
+                    attachments: [],
+                    priority: 'normal',
+                    scheduledAt: null
+                  });
+                  if (editorRef.current) {
+                    editorRef.current.innerHTML = '';
                   }
                   setComposeOpen(false);
                 }}
               >
-                Enregistrer le brouillon
+                <Trash2 className="w-5 h-5" />
               </Button>
             </div>
           </DialogContent>

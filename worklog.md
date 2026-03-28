@@ -201,3 +201,43 @@ Stage Summary:
 - Label management system
 - Realistic demo data
 
+---
+Task ID: 4
+Agent: Super Z (Main)
+Task: Add PDF generation button for planning section
+
+Work Log:
+- Created `generatePlanningPDF` function using jsPDF with:
+  - Landscape A4 orientation to fit all days of the month
+  - Professional header with logo and title "PLANNING DES AGENTS NOC"
+  - Month and year display
+  - Planning table with:
+    - Header row showing all days of the month (day name + day number)
+    - Row headers showing shift names (Shift A, Shift B, Shift C) with color coding
+    - Color-coded cells:
+      - DAY_SHIFT: Light version of team color (blue/yellow/green)
+      - NIGHT_SHIFT: Dark version of team color (dark blue/dark amber/dark green)
+      - REST_DAY: Gray background
+    - Shift type abbreviation in each cell (J for Jour, N for Nuit, R for Repos)
+    - Small orange dot indicator for individual rest days
+  - Legend section with color boxes and explanations:
+    - J = Jour (08h00 - 20h00)
+    - N = Nuit (20h00 - 08h00)
+    - R = Repos
+  - Team composition section with three columns:
+    - ÉQUIPE SHIFT A: Alaine ODZONDO, Emma-Casimir NDONGO, Luca MOUSSOUNDA, José NGONKOLI
+    - ÉQUIPE SHIFT B: Sara MADY, Séverin NDANDOU, Furys DIAMANA, Marly POUABOUD
+    - ÉQUIPE SHIFT C: Lapreuve N'SANA, Audrey NDINGA, Kevine BATA, Lotti SEHOSSOLO
+  - Footer with generation date/time and company name
+- Added "Générer PDF" button in planning section header next to month navigation controls
+- Button styled consistently with other buttons (using FileDown icon)
+- PDF filename format: `planning_noc_MM_yyyy.pdf`
+- Used existing `getShiftScheduleForDate` and `getIndividualRestAgent` functions for data
+
+Stage Summary:
+- Planning PDF generation fully implemented
+- Professional landscape layout with all days visible
+- Color-coded shift types with legend
+- Team member lists included
+- Button accessible from planning section header
+
