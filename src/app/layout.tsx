@@ -8,6 +8,11 @@ const inter = Inter({ subsets: ['latin'] });
 export const metadata: Metadata = {
   title: 'NOC ACTIVITIES - Silicone Connect',
   description: 'Gestion professionnelle du NOC 24/7',
+  icons: {
+    icon: '/icon.png',
+    shortcut: '/icon.png',
+    apple: '/icon.png',
+  },
 };
 
 export default function RootLayout({
