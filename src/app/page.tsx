@@ -2940,7 +2940,32 @@ export default function NOCActivityApp() {
     const dayNames = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
 
     const pageWidth = 210;
+    const pageHeight = 297;
     const margin = 10;
+
+    // ============================================
+    // 0. FOND D'ÉCRAN - logo_background.png
+    // ============================================
+    
+    try {
+      const bgImg = new Image();
+      bgImg.src = '/logo_background.png';
+      await new Promise((resolve) => {
+        bgImg.onload = resolve;
+        bgImg.onerror = resolve;
+      });
+      
+      if (bgImg.complete && bgImg.naturalWidth > 0) {
+        doc.addImage(bgImg, 'PNG', 0, 0, pageWidth, pageHeight, undefined, 'FAST');
+        // Superposition blanche semi-transparente
+        doc.setFillColor(255, 255, 255);
+        doc.setGState(new (doc as any).GState({ opacity: 0.85 }));
+        doc.rect(0, 0, pageWidth, pageHeight, 'F');
+        doc.setGState(new (doc as any).GState({ opacity: 1 }));
+      }
+    } catch (e) {
+      // Fond par défaut si l'image n'est pas disponible
+    }
 
     // ============================================
     // 1. EN-TÊTE - Logo + Titre CENTRÉS
@@ -2981,12 +3006,12 @@ export default function NOCActivityApp() {
     doc.text(titleText, headerStartX + logoWidth + 3, 21);
 
     // ============================================
-    // 2. BARRE DE TITRE - Image_titre_barre_heure_sup.png
+    // 2. BARRE DE TITRE - barre_titre_heures_sup.png
     // ============================================
     
     try {
       const barreImg = new Image();
-      barreImg.src = '/Image_titre_barre_heure_sup.png';
+      barreImg.src = '/barre_titre_heures_sup.png';
       await new Promise((resolve) => {
         barreImg.onload = resolve;
         barreImg.onerror = resolve;
@@ -3225,6 +3250,30 @@ export default function NOCActivityApp() {
     const pageWidth = 297; // A4 landscape width
     const pageHeight = 210; // A4 landscape height
     const margin = 10;
+
+    // ============================================
+    // 0. FOND D'ÉCRAN - logo_background.png
+    // ============================================
+    
+    try {
+      const bgImg = new Image();
+      bgImg.src = '/logo_background.png';
+      await new Promise((resolve) => {
+        bgImg.onload = resolve;
+        bgImg.onerror = resolve;
+      });
+      
+      if (bgImg.complete && bgImg.naturalWidth > 0) {
+        doc.addImage(bgImg, 'PNG', 0, 0, pageWidth, pageHeight, undefined, 'FAST');
+        // Superposition blanche semi-transparente
+        doc.setFillColor(255, 255, 255);
+        doc.setGState(new (doc as any).GState({ opacity: 0.85 }));
+        doc.rect(0, 0, pageWidth, pageHeight, 'F');
+        doc.setGState(new (doc as any).GState({ opacity: 1 }));
+      }
+    } catch (e) {
+      // Fond par défaut si l'image n'est pas disponible
+    }
 
     // ============================================
     // 1. EN-TÊTE - Logo + Titre
@@ -4969,21 +5018,14 @@ export default function NOCActivityApp() {
                             ) : null
                           ) : (
                             <>
-                              {/* Main centered logo watermark - PLUS VISIBLE */}
+                              {/* Background image logo_background.png */}
                               <div className="absolute inset-0 flex items-center justify-center">
-                                <img src="/logo_noc_activities_sans_fond.png" alt="" className="w-96 h-96 object-contain opacity-[0.20] dark:opacity-[0.12]" />
+                                <img src="/logo_background.png" alt="" className="w-full h-full object-cover opacity-[0.15] dark:opacity-[0.10]" />
                               </div>
-                              {/* Decorative pattern */}
-                              <div className="absolute inset-0" style={{
-                                backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%2300BCD4' fill-opacity='0.07'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
-                                backgroundSize: '60px 60px'
-                              }}></div>
-                              {/* Corner logos */}
-                              <img src="/logo_noc_activities_sans_fond.png" alt="" className="absolute top-4 left-4 w-20 h-20 object-contain opacity-[0.12] dark:opacity-[0.08]" />
-                              <img src="/logo_noc_activities_sans_fond.png" alt="" className="absolute bottom-4 right-4 w-20 h-20 object-contain opacity-[0.12] dark:opacity-[0.08]" />
-                              {/* Additional corner logos */}
-                              <img src="/logo_noc_activities_sans_fond.png" alt="" className="absolute top-4 right-4 w-12 h-12 object-contain opacity-[0.08] dark:opacity-[0.05]" />
-                              <img src="/logo_noc_activities_sans_fond.png" alt="" className="absolute bottom-4 left-4 w-12 h-12 object-contain opacity-[0.08] dark:opacity-[0.05]" />
+                              {/* Main centered logo watermark */}
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                <img src="/logo_noc_activities_sans_fond.png" alt="" className="w-96 h-96 object-contain opacity-[0.15] dark:opacity-[0.08]" />
+                              </div>
                             </>
                           )}
                         </div>
