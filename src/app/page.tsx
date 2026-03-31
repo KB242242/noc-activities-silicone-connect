@@ -1094,6 +1094,9 @@ const RESPONSIBILITY_CONFIG: Record<ResponsibilityType, { label: string; icon: t
 // FONCTIONS UTILITAIRES TÂCHES NOC
 // ============================================
 
+// Import des images en base64 pour les PDFs
+import { LOGO_BACKGROUND_BASE64, BARRE_HEURES_SUP_BASE64 } from '@/lib/pdf-images';
+
 // Créer une nouvelle tâche
 function createNewTask(
   userId: string,
@@ -2944,88 +2947,51 @@ export default function NOCActivityApp() {
     const margin = 10;
 
     // ============================================
-    // 0. FOND D'ÉCRAN - logo_background.png
+    // 1. EN-TÊTE - Logo Background + Titre
     // ============================================
     
-    try {
-      const bgImg = new Image();
-      bgImg.src = '/logo_background.png';
-      await new Promise((resolve) => {
-        bgImg.onload = resolve;
-        bgImg.onerror = resolve;
-      });
-      
-      if (bgImg.complete && bgImg.naturalWidth > 0) {
-        doc.addImage(bgImg, 'PNG', 0, 0, pageWidth, pageHeight, undefined, 'FAST');
-        // Superposition blanche semi-transparente
-        doc.setFillColor(255, 255, 255);
-        doc.setGState(new (doc as any).GState({ opacity: 0.85 }));
-        doc.rect(0, 0, pageWidth, pageHeight, 'F');
-        doc.setGState(new (doc as any).GState({ opacity: 1 }));
-      }
-    } catch (e) {
-      // Fond par défaut si l'image n'est pas disponible
-    }
-
-    // ============================================
-    // 1. EN-TÊTE - Logo + Titre CENTRÉS
-    // ============================================
-    
-    // Calculer la position centrée pour le logo + titre
-    const logoWidth = 18;
+    const logoWidth = 25;
+    const logoHeight = 20;
     const titleText = 'SILICONE CONNECT';
-    doc.setFontSize(12);
+    doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
     const titleWidth = doc.getTextWidth(titleText);
-    const totalHeaderWidth = logoWidth + 3 + titleWidth; // 3mm d'espace entre logo et titre
+    const totalHeaderWidth = logoWidth + 5 + titleWidth;
     const headerStartX = (pageWidth - totalHeaderWidth) / 2;
     
-    // Logo faicone_sc.png centré
-    try {
-      const logoImg = new Image();
-      logoImg.src = '/faicone_sc.png';
-      await new Promise((resolve) => {
-        logoImg.onload = resolve;
-        logoImg.onerror = resolve;
-      });
-      
-      if (logoImg.complete && logoImg.naturalWidth > 0) {
-        // Logo centré (18mm x 18mm)
-        doc.addImage(logoImg, 'PNG', headerStartX, 10, logoWidth, 18);
+    // Logo background à gauche du titre (utilise le base64 importé)
+    if (LOGO_BACKGROUND_BASE64) {
+      try {
+        doc.addImage(LOGO_BACKGROUND_BASE64, 'PNG', headerStartX, 8, logoWidth, logoHeight);
+      } catch (e) {
+        doc.setFillColor(59, 130, 246);
+        doc.roundedRect(headerStartX, 8, logoWidth, logoHeight, 2, 2, 'F');
       }
-    } catch (e) {
-      // Fallback simple
+    } else {
       doc.setFillColor(59, 130, 246);
-      doc.roundedRect(headerStartX, 10, logoWidth, 18, 2, 2, 'F');
+      doc.roundedRect(headerStartX, 8, logoWidth, logoHeight, 2, 2, 'F');
     }
 
-    // Titre SILICONE CONNECT (noir, plus petit, à côté du logo)
+    // Titre SILICONE CONNECT à droite du logo
     doc.setTextColor(0, 0, 0);
-    doc.setFontSize(12);
+    doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
-    doc.text(titleText, headerStartX + logoWidth + 3, 21);
+    doc.text(titleText, headerStartX + logoWidth + 5, 21);
 
     // ============================================
-    // 2. BARRE DE TITRE - barre_titre_heures_sup.png
+    // 2. BARRE DE TITRE - Image barre_titre_heures_sup.png
     // ============================================
     
-    try {
-      const barreImg = new Image();
-      barreImg.src = '/barre_titre_heures_sup.png';
-      await new Promise((resolve) => {
-        barreImg.onload = resolve;
-        barreImg.onerror = resolve;
-      });
-      
-      if (barreImg.complete && barreImg.naturalWidth > 0) {
-        doc.addImage(barreImg, 'PNG', margin, 35, pageWidth - (margin * 2), 10);
-      } else {
+    if (BARRE_HEURES_SUP_BASE64) {
+      try {
+        doc.addImage(BARRE_HEURES_SUP_BASE64, 'PNG', margin, 35, pageWidth - (margin * 2), 12);
+      } catch (e) {
         doc.setFillColor(59, 130, 246);
-        doc.roundedRect(margin, 35, pageWidth - (margin * 2), 10, 2, 2, 'F');
+        doc.roundedRect(margin, 35, pageWidth - (margin * 2), 12, 2, 2, 'F');
       }
-    } catch (e) {
+    } else {
       doc.setFillColor(59, 130, 246);
-      doc.roundedRect(margin, 35, pageWidth - (margin * 2), 10, 2, 2, 'F');
+      doc.roundedRect(margin, 35, pageWidth - (margin * 2), 12, 2, 2, 'F');
     }
 
     // ============================================
@@ -3035,7 +3001,7 @@ export default function NOCActivityApp() {
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
-    doc.text(`MOIS : ${monthNames[overtimeMonth.getMonth()].toUpperCase()} ${overtimeMonth.getFullYear()}`, pageWidth / 2, 52, { align: 'center' });
+    doc.text(`MOIS : ${monthNames[overtimeMonth.getMonth()].toUpperCase()} ${overtimeMonth.getFullYear()}`, pageWidth / 2, 55, { align: 'center' });
 
     // ============================================
     // 4. PRÉPARER LES DONNÉES
@@ -3252,34 +3218,11 @@ export default function NOCActivityApp() {
     const margin = 10;
 
     // ============================================
-    // 0. FOND D'ÉCRAN - logo_background.png
+    // 1. EN-TÊTE - Logo Background + Titre
     // ============================================
     
-    try {
-      const bgImg = new Image();
-      bgImg.src = '/logo_background.png';
-      await new Promise((resolve) => {
-        bgImg.onload = resolve;
-        bgImg.onerror = resolve;
-      });
-      
-      if (bgImg.complete && bgImg.naturalWidth > 0) {
-        doc.addImage(bgImg, 'PNG', 0, 0, pageWidth, pageHeight, undefined, 'FAST');
-        // Superposition blanche semi-transparente
-        doc.setFillColor(255, 255, 255);
-        doc.setGState(new (doc as any).GState({ opacity: 0.85 }));
-        doc.rect(0, 0, pageWidth, pageHeight, 'F');
-        doc.setGState(new (doc as any).GState({ opacity: 1 }));
-      }
-    } catch (e) {
-      // Fond par défaut si l'image n'est pas disponible
-    }
-
-    // ============================================
-    // 1. EN-TÊTE - Logo + Titre
-    // ============================================
-    
-    const logoWidth = 18;
+    const logoWidth = 25;
+    const logoHeight = 18;
     const titleText = 'SILICONE CONNECT';
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
@@ -3287,28 +3230,24 @@ export default function NOCActivityApp() {
     const totalHeaderWidth = logoWidth + 5 + titleWidth;
     const headerStartX = (pageWidth - totalHeaderWidth) / 2;
     
-    // Logo
-    try {
-      const logoImg = new Image();
-      logoImg.src = '/faicone_sc.png';
-      await new Promise((resolve) => {
-        logoImg.onload = resolve;
-        logoImg.onerror = resolve;
-      });
-      
-      if (logoImg.complete && logoImg.naturalWidth > 0) {
-        doc.addImage(logoImg, 'PNG', headerStartX, 8, logoWidth, 18);
+    // Logo background à gauche du titre (utilise le base64 importé)
+    if (LOGO_BACKGROUND_BASE64) {
+      try {
+        doc.addImage(LOGO_BACKGROUND_BASE64, 'PNG', headerStartX, 6, logoWidth, logoHeight);
+      } catch (e) {
+        doc.setFillColor(59, 130, 246);
+        doc.roundedRect(headerStartX, 6, logoWidth, logoHeight, 2, 2, 'F');
       }
-    } catch (e) {
+    } else {
       doc.setFillColor(59, 130, 246);
-      doc.roundedRect(headerStartX, 8, logoWidth, 18, 2, 2, 'F');
+      doc.roundedRect(headerStartX, 6, logoWidth, logoHeight, 2, 2, 'F');
     }
 
-    // Titre SILICONE CONNECT
+    // Titre SILICONE CONNECT à droite du logo
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
-    doc.text(titleText, headerStartX + logoWidth + 5, 20);
+    doc.text(titleText, headerStartX + logoWidth + 5, 18);
 
     // ============================================
     // 2. TITRE DU DOCUMENT
@@ -3316,7 +3255,7 @@ export default function NOCActivityApp() {
     
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
-    doc.text('PLANNING DES AGENTS NOC', pageWidth / 2, 35, { align: 'center' });
+    doc.text('PLANNING DES AGENTS NOC', pageWidth / 2, 32, { align: 'center' });
     
     doc.setFontSize(12);
     doc.setFont('helvetica', 'normal');
@@ -3735,30 +3674,9 @@ export default function NOCActivityApp() {
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 relative overflow-hidden">
         {/* Animated background elements - subtil et élégant */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <motion.div
-            animate={{
-              scale: [1, 1.2, 1],
-              opacity: [0.3, 0.5, 0.3],
-            }}
-            transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-            className="absolute -top-20 -right-20 w-72 h-72 bg-blue-200/30 dark:bg-blue-500/5 rounded-full blur-3xl"
-          />
-          <motion.div
-            animate={{
-              scale: [1, 1.3, 1],
-              opacity: [0.2, 0.4, 0.2],
-            }}
-            transition={{ duration: 10, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-            className="absolute -bottom-20 -left-20 w-80 h-80 bg-cyan-200/30 dark:bg-cyan-500/5 rounded-full blur-3xl"
-          />
-          <motion.div
-            animate={{
-              scale: [1, 1.1, 1],
-              opacity: [0.15, 0.25, 0.15],
-            }}
-            transition={{ duration: 12, repeat: Infinity, ease: "easeInOut", delay: 2 }}
-            className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-slate-300/20 dark:bg-slate-600/5 rounded-full blur-3xl"
-          />
+          <div className="absolute -top-20 -right-20 w-72 h-72 bg-blue-200/30 dark:bg-blue-500/5 rounded-full blur-3xl animate-pulse" />
+          <div className="absolute -bottom-20 -left-20 w-80 h-80 bg-cyan-200/30 dark:bg-cyan-500/5 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
+          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-slate-300/20 dark:bg-slate-600/5 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }} />
           {/* Particules subtiles */}
           <div className="absolute inset-0 opacity-[0.03] dark:opacity-[0.02]" style={{
             backgroundImage: 'radial-gradient(circle, currentColor 1px, transparent 1px)',
@@ -3768,78 +3686,39 @@ export default function NOCActivityApp() {
 
         <Toaster position="top-right" richColors />
 
-        <motion.div
-          initial={{ opacity: 0, y: 30, scale: 0.98 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-          className="w-full max-w-md mx-4 relative z-10"
-        >
+        <div className="w-full max-w-md mx-4 relative z-10 animate-in fade-in duration-500">
           <Card className="border border-slate-200/80 dark:border-slate-700/50 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.15)] dark:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)] bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl overflow-hidden">
-            {/* Header avec nouvelle image animée */}
+            {/* Header avec image */}
             <div className="relative pt-10 pb-6 text-center bg-gradient-to-b from-slate-50/50 to-transparent dark:from-slate-800/30 dark:to-transparent">
               {/* Glow effect derrière le logo */}
-              <motion.div
-                animate={{
-                  opacity: [0.3, 0.5, 0.3],
-                  scale: [1, 1.05, 1],
-                }}
-                transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-                className="absolute inset-x-0 top-8 h-20 bg-blue-400/10 dark:bg-blue-500/5 blur-2xl"
-              />
+              <div className="absolute inset-x-0 top-8 h-20 bg-blue-400/10 dark:bg-blue-500/5 blur-2xl animate-pulse" />
               
-              <motion.div
-                initial={{ scale: 0.8, opacity: 0, y: 10 }}
-                animate={{ scale: 1, opacity: 1, y: 0 }}
-                transition={{ delay: 0.1, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-                className="relative flex items-center justify-center px-8"
-              >
-                <motion.img
+              <div className="relative flex items-center justify-center px-8">
+                <img
                   src="/logo_noc_activities_sans_fond.png"
                   alt="NOC ACTIVITIES"
                   className="w-[90%] max-w-[320px] h-auto relative z-10"
                   style={{ aspectRatio: '464/165' }}
-                  animate={{
-                    y: [0, -3, 0],
-                  }}
-                  transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
                   onError={(e) => {
                     e.currentTarget.onerror = null;
                     e.currentTarget.src = '/logo_sc.png';
                   }}
                 />
-              </motion.div>
+              </div>
               
               {/* Séparateur élégant */}
-              <motion.div
-                initial={{ scaleX: 0, opacity: 0 }}
-                animate={{ scaleX: 1, opacity: 1 }}
-                transition={{ delay: 0.4, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-                className="mt-6 mx-8 h-[1px] bg-gradient-to-r from-transparent via-slate-300 dark:via-slate-600 to-transparent"
-              />
+              <div className="mt-6 mx-8 h-[1px] bg-gradient-to-r from-transparent via-slate-300 dark:via-slate-600 to-transparent" />
             </div>
 
             <CardContent className="pt-4 pb-8 px-8">
-              <motion.form
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.3, duration: 0.5 }}
+              <form
                 onSubmit={handleLogin}
                 className="space-y-5"
               >
                 {/* Champ Pseudo avec icône et label flottant */}
-                <motion.div
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.4, duration: 0.4 }}
-                  className="relative group"
-                >
+                <div className="relative group">
                   <div className="absolute left-4 top-1/2 -translate-y-1/2 z-10 transition-all duration-300 group-focus-within:scale-110">
-                    <motion.div
-                      animate={pseudoFocused ? { scale: 1.1, rotate: [0, -5, 5, 0] } : { scale: 1 }}
-                      transition={{ duration: 0.3 }}
-                    >
-                      <User className={`h-5 w-5 transition-colors duration-300 ${pseudoFocused ? 'text-blue-600' : 'text-slate-400'}`} />
-                    </motion.div>
+                    <User className={`h-5 w-5 transition-colors duration-300 ${pseudoFocused ? 'text-blue-600' : 'text-slate-400'}`} />
                   </div>
                   <Input
                     id="username"
@@ -3861,22 +3740,12 @@ export default function NOCActivityApp() {
                   >
                     Pseudo
                   </label>
-                </motion.div>
+                </div>
 
                 {/* Champ Mot de passe avec icône et label flottant */}
-                <motion.div
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.5, duration: 0.4 }}
-                  className="relative group"
-                >
+                <div className="relative group">
                   <div className="absolute left-4 top-1/2 -translate-y-1/2 z-10 transition-all duration-300 group-focus-within:scale-110">
-                    <motion.div
-                      animate={passwordFocused ? { scale: 1.1, rotate: [0, -5, 5, 0] } : { scale: 1 }}
-                      transition={{ duration: 0.3 }}
-                    >
-                      <Lock className={`h-5 w-5 transition-colors duration-300 ${passwordFocused ? 'text-blue-600' : 'text-slate-400'}`} />
-                    </motion.div>
+                    <Lock className={`h-5 w-5 transition-colors duration-300 ${passwordFocused ? 'text-blue-600' : 'text-slate-400'}`} />
                   </div>
                   <Input
                     id="password"
@@ -3903,78 +3772,41 @@ export default function NOCActivityApp() {
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-4 top-1/2 -translate-y-1/2 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-all duration-200"
                   >
-                    <motion.div
-                      whileHover={{ scale: 1.1 }}
-                      whileTap={{ scale: 0.9 }}
-                    >
-                      {showPassword ? (
-                        <EyeOff className="h-5 w-5 text-slate-400 hover:text-blue-600 transition-colors" />
-                      ) : (
-                        <Eye className="h-5 w-5 text-slate-400 hover:text-blue-600 transition-colors" />
-                      )}
-                    </motion.div>
+                    {showPassword ? (
+                      <EyeOff className="h-5 w-5 text-slate-400 hover:text-blue-600 transition-colors" />
+                    ) : (
+                      <Eye className="h-5 w-5 text-slate-400 hover:text-blue-600 transition-colors" />
+                    )}
                   </button>
-                </motion.div>
+                </div>
 
                 {/* Message d'erreur */}
-                <AnimatePresence mode="wait">
-                  {loginError && (
-                    <motion.p
-                      initial={{ opacity: 0, y: -10, scale: 0.95 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                      transition={{ duration: 0.2 }}
-                      className="text-sm text-red-500 flex items-center gap-2 bg-red-50 dark:bg-red-900/20 p-3 rounded-lg border border-red-200 dark:border-red-800/50"
-                    >
-                      <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                      <span>{loginError}</span>
-                    </motion.p>
-                  )}
-                </AnimatePresence>
+                {loginError && (
+                  <p className="text-sm text-red-500 flex items-center gap-2 bg-red-50 dark:bg-red-900/20 p-3 rounded-lg border border-red-200 dark:border-red-800/50">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                    <span>{loginError}</span>
+                  </p>
+                )}
 
                 {/* Compte à rebours si verrouillé */}
-                <AnimatePresence mode="wait">
-                  {isLocked && (
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.95, height: 0 }}
-                      animate={{ opacity: 1, scale: 1, height: 'auto' }}
-                      exit={{ opacity: 0, scale: 0.95, height: 0 }}
-                      className="bg-gradient-to-r from-red-50 to-orange-50 dark:from-red-900/20 dark:to-orange-900/20 border border-red-200 dark:border-red-800/50 rounded-xl p-4 text-center overflow-hidden"
-                    >
-                      <div className="flex items-center justify-center gap-2">
-                        <motion.div
-                          animate={{ rotate: 360 }}
-                          transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-                        >
-                          <RefreshCw className="w-5 h-5 text-red-500" />
-                        </motion.div>
-                        <p className="text-red-600 dark:text-red-400 font-medium">
-                          Veuillez patienter <span className="text-xl font-bold">{lockoutSeconds}</span> secondes
-                        </p>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                {isLocked && (
+                  <div className="bg-gradient-to-r from-red-50 to-orange-50 dark:from-red-900/20 dark:to-orange-900/20 border border-red-200 dark:border-red-800/50 rounded-xl p-4 text-center">
+                    <div className="flex items-center justify-center gap-2">
+                      <RefreshCw className="w-5 h-5 text-red-500 animate-spin" />
+                      <p className="text-red-600 dark:text-red-400 font-medium">
+                        Veuillez patienter <span className="text-xl font-bold">{lockoutSeconds}</span> secondes
+                      </p>
+                    </div>
+                  </div>
+                )}
 
-                {/* Bouton de connexion AVEC ICÔNE */}
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.6, duration: 0.4 }}
-                  className="pt-2"
-                >
-                  <motion.button
+                {/* Bouton de connexion */}
+                <div className="pt-2">
+                  <button
                     type="submit"
                     disabled={isLoading || isLocked}
-                    whileHover={{ scale: 1.02, y: -1 }}
-                    whileTap={{ scale: 0.98 }}
                     className="w-full h-14 relative overflow-hidden bg-gradient-to-r from-blue-600 via-blue-600 to-cyan-600 hover:from-blue-700 hover:via-blue-700 hover:to-cyan-700 text-white font-semibold text-base shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/30 transition-all duration-300 rounded-xl disabled:opacity-70 disabled:cursor-not-allowed group"
                   >
-                    {/* Effet de brillance au survol */}
-                    <motion.div
-                      className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700"
-                    />
-                    
                     <span className="relative flex items-center justify-center gap-2.5">
                       {isLoading ? (
                         <>
@@ -3983,83 +3815,48 @@ export default function NOCActivityApp() {
                         </>
                       ) : (
                         <>
-                          <motion.span
-                            initial={{ x: -5, opacity: 0 }}
-                            animate={{ x: 0, opacity: 1 }}
-                            transition={{ delay: 0.7, duration: 0.3 }}
-                          >
-                            <LogIn className="w-5 h-5" />
-                          </motion.span>
-                          <motion.span
-                            initial={{ x: 5, opacity: 0 }}
-                            animate={{ x: 0, opacity: 1 }}
-                            transition={{ delay: 0.75, duration: 0.3 }}
-                          >
-                            Se connecter
-                          </motion.span>
+                          <LogIn className="w-5 h-5" />
+                          <span>Se connecter</span>
                         </>
                       )}
                     </span>
-                  </motion.button>
-                </motion.div>
-              </motion.form>
+                  </button>
+                </div>
+              </form>
 
               {/* Message d'oubli - AFFICHÉ SEULEMENT APRÈS 3 TENTATIVES */}
-              <AnimatePresence mode="wait">
-                {showForgotMessage && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0, marginTop: 0 }}
-                    animate={{ opacity: 1, height: 'auto', marginTop: 24 }}
-                    exit={{ opacity: 0, height: 0, marginTop: 0 }}
-                    transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-                    className="overflow-hidden"
-                  >
-                    <div className="pt-5 border-t border-slate-200 dark:border-slate-700">
-                      <motion.div
-                        initial={{ y: 10, opacity: 0 }}
-                        animate={{ y: 0, opacity: 1 }}
-                        transition={{ delay: 0.1, duration: 0.3 }}
-                        className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/10 dark:to-orange-900/10 rounded-xl p-4 text-center border border-amber-200/50 dark:border-amber-800/30"
-                      >
-                        <Info className="w-5 h-5 text-amber-500 mx-auto mb-2" />
-                        <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
-                          Si vous avez oublié votre mot de passe ou votre pseudo,
-                          <br />
-                          merci de vous rapprocher de la <span className="font-semibold text-blue-600 dark:text-blue-400">Direction</span> ou
-                          contacter le <span className="font-semibold text-blue-600 dark:text-blue-400">Responsable Système</span>.
-                        </p>
-                      </motion.div>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              {showForgotMessage && (
+                <div className="pt-5 border-t border-slate-200 dark:border-slate-700 mt-6">
+                  <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/10 dark:to-orange-900/10 rounded-xl p-4 text-center border border-amber-200/50 dark:border-amber-800/30">
+                    <Info className="w-5 h-5 text-amber-500 mx-auto mb-2" />
+                    <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                      Si vous avez oublié votre mot de passe ou votre pseudo,
+                      <br />
+                      merci de vous rapprocher de la <span className="font-semibold text-blue-600 dark:text-blue-400">Direction</span> ou
+                      contacter le <span className="font-semibold text-blue-600 dark:text-blue-400">Responsable Système</span>.
+                    </p>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
           {/* Footer élégant */}
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.8, duration: 0.5 }}
-            className="text-center text-slate-400 dark:text-slate-500 text-xs mt-6 flex items-center justify-center gap-2"
-          >
+          <p className="text-center text-slate-400 dark:text-slate-500 text-xs mt-6 flex items-center justify-center gap-2">
             <span className="w-8 h-[1px] bg-slate-300 dark:bg-slate-700" />
             <span>© {new Date().getFullYear()} Silicone Connect</span>
             <span className="w-8 h-[1px] bg-slate-300 dark:bg-slate-700" />
-          </motion.p>
+          </p>
 
           {/* Bouton Télécharger le projet */}
-          <motion.a
+          <a
             href="/api/download-project"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 1, duration: 0.4 }}
             className="mt-4 flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-sm font-medium rounded-lg hover:from-cyan-400 hover:to-blue-500 transition-all shadow-lg"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
             Télécharger le projet (ZIP)
-          </motion.a>
-        </motion.div>
+          </a>
+        </div>
       </div>
     );
   }
