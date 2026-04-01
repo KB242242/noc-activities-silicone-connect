@@ -27,7 +27,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Switch } from '@/components/ui/switch';
 import { Toggle } from '@/components/ui/toggle';
-import { toast, Toaster } from 'sonner';
+import { toast as sonnerToast } from 'sonner';
 
 // Icons
 import {
@@ -50,6 +50,21 @@ import EmojiPicker, { Theme as EmojiPickerTheme, EmojiClickData } from 'emoji-pi
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar, Legend, PieChart, Pie, Cell } from 'recharts';
 
 // Types
+const createToastId = (type: 'success' | 'error' | 'warning' | 'info') =>
+  `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+const toast = {
+  success: (message: string, options?: Record<string, unknown>) =>
+    sonnerToast.success(message, { id: createToastId('success'), ...(options ?? {}) }),
+  error: (message: string, options?: Record<string, unknown>) =>
+    sonnerToast.error(message, { id: createToastId('error'), ...(options ?? {}) }),
+  warning: (message: string, options?: Record<string, unknown>) =>
+    sonnerToast.warning(message, { id: createToastId('warning'), ...(options ?? {}) }),
+  info: (message: string, options?: Record<string, unknown>) =>
+    sonnerToast.info(message, { id: createToastId('info'), ...(options ?? {}) }),
+  dismiss: sonnerToast.dismiss,
+};
+
 type UserRole = 'SUPER_ADMIN' | 'ADMIN' | 'RESPONSABLE' | 'TECHNICIEN' | 'TECHNICIEN_NO' | 'USER';
 type DayType = 'DAY_SHIFT' | 'NIGHT_SHIFT' | 'REST_DAY';
 type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'on_hold' | 'cancelled' | 'late';
@@ -245,7 +260,7 @@ interface NotificationItem {
 // TYPES MESSAGERIE INTERNE (GMAIL-LIKE)
 // ============================================
 
-type MessageFolder = 'inbox' | 'sent' | 'drafts' | 'spam' | 'trash' | 'starred';
+type MessageFolder = 'inbox' | 'sent' | 'drafts' | 'spam' | 'trash' | 'starred' | 'archived';
 type MessageStatus = 'unread' | 'read' | 'important' | 'archived';
 type MessagePriority = 'normal' | 'important' | 'urgent';
 
@@ -655,12 +670,7 @@ const ACTIVITY_TYPES: Record<string, Array<{ value: string; label: string }>> = 
   ]
 };
 
-const STATUS_COLORS: Record<TaskStatus, { bg: string; text: string }> = {
-  pending: { bg: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400', text: 'En attente' },
-  in_progress: { bg: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400', text: 'En cours' },
-  completed: { bg: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400', text: 'Terminé' },
-  on_hold: { bg: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400', text: 'Suspendu' }
-};
+
 
 // ============================================
 // CONFIGURATION TICKETS
@@ -1888,7 +1898,6 @@ export default function NOCActivityApp() {
           void Promise.resolve().then(() => {
             setUser(parsed);
             setIsAuthenticated(true);
-            toast.success(`Bienvenue, ${parsed.name} !`, { description: 'Connexion réussie' });
           });
         } catch { /* ignore */ }
       }
@@ -2194,14 +2203,16 @@ export default function NOCActivityApp() {
       if (lockoutTime > 0) {
         setIsLocked(true);
         setLockoutSeconds(lockoutTime);
-        toast.error('Trop de tentatives', {
-          description: `Veuillez attendre ${lockoutTime} secondes avant de réessayer`
-        });
       }
 
       setLoginError('Pseudo/Email ou mot de passe incorrect');
       setIsLoading(false);
-      toast.error('Erreur de connexion', { description: 'Identifiants invalides' });
+      toast.error(lockoutTime > 0 ? 'Trop de tentatives' : 'Erreur de connexion', {
+        id: lockoutTime > 0 ? 'auth-lockout-error' : 'auth-login-error',
+        description: lockoutTime > 0
+          ? `Veuillez attendre ${lockoutTime} secondes avant de réessayer`
+          : 'Identifiants invalides'
+      });
     };
 
     if (!foundUser) {
@@ -2239,14 +2250,12 @@ export default function NOCActivityApp() {
     localStorage.setItem('noc_user', JSON.stringify(updatedUser));
     setIsLoading(false);
 
-    // Alerte si mot de passe doit être changé
-    if (foundUser.mustChangePassword) {
-      toast.warning('Sécurité requise', {
-        description: 'Veuillez modifier votre mot de passe dans Mon profil → Sécuriser mon compte'
-      });
-    }
-
-    toast.success(`Bienvenue, ${foundUser.name} !`, { description: 'Connexion réussie' });
+    toast.success(`Bienvenue, ${foundUser.name} !`, {
+      id: 'auth-login-success',
+      description: foundUser.mustChangePassword
+        ? 'Connexion réussie. Veuillez modifier votre mot de passe dans Mon profil → Sécuriser mon compte'
+        : 'Connexion réussie'
+    });
   };
 
   // Effect pour le compte à rebours du verrouillage
@@ -3283,13 +3292,13 @@ export default function NOCActivityApp() {
     const numDays = days.length;
 
     // Couleurs pour les shifts
-    const shiftColors = {
+    const shiftColors: Record<'A' | 'B' | 'C', { light: [number, number, number]; dark: [number, number, number] }> = {
       'A': { light: [219, 234, 254], dark: [59, 130, 246] }, // Blue
       'B': { light: [254, 249, 195], dark: [234, 179, 8] },  // Yellow/Amber
       'C': { light: [220, 252, 231], dark: [34, 197, 94] }   // Green
     };
-    const restColor = [229, 231, 235]; // Gray for rest days
-    const nightDarkColors = {
+    const restColor: [number, number, number] = [229, 231, 235]; // Gray for rest days
+    const nightDarkColors: Record<'A' | 'B' | 'C', [number, number, number]> = {
       'A': [30, 64, 175],   // Dark blue
       'B': [161, 98, 7],    // Dark amber
       'C': [22, 101, 52]    // Dark green
@@ -3354,8 +3363,8 @@ export default function NOCActivityApp() {
         const schedule = getShiftScheduleForDate(shiftName, day);
         const restInfo = getIndividualRestAgent(shiftName, day);
         
-        let bgColor: number[];
-        let textColor: number[] = [0, 0, 0];
+        let bgColor: [number, number, number];
+        let textColor: [number, number, number] = [0, 0, 0];
         let cellText = '';
         
         if (schedule.isCollectiveRest) {
@@ -3407,7 +3416,7 @@ export default function NOCActivityApp() {
     doc.text('LÉGENDE:', margin, legendY);
     
     // Légende des types de jours - avec meilleur espacement
-    const legendItems = [
+    const legendItems: Array<{ label: string; color: [number, number, number] }> = [
       { label: 'J = Jour (07h00 - 19h00)', color: [219, 234, 254] },
       { label: 'N = Nuit (19h00 - 07h00)', color: [30, 64, 175] },
       { label: 'R = Repos', color: [229, 231, 235] }
@@ -3717,8 +3726,6 @@ export default function NOCActivityApp() {
           }} />
         </div>
 
-        <Toaster position="top-right" richColors />
-
         <motion.div
           initial={{ opacity: 0, y: 30, scale: 0.98 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -3998,18 +4005,6 @@ export default function NOCActivityApp() {
             <span>© {new Date().getFullYear()} Silicone Connect</span>
             <span className="w-8 h-[1px] bg-slate-300 dark:bg-slate-700" />
           </motion.p>
-
-          {/* Bouton Télécharger le projet */}
-          <motion.a
-            href="/api/download-project"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 1, duration: 0.4 }}
-            className="mt-4 flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-sm font-medium rounded-lg hover:from-cyan-400 hover:to-blue-500 transition-all shadow-lg"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
-            Télécharger le projet (ZIP)
-          </motion.a>
         </motion.div>
       </div>
     );
@@ -4019,7 +4014,6 @@ export default function NOCActivityApp() {
 
   return (
     <>
-      <Toaster position="top-right" richColors closeButton />
       <div className="min-h-screen bg-background">
         {/* Bannière d'avertissement - Mot de passe à changer */}
         {user?.mustChangePassword && (
@@ -5205,8 +5199,6 @@ export default function NOCActivityApp() {
                                           if (audioRef.current && message.mediaData) {
                                             const rect = e.currentTarget.getBoundingClientRect();
                                             const percent = ((e.clientX - rect.left) / rect.width);
-                                            const audio = new Audio(message.mediaData);
-                                            audio.duration = message.duration || 0;
                                             if (audioRef.current.duration) {
                                               audioRef.current.currentTime = percent * audioRef.current.duration;
                                               setAudioProgress(prev => ({...prev, [message.id]: percent * 100}));
@@ -7826,9 +7818,15 @@ export default function NOCActivityApp() {
                                     <SelectValue />
                                   </SelectTrigger>
                                   <SelectContent className="bg-white dark:bg-slate-800">
-                                    {Object.entries(TICKET_CATEGORIES).map(([key, val]) => (
-                                      <SelectItem key={key} value={key}>{val.icon} {val.label}</SelectItem>
-                                    ))}
+                                    {Object.entries(TICKET_CATEGORIES).map(([key, val]) => {
+                                      const CategoryIcon = val.icon;
+                                      return (
+                                        <SelectItem key={key} value={key}>
+                                          <CategoryIcon className="w-4 h-4 mr-2" />
+                                          {val.label}
+                                        </SelectItem>
+                                      );
+                                    })}
                                   </SelectContent>
                                 </Select>
                               </div>
@@ -10785,6 +10783,7 @@ export default function NOCActivityApp() {
                       },
                       to: newEmail.to,
                       cc: newEmail.cc,
+                      bcc: newEmail.bcc,
                       subject: newEmail.subject,
                       body: cleanEmptyDivs(newEmail.body),
                       attachments: newEmail.attachments,
@@ -10818,6 +10817,7 @@ export default function NOCActivityApp() {
                     setNewEmail({
                       to: [],
                       cc: [],
+                      bcc: [],
                       subject: '',
                       body: '',
                       attachments: [],
@@ -10887,6 +10887,7 @@ export default function NOCActivityApp() {
                       },
                       to: newEmail.to,
                       cc: newEmail.cc,
+                      bcc: newEmail.bcc,
                       subject: newEmail.subject,
                       body: cleanEmptyDivs(newEmail.body),
                       attachments: newEmail.attachments,

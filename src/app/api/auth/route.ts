@@ -39,13 +39,13 @@ export async function POST(request: NextRequest) {
     });
 
     if (!user) {
-      // Create new user with default AGENT role
+      // Create new user with a default technician role
       const name = email.split('@')[0].charAt(0).toUpperCase() + email.split('@')[0].slice(1);
       user = await prisma.user.create({
         data: {
           email,
           name,
-          role: 'AGENT',
+          role: 'TECHNICIEN_NO',
           isActive: true
         },
         include: {
@@ -61,10 +61,10 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Update last active
+    // Update last activity
     await prisma.user.update({
       where: { id: user.id },
-      data: { lastActiveAt: new Date() }
+      data: { lastActivity: new Date() }
     });
 
     return NextResponse.json({

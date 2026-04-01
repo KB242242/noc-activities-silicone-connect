@@ -151,10 +151,10 @@ export async function checkSession(token: string): Promise<{
       data: { expiresAt: newExpiresAt }
     });
 
-    // Update lastActiveAt
+    // Update last activity
     await prisma.user.update({
       where: { id: session.userId },
-      data: { lastActiveAt: new Date() }
+      data: { lastActivity: new Date() }
     });
 
     return {

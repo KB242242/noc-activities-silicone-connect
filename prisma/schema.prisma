@@ -1,140 +1,562 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
 
-// ==================== SQLITE CONFIGURATION ====================
-// Uncomment the block below for SQLite (default for development)
 datasource db {
-  provider = "sqlite"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
-// ==================== MYSQL CONFIGURATION ====================
-// Uncomment the block below for MySQL (WampServer production)
-// Replace the connection string with your MySQL credentials
-/*
-datasource db {
-  provider = "mysql"
-  url      = "mysql://username:password@localhost:3306/noc_activity"
-}
-// Example: mysql://root:@localhost:3306/noc_activity
-// For WampServer default: root with no password
-*/
-
-// User model with role-based access
 model User {
-  id            String   @id @default(cuid())
-  email         String   @unique
-  name          String
-  firstName     String?
-  lastName      String?
-  role          Role     @default(AGENT)
-  shiftId       String?
-  avatar        String?
-  isActive      Boolean  @default(true)
-  lastActiveAt  DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  
-  shift         Shift?         @relation(fields: [shiftId], references: [id], onDelete: SetNull)
-  activities    Activity[]
-  overtimes     Overtime[]
-  responsibilities Responsibility[]
-  individualRests IndividualRest[]
-  dayAssignments DayAssignment[]
-  tasks         Task[]
-  handovers     Handover[]
-  
-  @@index([email])
-  @@index([shiftId])
+  id                  String                   @id @default(cuid())
+  email               String                   @unique(map: "uk_users_email")
+  name                String
+  firstName           String?                  @map("first_name")
+  lastName            String?                  @map("last_name")
+  username            String?                  @unique(map: "uk_users_username")
+  passwordHash        String?                  @map("password_hash") @db.VarChar(500)
+  role                users_role?              @default(USER)
+  shiftId             String?                  @map("shift_id")
+  responsibility      users_responsibility?
+  shiftPeriodStart    DateTime?                @map("shift_period_start")
+  shiftPeriodEnd      DateTime?                @map("shift_period_end")
+  avatar              String?                  @db.VarChar(500)
+  isActive            Boolean?                 @default(true) @map("is_active")
+  isBlocked           Boolean?                 @default(false) @map("is_blocked")
+  isFirstLogin        Boolean?                 @default(true) @map("is_first_login")
+  mustChangePassword  Boolean?                 @default(true) @map("must_change_password")
+  lastActivity        DateTime?                @map("last_activity")
+  failedLoginAttempts Int?                     @default(0) @map("failed_login_attempts")
+  lockedUntil         DateTime?                @map("locked_until")
+  monthlyScore        Float?                   @map("monthly_score") @db.Float
+  reliabilityIndex    Float?                   @map("reliability_index") @db.Float
+  performanceBadge    users_performance_badge? @map("performance_badge")
+  presenceStatus      users_presence_status?   @default(OFFLINE) @map("presence_status")
+  createdAt           DateTime?                @default(now()) @map("created_at")
+  updatedAt           DateTime?                @default(now()) @updatedAt @map("updated_at")
+  activities          Activity[]
+  auditLogs           AuditLog[]
+  dayAssignments      DayAssignment[]
+  documentShares      DocumentShare[]
+  documentVersions    DocumentVersion[]
+  documents           Document[]
+  graphSchedules      GraphSchedule[]
+  handovers           Handover[]
+  individualRests     IndividualRest[]
+  notifications       Notification[]
+  overtimes           Overtime[]
+  responsibilities    Responsibility[]
+  sessions            Session[]
+  taskComments        TaskComment[]
+  tasks               Task[]
+  ticketAttachments   TicketAttachment[]
+  ticketComments      TicketComment[]
+  assignedTickets     Ticket[]                 @relation("TicketAssignee")
+  reportedTickets     Ticket[]                 @relation("TicketReporter")
+  shift               Shift?                   @relation(fields: [shiftId], references: [id], onUpdate: NoAction, map: "fk_users_shift")
+
+  @@index([role], map: "idx_users_role")
+  @@index([shiftId], map: "idx_users_shift_id")
+  @@map("users")
 }
 
-enum Role {
-  ADMIN
-  SUPERVISOR
-  AGENT
-}
-
-// Shift model (A, B, C)
 model Shift {
-  id          String   @id @default(cuid())
-  name        String   @unique // "A", "B", "C"
-  color       String   // "blue", "yellow", "green"
-  colorCode   String   // Hex color code
-  description String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  members     User[]
+  id          String       @id @default(cuid())
+  name        String       @unique(map: "uk_shifts_name")
+  color       String
+  colorCode   String       @map("color_code")
+  description String?      @db.VarChar(500)
+  createdAt   DateTime?    @default(now()) @map("created_at")
+  updatedAt   DateTime?    @default(now()) @map("updated_at")
+  handovers   Handover[]
   cycles      ShiftCycle[]
-  
+  members     User[]
+
   @@map("shifts")
 }
 
-// Shift Cycle - represents a work period (6 work days + 3 rest days)
 model ShiftCycle {
-  id            String   @id @default(cuid())
-  shiftId       String
-  startDate     DateTime
-  endDate       DateTime
-  cycleNumber   Int      // Sequential cycle number
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  
-  shift         Shift         @relation(fields: [shiftId], references: [id], onDelete: Cascade)
-  workDays      WorkDay[]
+  id              String           @id @default(cuid())
+  shiftId         String           @map("shift_id")
+  startDate       DateTime         @map("start_date")
+  endDate         DateTime         @map("end_date")
+  cycleNumber     Int              @map("cycle_number")
+  isActive        Boolean?         @default(true) @map("is_active")
+  createdAt       DateTime?        @default(now()) @map("created_at")
   individualRests IndividualRest[]
-  
-  @@index([shiftId, startDate])
-  @@index([shiftId, cycleNumber])
+  shift           Shift            @relation(fields: [shiftId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_shift_cycles_shift")
+  workDays        WorkDay[]
+
+  @@index([shiftId, cycleNumber], map: "idx_shift_cycles_shift_number")
+  @@index([shiftId, startDate], map: "idx_shift_cycles_shift_start")
+  @@map("shift_cycles")
 }
 
-// Work Day - each day within a cycle
 model WorkDay {
-  id            String     @id @default(cuid())
-  cycleId       String
-  date          DateTime
-  dayType       DayType
-  startHour     Int        // 7 or 19
-  endHour       Int        // 19 or 7
-  dayNumber     Int        // 1-6 within the cycle (work days only)
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
-  
-  cycle         ShiftCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
-  assignments   DayAssignment[]
-  
-  @@unique([cycleId, date])
-  @@index([cycleId])
-  @@index([date])
+  id          String          @id @default(cuid())
+  cycleId     String          @map("cycle_id")
+  date        DateTime
+  dayType     DayType         @map("day_type")
+  startHour   Int             @map("start_hour")
+  endHour     Int             @map("end_hour")
+  dayNumber   Int             @map("day_number")
+  createdAt   DateTime?       @default(now()) @map("created_at")
+  assignments DayAssignment[]
+  cycle       ShiftCycle      @relation(fields: [cycleId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_work_days_cycle")
+
+  @@unique([cycleId, date], map: "uk_work_days_cycle_date")
+  @@index([cycleId], map: "idx_work_days_cycle_id")
+  @@index([date], map: "idx_work_days_date")
+  @@map("work_days")
+}
+
+model DayAssignment {
+  id             String              @id @default(cuid())
+  workDayId      String              @map("work_day_id")
+  userId         String              @map("user_id")
+  responsibility ResponsibilityType?
+  isResting      Boolean?            @default(false) @map("is_resting")
+  createdAt      DateTime?           @default(now()) @map("created_at")
+  user           User                @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_day_assignments_user")
+  workDay        WorkDay             @relation(fields: [workDayId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_day_assignments_work_day")
+
+  @@unique([workDayId, userId], map: "uk_day_assignments_workday_user")
+  @@index([userId], map: "fk_day_assignments_user")
+  @@map("day_assignments")
+}
+
+model IndividualRest {
+  id        String     @id @default(cuid())
+  cycleId   String     @map("cycle_id")
+  userId    String     @map("user_id")
+  restDay   Int        @map("rest_day")
+  createdAt DateTime?  @default(now()) @map("created_at")
+  cycle     ShiftCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_individual_rests_cycle")
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_individual_rests_user")
+
+  @@unique([cycleId, userId], map: "uk_individual_rests_cycle_user")
+  @@index([userId], map: "fk_individual_rests_user")
+  @@map("individual_rests")
+}
+
+model Activity {
+  id          String       @id @default(cuid())
+  userId      String       @map("user_id")
+  type        ActivityType
+  category    String
+  description String       @db.Text
+  metadata    String?      @db.Text
+  createdAt   DateTime?    @default(now()) @map("created_at")
+  updatedAt   DateTime?    @default(now()) @map("updated_at")
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_activities_user")
+
+  @@index([category], map: "idx_activities_category")
+  @@index([type], map: "idx_activities_type")
+  @@index([userId, createdAt], map: "idx_activities_user_created")
+  @@map("activities")
+}
+
+model Task {
+  id                String              @id @default(cuid())
+  userId            String              @map("user_id")
+  title             String              @db.VarChar(500)
+  description       String?             @db.Text
+  status            tasks_status?       @default(PENDING)
+  category          tasks_category?     @default(OTHER)
+  priority          tasks_priority?     @default(MEDIUM)
+  responsibility    ResponsibilityType?
+  shiftName         String?             @map("shift_name") @db.VarChar(50)
+  startTime         DateTime?           @map("start_time")
+  estimatedEndTime  DateTime?           @map("estimated_end_time")
+  estimatedDuration Int?                @map("estimated_duration")
+  actualEndTime     DateTime?           @map("actual_end_time")
+  actualDuration    Int?                @map("actual_duration")
+  tags              String?             @db.Text
+  isOverdue         Boolean?            @default(false) @map("is_overdue")
+  isNotified        Boolean?            @default(false) @map("is_notified")
+  completedAt       DateTime?           @map("completed_at")
+  createdAt         DateTime?           @default(now()) @map("created_at")
+  updatedAt         DateTime?           @default(now()) @updatedAt @map("updated_at")
+  alerts            TaskAlert[]
+  comments          TaskComment[]
+  history           TaskHistory[]
+  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_tasks_user")
+
+  @@index([category], map: "idx_tasks_category")
+  @@index([priority], map: "idx_tasks_priority")
+  @@index([userId, createdAt], map: "idx_tasks_user_created")
+  @@index([userId, status], map: "idx_tasks_user_status")
+  @@map("tasks")
+}
+
+model GraphSchedule {
+  id         String    @id @default(cuid())
+  userId     String    @map("user_id")
+  date       DateTime
+  time       String    @db.VarChar(20)
+  sent       Boolean?  @default(false)
+  recipients String?   @db.Text
+  createdAt  DateTime? @default(now()) @map("created_at")
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_graph_schedules_user")
+
+  @@index([userId], map: "fk_graph_schedules_user")
+  @@index([date], map: "idx_graph_schedules_date")
+  @@map("graph_schedules")
+}
+
+model Handover {
+  id           String    @id @default(cuid())
+  authorId     String    @map("author_id")
+  shiftId      String    @map("shift_id")
+  date         DateTime
+  content      String?   @db.Text
+  incidents    String?   @db.Text
+  escalations  String?   @db.Text
+  pendingTasks String?   @map("pending_tasks") @db.Text
+  createdAt    DateTime? @default(now()) @map("created_at")
+  updatedAt    DateTime? @default(now()) @map("updated_at")
+  author       User      @relation(fields: [authorId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_handovers_author")
+  shift        Shift     @relation(fields: [shiftId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_handovers_shift")
+
+  @@index([authorId, date], map: "idx_handovers_author_date")
+  @@index([shiftId, date], map: "idx_handovers_shift_date")
+  @@map("handovers")
+}
+
+model Overtime {
+  id         String    @id @default(cuid())
+  userId     String    @map("user_id")
+  date       DateTime
+  duration   Int       @default(120)
+  shiftType  String    @map("shift_type") @db.VarChar(50)
+  startTime  String    @map("start_time") @db.VarChar(20)
+  endTime    String    @map("end_time") @db.VarChar(20)
+  reason     String?   @default("Supervision NOC") @db.VarChar(500)
+  approvedBy String?   @default("Daddy AZUMY") @map("approved_by")
+  month      Int
+  year       Int
+  createdAt  DateTime? @default(now()) @map("created_at")
+  updatedAt  DateTime? @default(now()) @map("updated_at")
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_overtimes_user")
+
+  @@unique([userId, date], map: "uk_overtimes_user_date")
+  @@index([date], map: "idx_overtimes_date")
+  @@index([userId, month, year], map: "idx_overtimes_user_month_year")
+  @@map("overtimes")
+}
+
+model Responsibility {
+  id             String             @id @default(cuid())
+  userId         String             @map("user_id")
+  responsibility ResponsibilityType
+  startDate      DateTime           @map("start_date")
+  endDate        DateTime?          @map("end_date")
+  isActive       Boolean?           @default(true) @map("is_active")
+  createdAt      DateTime?          @default(now()) @map("created_at")
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_responsibilities_user")
+
+  @@index([userId, startDate], map: "idx_responsibilities_user_start")
+  @@map("responsibilities")
+}
+
+model ExternalLink {
+  id          String    @id @default(cuid())
+  name        String    @db.VarChar(200)
+  url         String    @db.Text
+  category    String    @db.VarChar(100)
+  icon        String?   @db.VarChar(100)
+  description String?   @db.VarChar(500)
+  order       Int?      @default(0)
+  isActive    Boolean?  @default(true) @map("is_active")
+  createdAt   DateTime? @default(now()) @map("created_at")
+  updated_at  DateTime? @default(now())
+
+  @@map("external_links")
+}
+
+model SystemSetting {
+  id          String    @id @default(cuid())
+  key         String    @unique(map: "uk_system_settings_key")
+  value       String?   @db.Text
+  description String?   @db.VarChar(500)
+  created_at  DateTime? @default(now())
+  updatedAt   DateTime? @default(now()) @updatedAt @map("updated_at")
+
+  @@map("system_settings")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model AuditLog {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  userName  String    @map("user_name")
+  action    String    @db.VarChar(200)
+  details   String?   @db.Text
+  ipAddress String?   @map("ip_address") @db.VarChar(50)
+  status    String?   @default("SUCCESS") @db.VarChar(50)
+  createdAt DateTime? @default(now()) @map("created_at")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_audit_logs_user")
+
+  @@index([action], map: "idx_audit_logs_action")
+  @@index([createdAt], map: "idx_audit_logs_created_at")
+  @@index([userId], map: "idx_audit_logs_user_id")
+  @@map("audit_logs")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model DocumentShare {
+  id         String    @id @default(cuid())
+  documentId String    @map("document_id")
+  userId     String    @map("user_id")
+  permission String?   @default("read") @db.VarChar(50)
+  sharedBy   String?   @map("shared_by")
+  expiresAt  DateTime? @map("expires_at")
+  createdAt  DateTime? @default(now()) @map("created_at")
+  document   Document  @relation(fields: [documentId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_document_shares_document")
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_document_shares_user")
+
+  @@unique([documentId, userId], map: "uk_document_shares_doc_user")
+  @@index([documentId], map: "idx_document_shares_document_id")
+  @@index([userId], map: "idx_document_shares_user_id")
+  @@map("document_shares")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model DocumentVersion {
+  id         String    @id @default(cuid())
+  documentId String    @map("document_id")
+  version    Int
+  fileName   String    @map("file_name") @db.VarChar(500)
+  filePath   String    @map("file_path") @db.VarChar(500)
+  fileSize   Int       @map("file_size")
+  uploadedBy String    @map("uploaded_by")
+  changes    String?   @db.Text
+  createdAt  DateTime? @default(now()) @map("created_at")
+  document   Document  @relation(fields: [documentId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_document_versions_document")
+  user       User      @relation(fields: [uploadedBy], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_document_versions_user")
+
+  @@unique([documentId, version], map: "uk_document_versions_doc_version")
+  @@index([uploadedBy], map: "fk_document_versions_user")
+  @@index([documentId], map: "idx_document_versions_document_id")
+  @@map("document_versions")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model Document {
+  id          String            @id @default(cuid())
+  title       String            @db.VarChar(500)
+  description String?           @db.Text
+  fileName    String            @map("file_name") @db.VarChar(500)
+  filePath    String            @map("file_path") @db.VarChar(500)
+  fileType    String            @map("file_type") @db.VarChar(100)
+  fileSize    Int               @map("file_size")
+  category    String?           @db.VarChar(100)
+  tags        String?           @db.Text
+  ownerId     String            @map("owner_id")
+  folderId    String?           @map("folder_id")
+  isPublic    Boolean?          @default(false) @map("is_public")
+  isArchived  Boolean?          @default(false) @map("is_archived")
+  version     Int?              @default(1)
+  createdAt   DateTime?         @default(now()) @map("created_at")
+  updatedAt   DateTime?         @default(now()) @map("updated_at")
+  shares      DocumentShare[]
+  versions    DocumentVersion[]
+  owner       User              @relation(fields: [ownerId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_documents_owner")
+
+  @@index([category], map: "idx_documents_category")
+  @@index([folderId], map: "idx_documents_folder")
+  @@index([ownerId], map: "idx_documents_owner")
+  @@map("documents")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  title     String    @db.VarChar(200)
+  message   String    @db.Text
+  type      String    @db.VarChar(50)
+  read      Boolean?  @default(false) @map("is_read")
+  link      String?   @db.VarChar(500)
+  createdAt DateTime? @default(now()) @map("created_at")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_notifications_user")
+
+  @@index([createdAt], map: "idx_notifications_created_at")
+  @@index([userId, read], map: "idx_notifications_user_read")
+  @@map("notifications")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model Session {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  token     String    @unique(map: "uk_sessions_token") @db.VarChar(500)
+  expiresAt DateTime? @map("expires_at")
+  createdAt DateTime? @default(now()) @map("created_at")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_sessions_user")
+
+  @@index([userId], map: "idx_sessions_user_id")
+  @@map("sessions")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model TaskAlert {
+  id          String           @id @default(cuid())
+  taskId      String           @map("task_id")
+  type        task_alerts_type
+  message     String           @db.Text
+  isRead      Boolean?         @default(false) @map("is_read")
+  isDismissed Boolean?         @default(false) @map("is_dismissed")
+  triggeredBy String           @map("triggered_by") @db.VarChar(100)
+  createdAt   DateTime?        @default(now()) @map("created_at")
+  task        Task             @relation(fields: [taskId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_task_alerts_task")
+
+  @@index([taskId], map: "idx_task_alerts_task_id")
+  @@map("task_alerts")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model TaskComment {
+  id        String    @id @default(cuid())
+  taskId    String    @map("task_id")
+  userId    String    @map("user_id")
+  userName  String    @map("user_name")
+  content   String    @db.Text
+  isEdited  Boolean?  @default(false) @map("is_edited")
+  createdAt DateTime? @default(now()) @map("created_at")
+  updatedAt DateTime? @map("updated_at")
+  task      Task      @relation(fields: [taskId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_task_comments_task")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_task_comments_user")
+
+  @@index([userId], map: "fk_task_comments_user")
+  @@index([taskId], map: "idx_task_comments_task_id")
+  @@map("task_comments")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model TaskHistory {
+  id        String    @id @default(cuid())
+  taskId    String    @map("task_id")
+  userId    String?   @map("user_id")
+  userName  String?   @map("user_name")
+  action    String    @db.VarChar(100)
+  field     String?   @db.VarChar(100)
+  oldValue  String?   @map("old_value") @db.Text
+  newValue  String?   @map("new_value") @db.Text
+  timestamp DateTime? @default(now())
+  task      Task      @relation(fields: [taskId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_task_history_task")
+
+  @@index([taskId], map: "idx_task_history_task_id")
+  @@map("task_history")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model TicketAttachment {
+  id         String    @id @default(cuid())
+  ticketId   String    @map("ticket_id")
+  fileName   String    @map("file_name") @db.VarChar(500)
+  fileSize   Int       @map("file_size")
+  fileType   String    @map("file_type") @db.VarChar(100)
+  fileData   String?   @map("file_data") @db.LongText
+  uploadedBy String    @map("uploaded_by")
+  uploadedAt DateTime? @default(now()) @map("uploaded_at")
+  ticket     Ticket    @relation(fields: [ticketId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_ticket_attachments_ticket")
+  user       User      @relation(fields: [uploadedBy], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_ticket_attachments_user")
+
+  @@index([uploadedBy], map: "fk_ticket_attachments_user")
+  @@index([ticketId], map: "idx_ticket_attachments_ticket_id")
+  @@map("ticket_attachments")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model TicketComment {
+  id        String    @id @default(cuid())
+  ticketId  String    @map("ticket_id")
+  userId    String    @map("user_id")
+  userName  String    @map("user_name")
+  content   String    @db.Text
+  isPrivate Boolean?  @default(false) @map("is_private")
+  createdAt DateTime? @default(now()) @map("created_at")
+  updatedAt DateTime? @map("updated_at")
+  ticket    Ticket    @relation(fields: [ticketId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_ticket_comments_ticket")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_ticket_comments_user")
+
+  @@index([userId], map: "fk_ticket_comments_user")
+  @@index([ticketId], map: "idx_ticket_comments_ticket_id")
+  @@map("ticket_comments")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model TicketCounter {
+  id            String @id @default(cuid())
+  prefix        String @db.VarChar(10)
+  currentNumber Int    @default(0) @map("current_number")
+  year          Int
+
+  @@unique([prefix, year], map: "uk_ticket_counters_prefix_year")
+  @@map("ticket_counters")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model TicketHistory {
+  id        String    @id @default(cuid())
+  ticketId  String    @map("ticket_id")
+  userId    String?   @map("user_id")
+  userName  String?   @map("user_name")
+  action    String    @db.VarChar(100)
+  field     String?   @db.VarChar(100)
+  oldValue  String?   @map("old_value") @db.Text
+  newValue  String?   @map("new_value") @db.Text
+  timestamp DateTime? @default(now())
+  ticket    Ticket    @relation(fields: [ticketId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_ticket_history_ticket")
+
+  @@index([ticketId], map: "idx_ticket_history_ticket_id")
+  @@map("ticket_history")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model Ticket {
+  id           String             @id @default(cuid())
+  numero       String             @unique(map: "uk_tickets_numero") @db.VarChar(50)
+  objet        String             @db.VarChar(500)
+  description  String?            @db.Text
+  status       tickets_status?    @default(OPEN)
+  priority     tickets_priority?  @default(MEDIUM)
+  category     tickets_category?  @default(OTHER)
+  site         String?            @db.VarChar(200)
+  localite     String?            @db.VarChar(200)
+  technicien   String?            @db.VarChar(200)
+  reporterId   String             @map("reporter_id")
+  reporterName String             @map("reporter_name")
+  assigneeId   String?            @map("assignee_id")
+  assigneeName String?            @map("assignee_name")
+  tags         String?            @db.Text
+  dueDate      DateTime?          @map("due_date")
+  resolvedAt   DateTime?          @map("resolved_at")
+  closedAt     DateTime?          @map("closed_at")
+  isDeleted    Boolean?           @default(false) @map("is_deleted")
+  deletedAt    DateTime?          @map("deleted_at")
+  deletedBy    String?            @map("deleted_by")
+  createdAt    DateTime?          @default(now()) @map("created_at")
+  updatedAt    DateTime?          @default(now()) @map("updated_at")
+  attachments  TicketAttachment[]
+  comments     TicketComment[]
+  history      TicketHistory[]
+  assignee     User?              @relation("TicketAssignee", fields: [assigneeId], references: [id], onUpdate: NoAction, map: "fk_tickets_assignee")
+  reporter     User               @relation("TicketReporter", fields: [reporterId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_tickets_reporter")
+
+  @@index([assigneeId], map: "idx_tickets_assignee_id")
+  @@index([createdAt], map: "idx_tickets_created_at")
+  @@index([priority], map: "idx_tickets_priority")
+  @@index([reporterId], map: "idx_tickets_reporter_id")
+  @@index([status], map: "idx_tickets_status")
+  @@map("tickets")
 }
 
 enum DayType {
-  DAY_SHIFT    // 07h-19h
-  NIGHT_SHIFT  // 19h-07h
-  REST_DAY     // Collective rest
-}
-
-// Day Assignment - who works on what role each day
-model DayAssignment {
-  id               String           @id @default(cuid())
-  workDayId        String
-  userId           String
-  responsibility   ResponsibilityType?
-  isResting        Boolean          @default(false)
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
-  
-  workDay          WorkDay          @relation(fields: [workDayId], references: [id], onDelete: Cascade)
-  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  @@unique([workDayId, userId])
-  @@index([workDayId])
-  @@index([userId])
+  DAY_SHIFT
+  NIGHT_SHIFT
+  REST_DAY
 }
 
 enum ResponsibilityType {
@@ -142,69 +564,6 @@ enum ResponsibilityType {
   MONITORING
   REPORTING_1
   REPORTING_2
-}
-
-// Individual Rest - rotating rest days
-model IndividualRest {
-  id          String   @id @default(cuid())
-  cycleId     String
-  userId      String
-  restDay     Int      // Which day of the cycle (3, 4, 5, or 6)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  cycle       ShiftCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
-  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  @@unique([cycleId, userId])
-  @@index([cycleId])
-  @@index([userId])
-}
-
-// Task - Daily tasks management
-model Task {
-  id              String     @id @default(cuid())
-  userId          String
-  title           String
-  description     String?
-  status          TaskStatus @default(pending)
-  category        String     // "Monitoring", "Call Center", "Reporting 1", "Reporting 2"
-  responsibility  ResponsibilityType?
-  scheduledTime   String?    // "09:00", "12:00", etc.
-  completedAt     DateTime?
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
-  
-  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  @@index([userId, createdAt])
-  @@index([userId, status])
-  @@index([category])
-}
-
-enum TaskStatus {
-  pending
-  in_progress
-  completed
-  on_hold
-}
-
-// Activity tracking
-model Activity {
-  id          String       @id @default(cuid())
-  userId      String
-  type        ActivityType
-  category    String       // "Monitoring", "Call Center", "Reporting 1", "Reporting 2"
-  description String
-  metadata    String?      // JSON for additional data
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  
-  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  @@index([userId, createdAt])
-  @@index([category])
-  @@index([type])
 }
 
 enum ActivityType {
@@ -229,105 +588,89 @@ enum ActivityType {
   ARCHIVE_DONE
 }
 
-// Overtime tracking
-model Overtime {
-  id          String   @id @default(cuid())
-  userId      String
-  date        DateTime
-  duration    Int      @default(120) // Always 2 hours = 120 minutes
-  shiftType   String   // "jour" or "nuit"
-  startTime   String   // "07:00" or "18:00"
-  endTime     String   // "08:00" or "19:00"
-  reason      String   @default("Supervision NOC")
-  approvedBy  String   @default("Daddy AZUMY")
-  month       Int
-  year        Int
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  @@unique([userId, date])
-  @@index([userId, month, year])
-  @@index([date])
+enum task_alerts_type {
+  WARNING
+  CRITICAL
+  INFO
+  SUCCESS
 }
 
-// Responsibility history for rotation tracking
-model Responsibility {
-  id              String             @id @default(cuid())
-  userId          String
-  responsibility  ResponsibilityType
-  startDate       DateTime
-  endDate         DateTime?
-  isActive        Boolean            @default(true)
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
-  
-  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  @@index([userId, startDate])
+enum tasks_status {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  ON_HOLD
+  CANCELLED
+  LATE
 }
 
-// Handover reports
-model Handover {
-  id            String   @id @default(cuid())
-  authorId      String
-  shiftId       String
-  date          DateTime
-  content       String
-  incidents     String?  // JSON array of incident IDs
-  escalations   String?  // JSON array of escalation details
-  pendingTasks  String?  // JSON array of pending task IDs
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  
-  author        User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  
-  @@index([authorId, date])
-  @@index([shiftId, date])
+enum tickets_status {
+  OPEN
+  IN_PROGRESS
+  PENDING
+  ESCALATED
+  SUSPENDED
+  WAITING_FICHE
+  RESOLVED
+  CLOSED
 }
 
-// System settings
-model SystemSetting {
-  id          String   @id @default(cuid())
-  key         String   @unique
-  value       String
-  description String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  @@index([key])
+enum tasks_category {
+  INCIDENT
+  MAINTENANCE
+  SURVEILLANCE
+  ADMINISTRATIVE
+  OTHER
 }
 
-// External Links - Platform shortcuts
-model ExternalLink {
-  id          String   @id @default(cuid())
-  name        String
-  url         String
-  category    String   // "monitoring", "tickets", "communication", "tracking"
-  icon        String?  // Icon name
-  description String?
-  order       Int      @default(0)
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  @@index([category])
-  @@index([order])
+enum tickets_priority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
 }
 
-// Graph Schedule - For Reporting 1
-model GraphSchedule {
-  id          String   @id @default(cuid())
-  time        String   // "09:00", "12:00", "15:00", "18:00" for day shift
-  shiftType   String   // "day" or "night"
-  sent        Boolean  @default(false)
-  sentAt      DateTime?
-  sentBy      String?
-  date        DateTime
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  @@index([date, shiftType])
-  @@index([time])
+enum tasks_priority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum tickets_category {
+  INCIDENT
+  REQUEST
+  PROBLEM
+  CHANGE
+  OTHER
+}
+
+enum users_role {
+  SUPER_ADMIN
+  ADMIN
+  RESPONSABLE
+  TECHNICIEN
+  TECHNICIEN_NO
+  USER
+}
+
+enum users_responsibility {
+  CALL_CENTER
+  MONITORING
+  REPORTING_1
+  REPORTING_2
+}
+
+enum users_performance_badge {
+  EXEMPLARY
+  RELIABLE
+  IMPROVING
+  NEEDS_ATTENTION
+}
+
+enum users_presence_status {
+  ONLINE
+  OFFLINE
+  AWAY
+  BUSY
 }

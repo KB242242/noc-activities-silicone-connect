@@ -6,7 +6,7 @@ const prisma = new PrismaClient();
 const ACTIVITY_CATEGORIES: Record<string, ActivityType[]> = {
   'Monitoring': ['CLIENT_DOWN', 'INTERFACE_UNSTABLE', 'RECURRENT_PROBLEM', 'OTHER_MONITORING'],
   'Call Center': ['TICKET_CREATED', 'CLIENT_CALL', 'ESCALATION', 'INCIDENT_FOLLOWUP'],
-  'Reporting': ['REPORT_GENERATED', 'HANDOVER_DONE', 'TICKET_CLOSED']
+  'Reporting': ['REPORT_GENERATED', 'HANDOVER_WRITTEN', 'TICKET_CLOSED']
 };
 
 function getCategoryForType(type: ActivityType): string {

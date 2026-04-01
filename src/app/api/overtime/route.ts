@@ -116,6 +116,8 @@ export async function GET(request: NextRequest) {
             date: parseISO(record.date),
             duration: record.duration,
             shiftType: record.dayType === 'DAY_SHIFT' ? 'jour' : 'nuit',
+            startTime: record.startTime,
+            endTime: record.endTime.replace('\n', ' / '),
             month,
             year
           }
