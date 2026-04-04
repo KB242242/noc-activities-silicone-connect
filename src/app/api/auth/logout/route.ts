@@ -6,6 +6,12 @@ export async function POST(request: NextRequest) {
   try {
     const authHeader = request.headers.get('authorization');
     const token = authHeader?.replace('Bearer ', '');
+
+    if (token) {
+      await db.session.deleteMany({
+        where: { token },
+      });
+    }
     
     // Get user ID from request body if available
     let userId = null;

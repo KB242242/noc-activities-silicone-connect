@@ -392,7 +392,8 @@ export interface ChatMessage {
   replyTo?: ChatMessage;
   isEdited: boolean;
   isDeleted: boolean;
-  readBy: Array<{ userId: string; userName: string; readAt: Date }>;
+  status: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
+  readAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }

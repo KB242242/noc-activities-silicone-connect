@@ -111,9 +111,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Get assignee info if provided
-    let assignee = null;
+    let assignee: { id: string; name: string } | null = null;
     if (assigneeId) {
-      assignee = await db.user.findUnique({ where: { id: assigneeId } });
+      assignee = await db.user.findUnique({
+        where: { id: assigneeId },
+        select: { id: true, name: true }
+      });
     }
 
     // Generate ticket number
@@ -244,9 +247,12 @@ export async function PUT(request: NextRequest) {
     const user = userId ? await db.user.findUnique({ where: { id: userId } }) : null;
 
     // Get new assignee info if changing
-    let assignee = null;
+    let assignee: { id: string; name: string } | null = null;
     if (assigneeId && assigneeId !== ticket.assigneeId) {
-      assignee = await db.user.findUnique({ where: { id: assigneeId } });
+      assignee = await db.user.findUnique({
+        where: { id: assigneeId },
+        select: { id: true, name: true }
+      });
     }
 
     // Prepare update data

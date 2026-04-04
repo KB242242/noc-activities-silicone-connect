@@ -227,15 +227,16 @@ export async function PUT(request: NextRequest) {
     if (status === 'COMPLETED') {
       updateData.completedAt = new Date();
       if (!actualDuration) {
+        const taskStartTime = task.startTime ?? new Date();
         updateData.actualDuration = Math.round(
-          (new Date().getTime() - task.startTime.getTime()) / 60000
+          (new Date().getTime() - taskStartTime.getTime()) / 60000
         );
       }
     }
 
     // Check if task is overdue
     if (status !== 'COMPLETED' && status !== 'CANCELLED') {
-      updateData.isOverdue = new Date() > task.estimatedEndTime;
+      updateData.isOverdue = task.estimatedEndTime ? new Date() > task.estimatedEndTime : false;
     }
 
     // Update task

@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { checkSession } from '@/lib/auth';
+import { db } from '@/lib/db';
 
 export async function GET(request: NextRequest) {
   try {
-    const token = request.headers.get('Authorization')?.replace('Bearer ', '');
+    const token =
+      request.headers.get('Authorization')?.replace('Bearer ', '') ||
+      request.headers.get('authorization')?.replace('Bearer ', '');
 
     if (!token) {
       return NextResponse.json({ 
@@ -12,18 +14,44 @@ export async function GET(request: NextRequest) {
       }, { status: 401 });
     }
 
-    const sessionResult = await checkSession(token);
+    const session = await db.session.findUnique({
+      where: { token },
+      include: {
+        user: {
+          include: {
+            shift: true,
+          },
+        },
+      },
+    });
 
-    if (!sessionResult.valid) {
+    if (!session || (session.expiresAt && session.expiresAt < new Date())) {
+      if (session) {
+        await db.session.delete({ where: { id: session.id } });
+      }
       return NextResponse.json({ 
         valid: false, 
         error: 'Session expirée ou invalide' 
       }, { status: 401 });
     }
 
+    await db.session.update({
+      where: { id: session.id },
+      data: {
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      },
+    });
+
+    await db.user.update({
+      where: { id: session.userId },
+      data: {
+        lastActivity: new Date(),
+      },
+    });
+
     return NextResponse.json({
       valid: true,
-      user: sessionResult.user
+      user: session.user
     });
   } catch (error) {
     console.error('Session check error:', error);

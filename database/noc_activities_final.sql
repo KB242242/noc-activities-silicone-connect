@@ -1,8 +1,8 @@
 -- ============================================
 -- NOC ACTIVITIES - SILICONE CONNECT
--- Complete MySQL Database Schema (Final)
--- Version: 2.0.0
--- Date: 2026-02-25
+-- Complete MySQL Database Schema (Canonical Rebuild)
+-- Version: 2.1.0
+-- Date: 2026-04-01
 -- ============================================
 -- Compatible with phpMyAdmin and MySQL CLI
 -- Database: noc_activity
@@ -48,6 +48,9 @@ DROP TABLE IF EXISTS `day_assignments`;
 DROP TABLE IF EXISTS `work_days`;
 DROP TABLE IF EXISTS `shift_cycles`;
 DROP TABLE IF EXISTS `sessions`;
+DROP TABLE IF EXISTS `chat_messages`;
+DROP TABLE IF EXISTS `conversation_participants`;
+DROP TABLE IF EXISTS `conversations`;
 DROP TABLE IF EXISTS `users`;
 DROP TABLE IF EXISTS `external_links`;
 DROP TABLE IF EXISTS `system_settings`;
@@ -123,7 +126,7 @@ CREATE TABLE IF NOT EXISTS `users` (
 CREATE TABLE IF NOT EXISTS `sessions` (
     `id` VARCHAR(191) NOT NULL,
     `user_id` VARCHAR(191) NOT NULL,
-    `token` VARCHAR(500) NOT NULL,
+    `token` VARCHAR(191) NOT NULL,
     `expires_at` DATETIME(3) DEFAULT NULL,
     `created_at` DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
     PRIMARY KEY (`id`),
@@ -624,6 +627,56 @@ CREATE TABLE IF NOT EXISTS `graph_schedules` (
     CONSTRAINT `fk_graph_schedules_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Scheduled graph reports for Reporting 1 responsibility';
 
+-- ============================================
+-- 29. CONVERSATIONS - Chat conversations
+-- ============================================
+CREATE TABLE IF NOT EXISTS `conversations` (
+    `id` VARCHAR(191) NOT NULL,
+    `title` VARCHAR(191) DEFAULT NULL,
+    `created_at` DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+    `updated_at` DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+    PRIMARY KEY (`id`),
+    INDEX `idx_conversations_updated_at` (`updated_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Chat conversations for direct and group messaging';
+
+-- ============================================
+-- 30. CONVERSATION_PARTICIPANTS - Users in conversations
+-- ============================================
+CREATE TABLE IF NOT EXISTS `conversation_participants` (
+    `id` VARCHAR(191) NOT NULL,
+    `conversation_id` VARCHAR(191) NOT NULL,
+    `user_id` VARCHAR(191) NOT NULL,
+    `role` VARCHAR(50) DEFAULT 'member',
+    `joined_at` DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+    `last_read_at` DATETIME(3) DEFAULT NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_conversation_participants_conv_user` (`conversation_id`, `user_id`),
+    INDEX `idx_conversation_participants_user_id` (`user_id`),
+    CONSTRAINT `fk_conversation_participants_conversation` FOREIGN KEY (`conversation_id`) REFERENCES `conversations` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_conversation_participants_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Participants and roles for each chat conversation';
+
+-- ============================================
+-- 31. CHAT_MESSAGES - Conversation messages
+-- ============================================
+CREATE TABLE IF NOT EXISTS `chat_messages` (
+    `id` VARCHAR(191) NOT NULL,
+    `conversation_id` VARCHAR(191) NOT NULL,
+    `sender_id` VARCHAR(191) NOT NULL,
+    `participant_id` VARCHAR(191) NOT NULL,
+    `content` TEXT NOT NULL,
+    `sent_at` DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+    `status` VARCHAR(50) DEFAULT 'sent',
+    `read_at` DATETIME(3) DEFAULT NULL,
+    `updated_at` DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+    PRIMARY KEY (`id`),
+    INDEX `idx_chat_messages_conversation_sent_at` (`conversation_id`, `sent_at`),
+    INDEX `idx_chat_messages_sender_id` (`sender_id`),
+    CONSTRAINT `fk_chat_messages_conversation` FOREIGN KEY (`conversation_id`) REFERENCES `conversations` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_chat_messages_sender` FOREIGN KEY (`sender_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_chat_messages_participant` FOREIGN KEY (`participant_id`) REFERENCES `conversation_participants` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Chat messages for conversations';
+
 -- ============================================================================
 -- ============================================================================
 -- INITIAL SEED DATA
@@ -760,9 +813,73 @@ INSERT INTO `ticket_counters` (`id`, `prefix`, `current_number`, `year`) VALUES
 ON DUPLICATE KEY UPDATE `current_number` = VALUES(`current_number`);
 
 -- ============================================
+-- SEED: Chat Conversations, Participants, Messages
+-- ============================================
+INSERT INTO `conversations` (`id`, `title`) VALUES
+    ('conv-annonces', 'Annonces Officielles'),
+    ('conv-shift-a', 'Shift A - Team Chat'),
+    ('conv-shift-b', 'Shift B - Team Chat'),
+    ('conv-shift-c', 'Shift C - Team Chat'),
+    ('conv-a1-b1', 'Alaine <> Sahra')
+ON DUPLICATE KEY UPDATE `title` = VALUES(`title`);
+
+INSERT INTO `conversation_participants` (`id`, `conversation_id`, `user_id`, `role`, `last_read_at`) VALUES
+    ('cp-annonces-admin', 'conv-annonces', 'super-admin-1', 'admin', NOW(3)),
+    ('cp-annonces-resp', 'conv-annonces', 'resp-1', 'member', NOW(3)),
+    ('cp-annonces-a1', 'conv-annonces', 'agent-a1', 'member', NOW(3)),
+    ('cp-annonces-a2', 'conv-annonces', 'agent-a2', 'member', NOW(3)),
+    ('cp-annonces-a3', 'conv-annonces', 'agent-a3', 'member', NOW(3)),
+    ('cp-annonces-a4', 'conv-annonces', 'agent-a4', 'member', NOW(3)),
+    ('cp-annonces-b1', 'conv-annonces', 'agent-b1', 'member', NOW(3)),
+    ('cp-annonces-b2', 'conv-annonces', 'agent-b2', 'member', NOW(3)),
+    ('cp-annonces-b3', 'conv-annonces', 'agent-b3', 'member', NOW(3)),
+    ('cp-annonces-b4', 'conv-annonces', 'agent-b4', 'member', NOW(3)),
+    ('cp-annonces-c1', 'conv-annonces', 'agent-c1', 'member', NOW(3)),
+    ('cp-annonces-c2', 'conv-annonces', 'agent-c2', 'member', NOW(3)),
+    ('cp-annonces-c3', 'conv-annonces', 'agent-c3', 'member', NOW(3)),
+    ('cp-annonces-c4', 'conv-annonces', 'agent-c4', 'member', NOW(3)),
+
+    ('cp-sa-a1', 'conv-shift-a', 'agent-a1', 'admin', NOW(3)),
+    ('cp-sa-a2', 'conv-shift-a', 'agent-a2', 'member', NOW(3)),
+    ('cp-sa-a3', 'conv-shift-a', 'agent-a3', 'member', NOW(3)),
+    ('cp-sa-a4', 'conv-shift-a', 'agent-a4', 'member', NOW(3)),
+
+    ('cp-sb-b1', 'conv-shift-b', 'agent-b1', 'admin', NOW(3)),
+    ('cp-sb-b2', 'conv-shift-b', 'agent-b2', 'member', NOW(3)),
+    ('cp-sb-b3', 'conv-shift-b', 'agent-b3', 'member', NOW(3)),
+    ('cp-sb-b4', 'conv-shift-b', 'agent-b4', 'member', NOW(3)),
+
+    ('cp-sc-c1', 'conv-shift-c', 'agent-c1', 'admin', NOW(3)),
+    ('cp-sc-c2', 'conv-shift-c', 'agent-c2', 'member', NOW(3)),
+    ('cp-sc-c3', 'conv-shift-c', 'agent-c3', 'member', NOW(3)),
+    ('cp-sc-c4', 'conv-shift-c', 'agent-c4', 'member', NOW(3)),
+
+    ('cp-pv-a1', 'conv-a1-b1', 'agent-a1', 'member', NOW(3)),
+    ('cp-pv-b1', 'conv-a1-b1', 'agent-b1', 'member', DATE_SUB(NOW(3), INTERVAL 2 HOUR))
+ON DUPLICATE KEY UPDATE `role` = VALUES(`role`), `last_read_at` = VALUES(`last_read_at`);
+
+INSERT INTO `chat_messages` (`id`, `conversation_id`, `sender_id`, `participant_id`, `content`, `sent_at`, `status`, `read_at`) VALUES
+    ('msg-announce-1', 'conv-annonces', 'super-admin-1', 'cp-annonces-admin', 'Bienvenue sur la plateforme NOC Activities.', DATE_SUB(NOW(3), INTERVAL 6 HOUR), 'read', DATE_SUB(NOW(3), INTERVAL 5 HOUR)),
+    ('msg-shift-a-1', 'conv-shift-a', 'agent-a1', 'cp-sa-a1', 'Bonjour equipe A, verification monitoring terminee.', DATE_SUB(NOW(3), INTERVAL 4 HOUR), 'read', DATE_SUB(NOW(3), INTERVAL 3 HOUR)),
+    ('msg-shift-b-1', 'conv-shift-b', 'agent-b2', 'cp-sb-b2', 'Escalade ticket TKT-2026-0001 faite.', DATE_SUB(NOW(3), INTERVAL 3 HOUR), 'read', DATE_SUB(NOW(3), INTERVAL 2 HOUR)),
+    ('msg-shift-c-1', 'conv-shift-c', 'agent-c3', 'cp-sc-c3', 'Rapport RFO envoye au responsable.', DATE_SUB(NOW(3), INTERVAL 2 HOUR), 'read', DATE_SUB(NOW(3), INTERVAL 1 HOUR)),
+    ('msg-pv-1', 'conv-a1-b1', 'agent-a1', 'cp-pv-a1', 'Salut Sahra, peux-tu verifier la liaison principale ?', DATE_SUB(NOW(3), INTERVAL 90 MINUTE), 'read', DATE_SUB(NOW(3), INTERVAL 85 MINUTE)),
+    ('msg-pv-2', 'conv-a1-b1', 'agent-b1', 'cp-pv-b1', 'Oui, je suis dessus. Retour dans 10 minutes.', DATE_SUB(NOW(3), INTERVAL 30 MINUTE), 'sent', NULL)
+ON DUPLICATE KEY UPDATE `content` = VALUES(`content`), `status` = VALUES(`status`), `read_at` = VALUES(`read_at`);
+
+-- ============================================
+-- SEED: Notifications (including unread examples)
+-- ============================================
+INSERT INTO `notifications` (`id`, `user_id`, `title`, `message`, `type`, `is_read`, `link`, `created_at`) VALUES
+    ('notif-a1-1', 'agent-a1', 'Nouvelle annonce', 'Une annonce officielle vient d etre publiee.', 'info', TRUE, '/chat/conv-annonces', DATE_SUB(NOW(3), INTERVAL 5 HOUR)),
+    ('notif-b1-1', 'agent-b1', 'Message non lu', 'Vous avez un nouveau message prive de Alaine.', 'message', FALSE, '/chat/conv-a1-b1', DATE_SUB(NOW(3), INTERVAL 20 MINUTE)),
+    ('notif-c1-1', 'agent-c1', 'Ticket critique', 'Le ticket TKT-2026-0001 requiert votre attention.', 'alert', FALSE, '/tickets', DATE_SUB(NOW(3), INTERVAL 45 MINUTE))
+ON DUPLICATE KEY UPDATE `is_read` = VALUES(`is_read`), `created_at` = VALUES(`created_at`);
+
+-- ============================================
 -- END OF DATABASE SCHEMA
 -- ============================================
--- Total tables: 28
+-- Total tables: 31
 -- Total seed records:
 --   - 3 shifts
 --   - 14 users (1 SUPER_ADMIN + 1 RESPONSABLE + 12 TECHNICIEN_NO)

@@ -45,6 +45,8 @@ import {
   Minus, Maximize2, Minimize2, Highlighter, Tag, Wrench, Trophy, Flag, MapPin
 } from 'lucide-react';
 import EmojiPicker, { Theme as EmojiPickerTheme, EmojiClickData } from 'emoji-picker-react';
+import Cropper, { Area as CropArea } from 'react-easy-crop';
+import 'react-easy-crop/react-easy-crop.css';
 
 // Charts
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar, Legend, PieChart, Pie, Cell } from 'recharts';
@@ -73,7 +75,8 @@ type ResponsibilityType = 'CALL_CENTER' | 'MONITORING' | 'REPORTING_1' | 'REPORT
 // Types pour le gestionnaire de tâches NOC
 type TaskPriority = 'low' | 'medium' | 'high' | 'critical';
 type TaskCategory = 'incident' | 'maintenance' | 'surveillance' | 'administrative' | 'other';
-type AlertType = 'warning' | 'critical' | 'info' | 'success';
+type AlertType = 'warning' | 'critical' | 'info' | 'success' | 'normal' | 'passive' | 'external' | 'lucrative';
+type AppSectionKey = 'dashboard' | 'planning' | 'tasks' | 'activities' | 'tickets' | 'overtime' | 'links' | 'email' | 'messagerie' | 'ged' | 'supervision' | 'admin' | 'admin_users';
 
 // Password validation result
 interface PasswordValidation {
@@ -254,6 +257,8 @@ interface NotificationItem {
   type: 'success' | 'error' | 'warning' | 'info';
   read: boolean;
   createdAt: Date;
+  conversationId?: string;
+  messageId?: string;
 }
 
 // ============================================
@@ -396,12 +401,14 @@ interface ChatMessage {
   fileSize?: number;
   duration?: number; // pour audio/vidéo en secondes
   status: ChatMessageStatus;
+  readAt?: Date;
   replyTo?: ChatMessage;
   isEdited: boolean;
   editedAt?: Date;
   isDeleted: boolean;
   deletedForEveryone: boolean;
   isPinned: boolean;
+  isImportant?: boolean;
   isArchived: boolean; // for archiving individual messages
   isSelected?: boolean; // For multi-select
   formatting?: {
@@ -464,7 +471,18 @@ interface TypingIndicator {
   userId: string;
   userName: string;
   isTyping: boolean;
+  isRecording?: boolean;
   timestamp: Date;
+}
+
+interface LiveReaction {
+  id: string;
+  emoji: string;
+  userId: string;
+  userName: string;
+  conversationId: string;
+  callId?: string;
+  createdAt: Date;
 }
 
 // Statistiques de messagerie (pour Super Admin)
@@ -710,7 +728,7 @@ const DEMO_USERS: Record<string, UserProfile> = {
     firstName: 'Admin',
     lastName: 'SC',
     username: 'Admin',
-    passwordHash: '@adminsc2026',
+    passwordHash: '@Adminsc2026@',
     role: 'SUPER_ADMIN', 
     isActive: true, 
     isBlocked: false,
@@ -1092,6 +1110,54 @@ const ROLE_CONFIG: Record<UserRole, { label: string; color: string; description:
   'USER': { label: 'Utilisateur', color: 'bg-gray-100 text-gray-800', description: 'Accès standard' }
 };
 
+const DEFAULT_SECTION_ACCESS: Record<AppSectionKey, boolean> = {
+  dashboard: true,
+  planning: true,
+  tasks: true,
+  activities: true,
+  tickets: true,
+  overtime: true,
+  links: true,
+  email: true,
+  messagerie: true,
+  ged: true,
+  supervision: true,
+  admin: true,
+  admin_users: true,
+};
+
+const SECTION_LABELS: Record<AppSectionKey, string> = {
+  dashboard: 'Tableau de bord',
+  planning: 'Planning',
+  tasks: 'Mes Tâches',
+  activities: 'Activités',
+  tickets: 'Gestion Tickets',
+  overtime: 'Heures Sup.',
+  links: 'Liens Externes',
+  email: 'Chats',
+  messagerie: 'Messagerie',
+  ged: 'GED Documents',
+  supervision: 'Supervision',
+  admin: 'Administration',
+  admin_users: 'Gestion Utilisateurs',
+};
+
+const ALERT_TYPE_CONFIG: Record<AlertType, { label: string; colorClass: string }> = {
+  critical: { label: 'Critique', colorClass: 'text-red-600' },
+  warning: { label: 'Avertissement', colorClass: 'text-amber-600' },
+  info: { label: 'Information', colorClass: 'text-blue-600' },
+  normal: { label: 'Normale', colorClass: 'text-slate-600' },
+  passive: { label: 'Passive', colorClass: 'text-zinc-600' },
+  external: { label: 'Externe', colorClass: 'text-cyan-700' },
+  lucrative: { label: 'Lucrative', colorClass: 'text-emerald-700' },
+  success: { label: 'Succès', colorClass: 'text-green-600' },
+};
+
+function canManageAnnouncements(user: UserProfile | null): boolean {
+  if (!user) return false;
+  return user.role === 'SUPER_ADMIN' || user.role === 'ADMIN' || user.role === 'RESPONSABLE';
+}
+
 // Configuration des responsabilités NOC
 const RESPONSIBILITY_CONFIG: Record<ResponsibilityType, { label: string; icon: typeof Phone; color: string }> = {
   'CALL_CENTER': { label: 'Call Center', icon: Phone, color: 'text-blue-600' },
@@ -1460,6 +1526,8 @@ export default function NOCActivityApp() {
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [notificationsHydrated, setNotificationsHydrated] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [activityDialogOpen, setActivityDialogOpen] = useState(false);
   const [newActivity, setNewActivity] = useState({ type: '', category: 'Monitoring', description: '' });
   
@@ -1487,6 +1555,7 @@ export default function NOCActivityApp() {
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [usersManagementOpen, setUsersManagementOpen] = useState(false);
   const [createUserDialogOpen, setCreateUserDialogOpen] = useState(false);
+  const [editUserDialogOpen, setEditUserDialogOpen] = useState(false);
   const [auditLogDialogOpen, setAuditLogDialogOpen] = useState(false);
   
   // États pour l'édition
@@ -1499,13 +1568,36 @@ export default function NOCActivityApp() {
   const [editShift, setEditShift] = useState<string>('');
   const [editResponsibility, setEditResponsibility] = useState<ResponsibilityType | ''>('');
   const [editRole, setEditRole] = useState<UserRole>('USER');
+  const [editUserIsActive, setEditUserIsActive] = useState(true);
+  const [editUserIsBlocked, setEditUserIsBlocked] = useState(false);
+  const [userToEdit, setUserToEdit] = useState<UserProfile | null>(null);
   
   // États pour la gestion des utilisateurs (Super Admin)
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
+  const usersDirectory: UserProfile[] = allUsers.length > 0 ? allUsers : Object.values(DEMO_USERS);
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [userSearchQuery, setUserSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
+  const [isUsersSyncing, setIsUsersSyncing] = useState(false);
+  const [usersActionInProgress, setUsersActionInProgress] = useState<string | null>(null);
+  const [sectionAccess, setSectionAccess] = useState<Record<AppSectionKey, boolean>>({ ...DEFAULT_SECTION_ACCESS });
+  const [userToDelete, setUserToDelete] = useState<UserProfile | null>(null);
+  const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
+  const [deleteConfirmationInput, setDeleteConfirmationInput] = useState('');
+
+  // États pour les filtres du Journal d'activité
+  const [auditLogDateFrom, setAuditLogDateFrom] = useState<string>('');
+  const [auditLogDateTo, setAuditLogDateTo] = useState<string>('');
+  const [auditLogActionType, setAuditLogActionType] = useState<string>('all');
+  const [auditLogStatusFilter, setAuditLogStatusFilter] = useState<string>('all');
+  const [auditLogUserFilter, setAuditLogUserFilter] = useState<string>('');
+  const [auditLogRefreshing, setAuditLogRefreshing] = useState(false);
+
+  const isAdminPasswordResetMode = Boolean(
+    securityDialogOpen && selectedUser && user && selectedUser.id !== user.id && isSuperAdmin(user)
+  );
+  const canManageUsers = Boolean(user && (user.role === 'SUPER_ADMIN' || user.role === 'ADMIN'));
   
   // ============================================
   // États pour le module Tâches NOC
@@ -1648,7 +1740,11 @@ export default function NOCActivityApp() {
     newEmailSound: true
   });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarPosition, setSidebarPosition] = useState<'left' | 'right'>('left');
+  const [sidebarWidth, setSidebarWidth] = useState(240);
+  const [isSidebarResizing, setIsSidebarResizing] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const sidebarResizeFrameRef = useRef<number | null>(null);
   const [selectMode, setSelectMode] = useState<'none' | 'some' | 'all'>('none');
   const [currentPage, setCurrentPage] = useState(1);
   const emailsPerPage = 25;
@@ -1663,7 +1759,426 @@ export default function NOCActivityApp() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [chatSearchQuery, setChatSearchQuery] = useState('');
-  
+  const [announcementAvatar, setAnnouncementAvatar] = useState<string>('/logo_sc_icon.png');
+  const [chatAvatarUploadTarget, setChatAvatarUploadTarget] = useState<{ mode: 'announcement' | 'group'; conversationId?: string } | null>(null);
+  const chatAvatarInputRef = useRef<HTMLInputElement | null>(null);
+  const fetchMessagesRequestIdRef = useRef(0);
+  const selectedConversationRef = useRef<Conversation | null>(null);
+  const currentTabRef = useRef(currentTab);
+
+  const fetchMessages = useCallback(async (conversationId: string) => {
+    const requestId = ++fetchMessagesRequestIdRef.current;
+
+    try {
+      const response = await fetch(`/api/chat/conversations/${conversationId}/messages?userId=${user?.id || ''}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          Pragma: 'no-cache',
+          Expires: '0',
+        },
+      });
+      if (!response.ok) {
+        console.warn('Échec téléchargement des messages', response.status);
+        return;
+      }
+      const data = await response.json();
+      if (data.success) {
+        if (requestId !== fetchMessagesRequestIdRef.current) {
+          return;
+        }
+
+        const mapped = data.messages.map((m: any) => {
+          let parsed = { ...m };
+          // Si le content est un JSON avec __chatPayload, on l'extrait
+          if (typeof m.content === 'string' && m.content.startsWith('{"__chatPayload"')) {
+            try {
+              const payload = JSON.parse(m.content);
+              if (payload.__chatPayload) {
+                parsed = {
+                  ...m,
+                  ...payload,
+                  content: payload.content || '',
+                  mediaData: payload.mediaUrl || payload.mediaData || undefined,
+                  fileName: payload.fileName,
+                  fileSize: payload.fileSize,
+                  fileType: payload.fileType,
+                  type: payload.type || m.type,
+                };
+              }
+            } catch (e) {
+              // ignore parse error, fallback to original
+            }
+          } else {
+            parsed.mediaData = m.mediaUrl || undefined;
+          }
+          return {
+            ...parsed,
+            createdAt: new Date(m.createdAt),
+            updatedAt: new Date(m.updatedAt),
+            readAt: m.readAt ? new Date(m.readAt) : undefined,
+            isImportant: Boolean(m.isImportant),
+            replyTo: undefined,
+          };
+        });
+
+        const byId = new Map(mapped.map((msg: ChatMessage) => [msg.id, msg]));
+        const withReplies = mapped.map((msg: ChatMessage) => ({
+          ...msg,
+          replyTo: msg.replyTo ? byId.get(msg.replyTo) : undefined,
+        }));
+
+        setChatMessages(withReplies);
+        setPinnedMessages(withReplies.filter((message: ChatMessage) => message.isPinned));
+      }
+    } catch (error) {
+      console.error('Erreur fetch messages', error);
+    }
+  }, [user]);
+
+  const fetchConversations = useCallback(async () => {
+    if (!user) return;
+    try {
+      const response = await fetch(`/api/chat/conversations?userId=${user.id}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          Pragma: 'no-cache',
+          Expires: '0',
+        },
+      });
+      if (!response.ok) {
+        console.warn('Échec téléchargement des conversations', response.status);
+        return;
+      }
+      const data = await response.json();
+      if (data.success) {
+        const loaded = data.conversations.map((c: any) => ({
+          ...c,
+          createdAt: new Date(c.createdAt),
+          updatedAt: new Date(c.updatedAt),
+          participants: c.participants?.map((p: any) => ({
+            ...p,
+            joinedAt: new Date(p.joinedAt),
+            lastReadAt: p.lastReadAt ? new Date(p.lastReadAt) : undefined,
+          })) || [],
+          lastMessage: c.messages?.[0] ? {
+            ...c.messages[0],
+            createdAt: new Date(c.messages[0].createdAt),
+            updatedAt: new Date(c.messages[0].updatedAt),
+            readAt: c.messages[0].readAt ? new Date(c.messages[0].readAt) : undefined,
+            mediaData: c.messages[0].mediaUrl || undefined,
+          } : undefined
+        })) as Conversation[];
+
+        setConversations(loaded);
+        if (loaded.length > 0) {
+          const nextSelected =
+            loaded.find((conversation) => conversation.id === selectedConversation?.id) || loaded[0];
+          setSelectedConversation(nextSelected);
+          await fetchMessages(nextSelected.id);
+        }
+      }
+    } catch (error) {
+      console.error('Erreur fetch conversations', error);
+    }
+  }, [user, fetchMessages, selectedConversation?.id]);
+
+  useEffect(() => {
+    selectedConversationRef.current = selectedConversation;
+  }, [selectedConversation]);
+
+  useEffect(() => {
+    currentTabRef.current = currentTab;
+  }, [currentTab]);
+
+  const setCurrentTabSafely = useCallback((nextTab: AppSectionKey) => {
+    if (!sectionAccess[nextTab]) {
+      toast.warning('Rubrique désactivée', {
+        description: 'Cette rubrique a été désactivée par un administrateur.',
+      });
+      return;
+    }
+    setCurrentTab(nextTab);
+  }, [sectionAccess]);
+
+  useEffect(() => {
+    if (!sectionAccess[currentTab as AppSectionKey]) {
+      setCurrentTab('dashboard');
+      toast.warning('Rubrique indisponible', {
+        description: 'Vous avez été redirigé vers le tableau de bord.',
+      });
+    }
+  }, [currentTab, sectionAccess]);
+
+  const createConversationInDb = useCallback(
+    async ({
+      type,
+      name,
+      description,
+      participantIds,
+    }: {
+      type: 'individual' | 'group';
+      name?: string;
+      description?: string;
+      participantIds: string[];
+    }): Promise<Conversation | null> => {
+      if (!user?.id) {
+        toast.error('Utilisateur non authentifié');
+        return null;
+      }
+
+      const uniqueParticipantIds = Array.from(new Set(participantIds.filter(Boolean)));
+      if (uniqueParticipantIds.length === 0) {
+        toast.error('Aucun participant valide');
+        return null;
+      }
+
+      try {
+        const response = await fetch('/api/chat/conversations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type,
+            name,
+            description,
+            createdBy: user.id,
+            participantIds: uniqueParticipantIds,
+          }),
+        });
+
+        if (!response.ok) {
+          let errMsg = `Erreur création conversation (${response.status})`;
+          try {
+            const errJson = await response.json();
+            if (errJson?.error) {
+              errMsg = `Erreur création conversation (${response.status}) : ${errJson.error}`;
+            }
+          } catch (_e) {
+            // réponse non JSON
+          }
+          toast.error(errMsg);
+          return null;
+        }
+
+        const data = await response.json();
+        if (!data?.success || !data?.conversation) {
+          toast.error('Erreur création conversation');
+          return null;
+        }
+
+        const c = data.conversation;
+        const mappedConversation: Conversation = {
+          ...c,
+          createdAt: new Date(c.createdAt),
+          updatedAt: new Date(c.updatedAt),
+          participants: c.participants?.map((p: any) => ({
+            ...p,
+            joinedAt: new Date(p.joinedAt),
+            lastReadAt: p.lastReadAt ? new Date(p.lastReadAt) : undefined,
+          })) || [],
+          lastMessage: c.lastMessage
+            ? {
+                ...c.lastMessage,
+                createdAt: new Date(c.lastMessage.createdAt),
+                updatedAt: new Date(c.lastMessage.updatedAt),
+                readAt: c.lastMessage.readAt ? new Date(c.lastMessage.readAt) : undefined,
+                mediaData: c.lastMessage.mediaUrl || undefined,
+                reactions: c.lastMessage.reactions || [],
+                readBy: c.lastMessage.readBy || [],
+                isEdited: c.lastMessage.isEdited || false,
+                isDeleted: c.lastMessage.isDeleted || false,
+                deletedForEveryone: c.lastMessage.deletedForEveryone || false,
+                isPinned: c.lastMessage.isPinned || false,
+                isImportant: c.lastMessage.isImportant || false,
+                isArchived: c.lastMessage.isArchived || false,
+              }
+            : undefined,
+        };
+
+        return mappedConversation;
+      } catch (error) {
+        console.error('Erreur createConversationInDb', error);
+        toast.error('Erreur création conversation');
+        return null;
+      }
+    },
+    [user]
+  );
+
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      void fetchConversations();
+    }
+  }, [isAuthenticated, user, fetchConversations]);
+
+  useEffect(() => {
+    if (currentTab === 'messagerie' && isAuthenticated && user) {
+      void fetchConversations();
+    }
+  }, [currentTab, isAuthenticated, user, fetchConversations]);
+
+  useEffect(() => {
+    if (selectedConversation) {
+      void fetchMessages(selectedConversation.id);
+    }
+  }, [selectedConversation, fetchMessages]);
+
+  // Real-time Mercure-like stream (SSE) for incoming chat events
+  useEffect(() => {
+    if (!isAuthenticated || !user?.id) return;
+
+    const streamUrl = `/api/chat/stream?userId=${encodeURIComponent(user.id)}`;
+    const source = new EventSource(streamUrl);
+
+    const mapIncomingMessage = (incoming: any): ChatMessage => ({
+      ...incoming,
+      createdAt: new Date(incoming.createdAt),
+      updatedAt: new Date(incoming.updatedAt),
+      readAt: incoming.readAt ? new Date(incoming.readAt) : undefined,
+      mediaData: incoming.mediaUrl || undefined,
+      reactions: incoming.reactions || [],
+      readBy: incoming.readBy || [],
+      isEdited: incoming.isEdited || false,
+      isDeleted: incoming.isDeleted || false,
+      deletedForEveryone: incoming.deletedForEveryone || false,
+      isPinned: incoming.isPinned || false,
+      isImportant: incoming.isImportant || false,
+      isArchived: incoming.isArchived || false,
+    });
+
+    const handleChatEvent = (event: MessageEvent) => {
+      try {
+        const payload = JSON.parse(event.data || '{}');
+        if (!payload?.type) return;
+
+        if (payload.type === 'profile-updated' && payload.user?.id) {
+          const updatedUserId = String(payload.user.id);
+          const updatedAvatar =
+            typeof payload.user.avatar === 'string' && payload.user.avatar.trim().length > 0
+              ? payload.user.avatar
+              : undefined;
+          const updatedName =
+            typeof payload.user.name === 'string' && payload.user.name.trim().length > 0
+              ? payload.user.name
+              : undefined;
+
+          setAllUsers((prev) => {
+            const exists = prev.some((entry) => entry.id === updatedUserId);
+            if (!exists) return prev;
+
+            const updated = prev.map((entry) =>
+              entry.id === updatedUserId
+                ? {
+                    ...entry,
+                    ...(updatedAvatar !== undefined ? { avatar: updatedAvatar } : {}),
+                    ...(updatedName ? { name: updatedName } : {}),
+                  }
+                : entry
+            );
+            localStorage.setItem('noc_all_users', JSON.stringify(updated));
+            return updated;
+          });
+
+          setConversations((prev) =>
+            prev.map((conversation) => ({
+              ...conversation,
+              participants: conversation.participants.map((participant) =>
+                participant.id === updatedUserId
+                  ? {
+                      ...participant,
+                      ...(updatedAvatar !== undefined ? { avatar: updatedAvatar } : {}),
+                      ...(updatedName ? { name: updatedName } : {}),
+                    }
+                  : participant
+              ),
+            }))
+          );
+
+          setChatMessages((prev) =>
+            prev.map((message) =>
+              message.senderId === updatedUserId
+                ? {
+                    ...message,
+                    ...(updatedAvatar !== undefined ? { senderAvatar: updatedAvatar } : {}),
+                    ...(updatedName ? { senderName: updatedName } : {}),
+                  }
+                : message
+            )
+          );
+
+          return;
+        }
+
+        if (!payload?.message) return;
+
+        const message = mapIncomingMessage(payload.message);
+
+        setChatMessages((prev) => {
+          const exists = prev.some((existing) => existing.id === message.id);
+          if (exists) {
+            return prev.map((existing) => (existing.id === message.id ? { ...existing, ...message } : existing));
+          }
+
+          return [...prev, message];
+        });
+
+        setPinnedMessages((prev) => {
+          if (!message.isPinned) {
+            return prev.filter((existing) => existing.id !== message.id);
+          }
+          const exists = prev.some((existing) => existing.id === message.id);
+          return exists ? prev.map((existing) => (existing.id === message.id ? { ...existing, ...message } : existing)) : [...prev, message];
+        });
+
+        setConversations((prev) =>
+          prev.map((conversation) => {
+            if (conversation.id !== message.conversationId) return conversation;
+
+            const activeConversation = selectedConversationRef.current;
+            const isOpenConversation =
+              activeConversation?.id === message.conversationId && currentTabRef.current === 'messagerie';
+            const isIncoming = message.senderId !== user.id;
+
+            return {
+              ...conversation,
+              lastMessage: message,
+              updatedAt: new Date(),
+              unreadCount: isIncoming && !isOpenConversation ? (conversation.unreadCount || 0) + 1 : 0,
+            };
+          })
+        );
+
+        const activeConversation = selectedConversationRef.current;
+        const isOpenConversation =
+          activeConversation?.id === message.conversationId && currentTabRef.current === 'messagerie';
+        const isIncoming = message.senderId !== user.id;
+
+        if (isIncoming && isOpenConversation) {
+          setNotifications((prev) =>
+            prev.map((notification) =>
+              notification.conversationId === message.conversationId
+                ? { ...notification, read: true }
+                : notification
+            )
+          );
+        }
+      } catch (error) {
+        console.error('Erreur event stream chat', error);
+      }
+    };
+
+    source.addEventListener('chat-event', handleChatEvent as EventListener);
+    source.onerror = () => {
+      // The browser automatically retries EventSource connections.
+    };
+
+    return () => {
+      source.removeEventListener('chat-event', handleChatEvent as EventListener);
+      source.close();
+    };
+  }, [isAuthenticated, user?.id]);
+
   // Typing & Presence
   const [typingIndicators, setTypingIndicators] = useState<TypingIndicator[]>([]);
   const [isTyping, setIsTyping] = useState(false);
@@ -1713,17 +2228,44 @@ export default function NOCActivityApp() {
   const [playingMessageId, setPlayingMessageId] = useState<string | null>(null);
   const [audioProgress, setAudioProgress] = useState<Record<string, number>>({});
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const seenIncomingMessageIdsByConversationRef = useRef<Record<string, Set<string>>>({});
+  const avatarFileInputRef = useRef<HTMLInputElement | null>(null);
+  const tempAvatarObjectUrlRef = useRef<string | null>(null);
+  const profilePhotoDialogTimerRef = useRef<NodeJS.Timeout | null>(null);
   
   // Attachments
-  const [attachmentPreview, setAttachmentPreview] = useState<{
+  type AttachmentPreview = {
     file: File | null;
     preview: string | null;
     type: 'image' | 'video' | 'document' | 'audio' | null;
-  }>({ file: null, preview: null, type: null });
+    fileType?: string;
+  };
+  const [attachmentPreview, setAttachmentPreview] = useState<AttachmentPreview>({ file: null, preview: null, type: null, fileType: undefined });
   const [showAttachmentPreview, setShowAttachmentPreview] = useState(false);
+  const [chatImagePreview, setChatImagePreview] = useState<{ url: string; fileName?: string; message: ChatMessage } | null>(null);
+  const [chatImageZoom, setChatImageZoom] = useState(1);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const messageEndRef = useRef<HTMLDivElement | null>(null);
+  const skipNextSmoothScrollRef = useRef(false);
   
   // Emoji picker
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showLiveReactionPicker, setShowLiveReactionPicker] = useState(false);
+  const [showCallReactionPicker, setShowCallReactionPicker] = useState(false);
+  const [recentEmojis, setRecentEmojis] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const raw = localStorage.getItem('noc_recent_emojis');
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed)
+        ? parsed.filter((item): item is string => typeof item === 'string').slice(0, 24)
+        : [];
+    } catch {
+      return [];
+    }
+  });
+  const [isCompactEmojiLayout, setIsCompactEmojiLayout] = useState(false);
+  const [liveReactions, setLiveReactions] = useState<LiveReaction[]>([]);
   
   // Mention suggestions
   const [showMentionSuggestions, setShowMentionSuggestions] = useState(false);
@@ -1744,7 +2286,12 @@ export default function NOCActivityApp() {
   // Profile photo cropping
   const [profilePhotoDialogOpen, setProfilePhotoDialogOpen] = useState(false);
   const [tempProfilePhoto, setTempProfilePhoto] = useState<string | null>(null);
-  const [cropArea, setCropArea] = useState({ x: 50, y: 50, size: 100 });
+  const [profileCrop, setProfileCrop] = useState({ x: 0, y: 0 });
+  const [profileZoom, setProfileZoom] = useState(1.2);
+  const [profileCroppedAreaPixels, setProfileCroppedAreaPixels] = useState<CropArea | null>(null);
+  const [hideSecurityBanner, setHideSecurityBanner] = useState(false);
+  const [avatarViewerOpen, setAvatarViewerOpen] = useState(false);
+  const [avatarViewerData, setAvatarViewerData] = useState<{ src: string; name: string } | null>(null);
   
   // Custom background image
   const [customBackgroundImage, setCustomBackgroundImage] = useState<string | null>(() => {
@@ -1802,6 +2349,14 @@ export default function NOCActivityApp() {
   }>>([]);
   const [addParticipantsOpen, setAddParticipantsOpen] = useState(false);
   const callTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const callRingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [heldCall, setHeldCall] = useState<CallHistory | null>(null);
+  const [conferenceEnabled, setConferenceEnabled] = useState(false);
+  const [busyUsers, setBusyUsers] = useState<Record<string, boolean>>({});
+  const callChannelRef = useRef<BroadcastChannel | null>(null);
+  const typingChannelRef = useRef<BroadcastChannel | null>(null);
+  const reactionChannelRef = useRef<BroadcastChannel | null>(null);
+  const typingStopTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Pinned messages
   const [pinnedMessages, setPinnedMessages] = useState<ChatMessage[]>([]);
@@ -1882,10 +2437,962 @@ export default function NOCActivityApp() {
   const [mounted, setMounted] = useState(false);
   const initializedRef = useRef(false);
 
+  const playCallTone = useCallback(
+    (tone: 'ring' | 'connected' | 'missed' | 'busy' | 'ended' | 'incoming') => {
+      if (!soundEnabled) return;
+      if (typeof window === 'undefined') return;
+
+      const AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextCtor) return;
+
+      const playBeep = (frequency: number, durationMs: number, delayMs = 0) => {
+        window.setTimeout(() => {
+          const context = new AudioContextCtor();
+          const oscillator = context.createOscillator();
+          const gain = context.createGain();
+
+          oscillator.type = 'sine';
+          oscillator.frequency.value = frequency;
+          gain.gain.value = 0.05;
+
+          oscillator.connect(gain);
+          gain.connect(context.destination);
+          oscillator.start();
+
+          window.setTimeout(() => {
+            oscillator.stop();
+            void context.close();
+          }, durationMs);
+        }, delayMs);
+      };
+
+      if (tone === 'ring' || tone === 'incoming') {
+        playBeep(650, 120, 0);
+        playBeep(520, 160, 180);
+        return;
+      }
+      if (tone === 'connected') {
+        playBeep(880, 120, 0);
+        playBeep(1100, 140, 140);
+        return;
+      }
+      if (tone === 'missed') {
+        playBeep(340, 220, 0);
+        playBeep(280, 220, 260);
+        return;
+      }
+      if (tone === 'busy') {
+        playBeep(420, 150, 0);
+        playBeep(420, 150, 220);
+        playBeep(420, 150, 440);
+        return;
+      }
+
+      playBeep(500, 120, 0);
+    },
+    [soundEnabled]
+  );
+
+  const clearCallTimeouts = useCallback(() => {
+    if (callTimeoutRef.current) {
+      clearTimeout(callTimeoutRef.current);
+      callTimeoutRef.current = null;
+    }
+    if (callRingIntervalRef.current) {
+      clearInterval(callRingIntervalRef.current);
+      callRingIntervalRef.current = null;
+    }
+  }, []);
+
+  const markUsersBusy = useCallback((call: CallHistory, isBusy: boolean) => {
+    const calleeIds = call.calleeId.split(',').map((id) => id.trim()).filter(Boolean);
+    setBusyUsers((prev) => {
+      const next = { ...prev };
+      next[call.callerId] = isBusy;
+      calleeIds.forEach((id) => {
+        next[id] = isBusy;
+      });
+      return next;
+    });
+  }, []);
+
+  const pushCallNotification = useCallback(
+    (message: string, type: NotificationItem['type'], conversationId?: string) => {
+      const notif: NotificationItem = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        message,
+        type,
+        read: false,
+        createdAt: new Date(),
+        conversationId,
+      };
+      setNotifications((prev) => [notif, ...prev]);
+    },
+    []
+  );
+
+  const addNotification = useCallback(
+    (
+      message: string,
+      type: NotificationItem['type'],
+      options?: { conversationId?: string; messageId?: string }
+    ) => {
+      const notif: NotificationItem = {
+        id: Date.now().toString(),
+        message,
+        type,
+        read: false,
+        createdAt: new Date(),
+        conversationId: options?.conversationId,
+        messageId: options?.messageId,
+      };
+
+      setNotifications((prev) => {
+        if (options?.messageId) {
+          const alreadyExists = prev.some(
+            (notification) =>
+              notification.messageId === options.messageId &&
+              notification.conversationId === options.conversationId
+          );
+          if (alreadyExists) {
+            return prev;
+          }
+        }
+
+        return [notif, ...prev];
+      });
+    },
+    []
+  );
+
+  const closeCallSession = useCallback(
+    (
+      reason: 'ended' | 'missed' | 'declined',
+      message?: string,
+      callOverride?: CallHistory
+    ) => {
+      const callToClose = callOverride || activeCall;
+      if (!callToClose) return;
+
+      clearCallTimeouts();
+      markUsersBusy(callToClose, false);
+
+      const computedStatus: CallHistory['status'] =
+        reason === 'missed'
+          ? 'missed'
+          : reason === 'declined'
+          ? 'declined'
+          : callState === 'connected'
+          ? 'answered'
+          : 'declined';
+
+      const durationSec =
+        callState === 'connected' && callStartTime
+          ? Math.max(0, Math.floor((Date.now() - callStartTime.getTime()) / 1000))
+          : 0;
+
+      setCallHistory((prev) => [
+        {
+          ...callToClose,
+          status: computedStatus,
+          duration: durationSec,
+          endedAt: new Date(),
+        },
+        ...prev,
+      ]);
+
+      if (message) {
+        pushCallNotification(
+          message,
+          reason === 'missed' ? 'warning' : 'info',
+          callToClose.conversationId
+        );
+      }
+
+      if (reason === 'missed') {
+        playCallTone('missed');
+      } else {
+        playCallTone('ended');
+      }
+
+      setCallDialogOpen(false);
+      setActiveCall(null);
+      setIncomingCall(null);
+      setHeldCall(null);
+      setConferenceEnabled(false);
+      setShowCallReactionPicker(false);
+      setCallParticipants([]);
+      setLiveReactions((prev) => prev.filter((item) => item.callId !== callToClose.id));
+      setCallTimer(0);
+      setCallState('ended');
+      setCallStartTime(null);
+    },
+    [
+      activeCall,
+      callStartTime,
+      callState,
+      clearCallTimeouts,
+      markUsersBusy,
+      playCallTone,
+      pushCallNotification,
+    ]
+  );
+
+  const emitCallSignal = useCallback((payload: Record<string, unknown>) => {
+    if (typeof window === 'undefined') return;
+    const envelope = {
+      ...payload,
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      sentAt: Date.now(),
+    };
+    localStorage.setItem('noc_call_signal', JSON.stringify(envelope));
+    callChannelRef.current?.postMessage(envelope);
+    window.dispatchEvent(new CustomEvent('noc-call-signal', { detail: envelope }));
+  }, []);
+
+  const emitTypingSignal = useCallback(
+    (payload: {
+      conversationId: string;
+      fromUserId: string;
+      fromUserName: string;
+      toUserIds: string[];
+      isTyping: boolean;
+      isRecording?: boolean;
+    }) => {
+      if (typeof window === 'undefined') return;
+      const envelope = {
+        signalType: 'typing',
+        ...payload,
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        sentAt: Date.now(),
+      };
+      localStorage.setItem('noc_typing_signal', JSON.stringify(envelope));
+      typingChannelRef.current?.postMessage(envelope);
+      window.dispatchEvent(new CustomEvent('noc-typing-signal', { detail: envelope }));
+    },
+    []
+  );
+
+  const broadcastTypingStatus = useCallback(
+    (options: { isTyping: boolean; isRecording?: boolean }) => {
+      if (!selectedConversation || !user?.id || !user?.name) return;
+      const targetUserIds = selectedConversation.participants
+        .map((participant) => participant.id)
+        .filter((id) => id && id !== user.id);
+      if (targetUserIds.length === 0) return;
+
+      emitTypingSignal({
+        conversationId: selectedConversation.id,
+        fromUserId: user.id,
+        fromUserName: user.name,
+        toUserIds: targetUserIds,
+        isTyping: options.isTyping,
+        isRecording: Boolean(options.isRecording),
+      });
+    },
+    [emitTypingSignal, selectedConversation, user?.id, user?.name]
+  );
+
+  const registerRecentEmoji = useCallback((emoji: string) => {
+    setRecentEmojis((prev) => {
+      const next = [emoji, ...prev.filter((item) => item !== emoji)].slice(0, 24);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('noc_recent_emojis', JSON.stringify(next));
+      }
+      return next;
+    });
+  }, []);
+
+  const emitReactionSignal = useCallback((payload: Record<string, unknown>) => {
+    if (typeof window === 'undefined') return;
+    const envelope = {
+      signalType: 'live_reaction',
+      ...payload,
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      sentAt: Date.now(),
+    };
+    localStorage.setItem('noc_reaction_signal', JSON.stringify(envelope));
+    reactionChannelRef.current?.postMessage(envelope);
+    window.dispatchEvent(new CustomEvent('noc-reaction-signal', { detail: envelope }));
+  }, []);
+
+  const pushLiveReaction = useCallback(
+    (reaction: {
+      emoji: string;
+      conversationId: string;
+      callId?: string;
+      userId: string;
+      userName: string;
+    }) => {
+      setLiveReactions((prev) => {
+        const next: LiveReaction[] = [
+          ...prev,
+          {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            emoji: reaction.emoji,
+            userId: reaction.userId,
+            userName: reaction.userName,
+            conversationId: reaction.conversationId,
+            callId: reaction.callId,
+            createdAt: new Date(),
+          },
+        ];
+        return next.slice(-40);
+      });
+    },
+    []
+  );
+
+  const broadcastLiveReaction = useCallback(
+    (emoji: string, scope: 'chat' | 'call') => {
+      if (!emoji || !user?.id || !user?.name) return;
+
+      if (scope === 'call' && activeCall) {
+        const targetUserIds = Array.from(
+          new Set(
+            [
+              activeCall.callerId,
+              ...activeCall.calleeId.split(',').map((id) => id.trim()).filter(Boolean),
+            ].filter((id) => id && id !== user.id)
+          )
+        );
+
+        pushLiveReaction({
+          emoji,
+          conversationId: activeCall.conversationId,
+          callId: activeCall.id,
+          userId: user.id,
+          userName: user.name,
+        });
+        emitReactionSignal({
+          fromUserId: user.id,
+          fromUserName: user.name,
+          toUserIds: targetUserIds,
+          conversationId: activeCall.conversationId,
+          callId: activeCall.id,
+          emoji,
+        });
+        registerRecentEmoji(emoji);
+        return;
+      }
+
+      if (!selectedConversation) return;
+
+      const targetUserIds = selectedConversation.participants
+        .map((participant) => participant.id)
+        .filter((id) => id && id !== user.id);
+
+      pushLiveReaction({
+        emoji,
+        conversationId: selectedConversation.id,
+        userId: user.id,
+        userName: user.name,
+      });
+      emitReactionSignal({
+        fromUserId: user.id,
+        fromUserName: user.name,
+        toUserIds: targetUserIds,
+        conversationId: selectedConversation.id,
+        emoji,
+      });
+      registerRecentEmoji(emoji);
+    },
+    [activeCall, emitReactionSignal, pushLiveReaction, registerRecentEmoji, selectedConversation, user?.id, user?.name]
+  );
+
+  const startOutgoingCall = useCallback(
+    (target: {
+      conversationId: string;
+      calleeId: string;
+      calleeName: string;
+      type: 'audio' | 'video';
+    }) => {
+      if (!user?.id || !user?.name) return;
+
+      if (activeCall && callDialogOpen) {
+        toast.error('Vous avez déjà un appel en cours');
+        return;
+      }
+
+      const calleeIds = target.calleeId.split(',').map((id) => id.trim()).filter(Boolean);
+      const busyTargetId = calleeIds.find((id) => busyUsers[id]);
+      if (busyTargetId) {
+        const busyName =
+          Object.values(DEMO_USERS).find((u) => u.id === busyTargetId)?.name || target.calleeName;
+        const message = `Désolé, ${busyName} est déjà occupé`;
+        toast.error(message);
+        addNotification(message, 'warning', { conversationId: target.conversationId });
+        playCallTone('busy');
+        return;
+      }
+
+      const newCall: CallHistory = {
+        id: generateId(),
+        conversationId: target.conversationId,
+        callerId: user.id,
+        callerName: user.name,
+        calleeId: target.calleeId,
+        calleeName: target.calleeName,
+        type: target.type,
+        status: 'ongoing',
+        startedAt: new Date(),
+      };
+
+      markUsersBusy(newCall, true);
+      setActiveCall(newCall);
+      setIncomingCall(null);
+      setHeldCall(null);
+      setConferenceEnabled(false);
+      setCallDialogOpen(true);
+      setCallState('calling');
+      setCallTimer(0);
+      setCallStartTime(null);
+
+      addNotification(
+        `Appel ${target.type === 'video' ? 'vidéo' : 'audio'} vers ${target.calleeName}`,
+        'info',
+        { conversationId: target.conversationId }
+      );
+
+      emitCallSignal({
+        signalType: 'call_request',
+        callId: newCall.id,
+        fromUserId: user.id,
+        fromUserName: user.name,
+        toUserIds: calleeIds,
+        conversationId: target.conversationId,
+        callMediaType: target.type,
+      });
+
+      playCallTone('ring');
+    },
+    [activeCall, addNotification, busyUsers, callDialogOpen, emitCallSignal, markUsersBusy, playCallTone, user]
+  );
+
+  const handleIncomingCallAction = useCallback(
+    (action: 'accept' | 'reject' | 'ignore') => {
+      if (!incomingCall) return;
+
+      clearCallTimeouts();
+
+      if (action === 'accept') {
+        if (activeCall && callDialogOpen && callState === 'connected') {
+          setHeldCall(activeCall);
+          setConferenceEnabled(false);
+        }
+
+        markUsersBusy(incomingCall, true);
+        setActiveCall(incomingCall);
+        setIncomingCall(null);
+        setCallDialogOpen(true);
+        setCallState('connected');
+        setCallStartTime(new Date());
+        setCallTimer(0);
+        playCallTone('connected');
+
+        const acceptedMsg = `Appel accepté avec ${incomingCall.callerName}`;
+        pushCallNotification(acceptedMsg, 'success', incomingCall.conversationId);
+        addNotification(acceptedMsg, 'success', { conversationId: incomingCall.conversationId });
+        emitCallSignal({
+          signalType: 'call_response',
+          callId: incomingCall.id,
+          fromUserId: user?.id,
+          fromUserName: user?.name,
+          toUserId: incomingCall.callerId,
+          conversationId: incomingCall.conversationId,
+          response: 'accepted',
+        });
+        return;
+      }
+
+      markUsersBusy(incomingCall, false);
+      setIncomingCall(null);
+
+      if (action === 'reject') {
+        const rejectedMsg = 'Appel rejeté';
+        playCallTone('ended');
+        pushCallNotification(rejectedMsg, 'warning', incomingCall.conversationId);
+        addNotification(rejectedMsg, 'warning', { conversationId: incomingCall.conversationId });
+        emitCallSignal({
+          signalType: 'call_response',
+          callId: incomingCall.id,
+          fromUserId: user?.id,
+          fromUserName: user?.name,
+          toUserId: incomingCall.callerId,
+          conversationId: incomingCall.conversationId,
+          response: 'rejected',
+        });
+        return;
+      }
+
+      const ignoredMsg = "La personne n'est pas apte pour répondre pour l'instant";
+      playCallTone('missed');
+      pushCallNotification(ignoredMsg, 'warning', incomingCall.conversationId);
+      addNotification(ignoredMsg, 'warning', { conversationId: incomingCall.conversationId });
+      emitCallSignal({
+        signalType: 'call_response',
+        callId: incomingCall.id,
+        fromUserId: user?.id,
+        fromUserName: user?.name,
+        toUserId: incomingCall.callerId,
+        conversationId: incomingCall.conversationId,
+        response: 'ignored',
+      });
+    },
+    [
+      activeCall,
+      addNotification,
+      callDialogOpen,
+      callState,
+      clearCallTimeouts,
+      incomingCall,
+      markUsersBusy,
+      playCallTone,
+      pushCallNotification,
+      emitCallSignal,
+      user?.id,
+      user?.name,
+    ]
+  );
+
   // Effects
+  useEffect(() => {
+    if (!chatImagePreview) {
+      setChatImageZoom(1);
+    }
+  }, [chatImagePreview]);
+
+  useEffect(() => {
+    if (!selectedConversation) return;
+
+    setShowEmojiPicker(false);
+    setShowLiveReactionPicker(false);
+    skipNextSmoothScrollRef.current = true;
+
+    requestAnimationFrame(() => {
+      messageEndRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' });
+      setShowScrollToBottom(false);
+    });
+  }, [selectedConversation?.id]);
+
+  useEffect(() => {
+    if (!selectedConversation || showScrollToBottom) return;
+    if (skipNextSmoothScrollRef.current) {
+      skipNextSmoothScrollRef.current = false;
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      messageEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    });
+  }, [chatMessages.length, selectedConversation?.id, showScrollToBottom]);
+
+  useEffect(() => {
+    if (!incomingCall) return;
+
+    playCallTone('incoming');
+    toast.info(`Appel entrant de ${incomingCall.callerName}`);
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'granted') {
+        new Notification('Appel entrant', {
+          body: `${incomingCall.callerName} (${incomingCall.type === 'video' ? 'vidéo' : 'audio'})`,
+        });
+      } else if (Notification.permission === 'default') {
+        Notification.requestPermission().catch(() => {});
+      }
+    }
+    pushCallNotification(
+      `Appel entrant ${incomingCall.type === 'video' ? 'vidéo' : 'audio'} de ${incomingCall.callerName}`,
+      'info',
+      incomingCall.conversationId
+    );
+
+    if (callRingIntervalRef.current) {
+      clearInterval(callRingIntervalRef.current);
+      callRingIntervalRef.current = null;
+    }
+    callRingIntervalRef.current = setInterval(() => {
+      playCallTone('incoming');
+    }, 2200);
+
+    callTimeoutRef.current = setTimeout(() => {
+      handleIncomingCallAction('ignore');
+    }, 60000);
+
+    return () => {
+      if (callRingIntervalRef.current) {
+        clearInterval(callRingIntervalRef.current);
+        callRingIntervalRef.current = null;
+      }
+      if (callTimeoutRef.current) {
+        clearTimeout(callTimeoutRef.current);
+        callTimeoutRef.current = null;
+      }
+    };
+  }, [incomingCall, handleIncomingCallAction, playCallTone, pushCallNotification]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      if (!callChannelRef.current) {
+        callChannelRef.current = new BroadcastChannel('noc-call-events');
+      }
+    }
+
+    const handleSignalEnvelope = (signal: any) => {
+      if (!signal || typeof signal !== 'object') return;
+
+      if (signal.signalType === 'call_request') {
+        const targets = Array.isArray(signal.toUserIds)
+          ? signal.toUserIds.filter((id: unknown) => typeof id === 'string')
+          : [];
+
+        if (!targets.includes(user.id)) return;
+        if (signal.fromUserId === user.id) return;
+
+        if (activeCall || callDialogOpen || busyUsers[user.id]) {
+          emitCallSignal({
+            signalType: 'call_response',
+            callId: signal.callId,
+            fromUserId: user.id,
+            fromUserName: user.name,
+            toUserId: signal.fromUserId,
+            conversationId: signal.conversationId,
+            response: 'busy',
+          });
+          return;
+        }
+
+        const incoming: CallHistory = {
+          id: String(signal.callId || generateId()),
+          conversationId: String(signal.conversationId || selectedConversation?.id || ''),
+          callerId: String(signal.fromUserId || ''),
+          callerName: String(signal.fromUserName || 'Inconnu'),
+          calleeId: user.id,
+          calleeName: user.name || 'Vous',
+          type: signal.callMediaType === 'video' ? 'video' : 'audio',
+          status: 'ongoing',
+          startedAt: new Date(),
+        };
+
+        setIncomingCall(incoming);
+        addNotification(
+          `Appel entrant ${incoming.type === 'video' ? 'vidéo' : 'audio'} de ${incoming.callerName}`,
+          'info',
+          { conversationId: incoming.conversationId }
+        );
+        return;
+      }
+
+      if (signal.signalType === 'call_response') {
+        if (signal.toUserId !== user.id) return;
+        if (!activeCall || signal.callId !== activeCall.id) return;
+
+        const response = String(signal.response || 'ignored');
+        const fromName = String(signal.fromUserName || activeCall.calleeName || 'Correspondant');
+
+        if (response === 'accepted') {
+          setCallState('connected');
+          setCallStartTime(new Date());
+          setCallTimer(0);
+          playCallTone('connected');
+          addNotification('Appel accepté', 'success', { conversationId: activeCall.conversationId });
+          return;
+        }
+
+        if (response === 'rejected') {
+          closeCallSession('declined', 'Appel réjeté', activeCall);
+          return;
+        }
+
+        if (response === 'busy') {
+          closeCallSession('declined', `Désolé ${fromName} est déjà occupé`, activeCall);
+          playCallTone('busy');
+          return;
+        }
+
+        closeCallSession('missed', "La personne n'est pas apte pour répondre pour l'instant", activeCall);
+      }
+    };
+
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== 'noc_call_signal' || !event.newValue) return;
+      try {
+        const parsed = JSON.parse(event.newValue);
+        handleSignalEnvelope(parsed);
+      } catch {
+        // ignore malformed payload
+      }
+    };
+
+    const onCustom = (event: Event) => {
+      const custom = event as CustomEvent;
+      handleSignalEnvelope(custom.detail);
+    };
+
+    const channel = callChannelRef.current;
+    if (channel) {
+      channel.onmessage = (event: MessageEvent) => {
+        handleSignalEnvelope(event.data);
+      };
+    }
+
+    window.addEventListener('storage', onStorage);
+    window.addEventListener('noc-call-signal', onCustom as EventListener);
+
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener('noc-call-signal', onCustom as EventListener);
+      if (channel) {
+        channel.onmessage = null;
+      }
+    };
+  }, [
+    user?.id,
+    user?.name,
+    activeCall,
+    callDialogOpen,
+    busyUsers,
+    emitCallSignal,
+    selectedConversation?.id,
+    addNotification,
+    closeCallSession,
+    playCallTone,
+  ]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      if (!typingChannelRef.current) {
+        typingChannelRef.current = new BroadcastChannel('noc-typing-events');
+      }
+    }
+
+    const applyTypingSignal = (signal: any) => {
+      if (!signal || signal.signalType !== 'typing') return;
+      if (signal.fromUserId === user.id) return;
+
+      const targets = Array.isArray(signal.toUserIds)
+        ? signal.toUserIds.filter((id: unknown) => typeof id === 'string')
+        : [];
+      if (!targets.includes(user.id)) return;
+
+      const conversationId = String(signal.conversationId || '');
+      const senderId = String(signal.fromUserId || '');
+      const senderName = String(signal.fromUserName || 'Utilisateur');
+      const nextTyping = Boolean(signal.isTyping);
+      const nextRecording = Boolean(signal.isRecording);
+
+      setTypingIndicators((prev) => {
+        const filtered = prev.filter(
+          (item) => !(item.conversationId === conversationId && item.userId === senderId)
+        );
+
+        if (!nextTyping) return filtered;
+
+        return [
+          ...filtered,
+          {
+            conversationId,
+            userId: senderId,
+            userName: senderName,
+            isTyping: true,
+            isRecording: nextRecording,
+            timestamp: new Date(),
+          },
+        ];
+      });
+    };
+
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== 'noc_typing_signal' || !event.newValue) return;
+      try {
+        const parsed = JSON.parse(event.newValue);
+        applyTypingSignal(parsed);
+      } catch {
+        // ignore malformed payload
+      }
+    };
+
+    const onCustom = (event: Event) => {
+      const custom = event as CustomEvent;
+      applyTypingSignal(custom.detail);
+    };
+
+    const channel = typingChannelRef.current;
+    if (channel) {
+      channel.onmessage = (event: MessageEvent) => {
+        applyTypingSignal(event.data);
+      };
+    }
+
+    const staleCleanup = setInterval(() => {
+      const now = Date.now();
+      setTypingIndicators((prev) =>
+        prev.filter((item) => now - new Date(item.timestamp).getTime() < 4500)
+      );
+    }, 1500);
+
+    window.addEventListener('storage', onStorage);
+    window.addEventListener('noc-typing-signal', onCustom as EventListener);
+
+    return () => {
+      clearInterval(staleCleanup);
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener('noc-typing-signal', onCustom as EventListener);
+      if (channel) {
+        channel.onmessage = null;
+      }
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      if (!reactionChannelRef.current) {
+        reactionChannelRef.current = new BroadcastChannel('noc-reaction-events');
+      }
+    }
+
+    const applyReactionSignal = (signal: any) => {
+      if (!signal || signal.signalType !== 'live_reaction') return;
+      if (signal.fromUserId === user.id) return;
+
+      const targets = Array.isArray(signal.toUserIds)
+        ? signal.toUserIds.filter((id: unknown) => typeof id === 'string')
+        : [];
+      if (!targets.includes(user.id)) return;
+
+      const emoji = String(signal.emoji || '').trim();
+      if (!emoji) return;
+
+      pushLiveReaction({
+        emoji,
+        conversationId: String(signal.conversationId || ''),
+        callId: signal.callId ? String(signal.callId) : undefined,
+        userId: String(signal.fromUserId || ''),
+        userName: String(signal.fromUserName || 'Utilisateur'),
+      });
+    };
+
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== 'noc_reaction_signal' || !event.newValue) return;
+      try {
+        const parsed = JSON.parse(event.newValue);
+        applyReactionSignal(parsed);
+      } catch {
+        // ignore malformed payload
+      }
+    };
+
+    const onCustom = (event: Event) => {
+      const custom = event as CustomEvent;
+      applyReactionSignal(custom.detail);
+    };
+
+    const channel = reactionChannelRef.current;
+    if (channel) {
+      channel.onmessage = (event: MessageEvent) => {
+        applyReactionSignal(event.data);
+      };
+    }
+
+    const staleCleanup = setInterval(() => {
+      const now = Date.now();
+      setLiveReactions((prev) =>
+        prev.filter((item) => now - new Date(item.createdAt).getTime() < 8000)
+      );
+    }, 1000);
+
+    window.addEventListener('storage', onStorage);
+    window.addEventListener('noc-reaction-signal', onCustom as EventListener);
+
+    return () => {
+      clearInterval(staleCleanup);
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener('noc-reaction-signal', onCustom as EventListener);
+      if (channel) {
+        channel.onmessage = null;
+      }
+    };
+  }, [pushLiveReaction, user?.id]);
+
+  useEffect(() => {
+    return () => {
+      if (callChannelRef.current) {
+        callChannelRef.current.close();
+        callChannelRef.current = null;
+      }
+      if (typingChannelRef.current) {
+        typingChannelRef.current.close();
+        typingChannelRef.current = null;
+      }
+      if (reactionChannelRef.current) {
+        reactionChannelRef.current.close();
+        reactionChannelRef.current = null;
+      }
+      if (typingStopTimeoutRef.current) {
+        clearTimeout(typingStopTimeoutRef.current);
+        typingStopTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
   useEffect(() => {
     const timer = requestAnimationFrame(() => setMounted(true));
     return () => cancelAnimationFrame(timer);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const updateCompactEmojiLayout = () => {
+      setIsCompactEmojiLayout(window.innerWidth < 640);
+    };
+
+    updateCompactEmojiLayout();
+    window.addEventListener('resize', updateCompactEmojiLayout);
+
+    return () => {
+      window.removeEventListener('resize', updateCompactEmojiLayout);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const raw = localStorage.getItem('noc_notifications');
+    if (!raw) {
+      setNotificationsHydrated(true);
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as Array<NotificationItem & { createdAt: string }>;
+      setNotifications(
+        parsed.map((notification) => {
+          const rawRead = (notification as { read?: unknown }).read;
+          return {
+            id: String(notification.id),
+            message: notification.message || 'Notification',
+            type: ['success', 'error', 'warning', 'info'].includes(notification.type)
+              ? notification.type
+              : 'info',
+            read: rawRead === true || rawRead === 'true' || rawRead === 1,
+            createdAt: new Date(notification.createdAt),
+            conversationId: notification.conversationId,
+            messageId: notification.messageId,
+          };
+        })
+      );
+    } catch {
+      setNotifications([]);
+    } finally {
+      setNotificationsHydrated(true);
+    }
   }, []);
 
   useEffect(() => {
@@ -1905,27 +3412,102 @@ export default function NOCActivityApp() {
   }, []);
 
   useEffect(() => {
-    if (isAuthenticated && tasks.length === 0) {
+    if (isAuthenticated && tasks.length === 0 && notificationsHydrated) {
       const timer = setTimeout(() => {
         setTasks([
-          { id: 't1', userId: 'agent-a1', userName: 'Alaine', title: 'Vérifier alarmes Zabbix', description: 'Monitoring alerts', status: 'in_progress', category: 'Monitoring', createdAt: new Date(), updatedAt: new Date(), scheduledTime: '08:00' },
-          { id: 't2', userId: 'agent-a1', userName: 'Alaine', title: 'Envoyer graphes 09h', description: 'Graphes trafic', status: 'completed', category: 'Reporting 1', createdAt: new Date(), updatedAt: new Date(), scheduledTime: '09:00', completedAt: new Date() },
-          { id: 't3', userId: 'agent-c2', userName: 'Lapreuve', title: 'Appel client ACME', description: 'Suivi incident', status: 'pending', category: 'Call Center', createdAt: new Date(), updatedAt: new Date(), scheduledTime: '10:30' },
+          {
+            id: 't1',
+            userId: 'agent-a1',
+            userName: 'Alaine',
+            title: 'Vérifier alarmes Zabbix',
+            description: 'Monitoring alerts',
+            status: 'in_progress',
+            category: 'surveillance',
+            priority: 'medium',
+            startTime: new Date(),
+            estimatedEndTime: new Date(Date.now() + 60 * 60 * 1000),
+            estimatedDuration: 60,
+            comments: [],
+            alerts: [],
+            history: [],
+            tags: [],
+            isOverdue: false,
+            isNotified: false,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+          {
+            id: 't2',
+            userId: 'agent-a1',
+            userName: 'Alaine',
+            title: 'Envoyer graphes 09h',
+            description: 'Graphes trafic',
+            status: 'completed',
+            category: 'administrative',
+            priority: 'low',
+            startTime: new Date(Date.now() - 90 * 60 * 1000),
+            estimatedEndTime: new Date(Date.now() - 30 * 60 * 1000),
+            estimatedDuration: 60,
+            actualEndTime: new Date(),
+            actualDuration: 60,
+            comments: [],
+            alerts: [],
+            history: [],
+            tags: [],
+            isOverdue: false,
+            isNotified: true,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            completedAt: new Date(),
+          },
+          {
+            id: 't3',
+            userId: 'agent-c2',
+            userName: 'Lapreuve',
+            title: 'Appel client ACME',
+            description: 'Suivi incident',
+            status: 'pending',
+            category: 'incident',
+            priority: 'high',
+            startTime: new Date(),
+            estimatedEndTime: new Date(Date.now() + 45 * 60 * 1000),
+            estimatedDuration: 45,
+            comments: [],
+            alerts: [],
+            history: [],
+            tags: [],
+            isOverdue: false,
+            isNotified: false,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
         ]);
         setActivities([
           { id: 'a1', userId: 'agent-c2', userName: 'Lapreuve', type: 'CLIENT_DOWN', category: 'Monitoring', description: 'Client ACME - Connexion perdue', createdAt: new Date(Date.now() - 3600000) },
           { id: 'a2', userId: 'agent-b1', userName: 'Sahra', type: 'TICKET_CREATED', category: 'Call Center', description: 'Ticket #1234 créé', createdAt: new Date(Date.now() - 7200000) },
           { id: 'a3', userId: 'agent-c1', userName: 'Audrey', type: 'GRAPH_SENT', category: 'Reporting 1', description: 'Graphes 09h envoyés', createdAt: new Date(Date.now() - 10800000) },
         ]);
-        setNotifications([
-          { id: '1', message: 'Incident critique détecté', type: 'warning', read: false, createdAt: new Date() },
-          { id: '2', message: 'Nouveau ticket assigné', type: 'info', read: false, createdAt: new Date() },
-          { id: '3', message: 'Handover validé', type: 'success', read: true, createdAt: new Date() },
-        ]);
+        if (notifications.length === 0) {
+          setNotifications([
+            { id: '1', message: 'Incident critique détecté', type: 'warning', read: false, createdAt: new Date() },
+            { id: '2', message: 'Nouveau ticket assigné', type: 'info', read: false, createdAt: new Date() },
+            { id: '3', message: 'Handover validé', type: 'success', read: true, createdAt: new Date() },
+          ]);
+        }
       }, 0);
       return () => clearTimeout(timer);
     }
-  }, [isAuthenticated, tasks.length]);
+  }, [isAuthenticated, tasks.length, notifications.length, notificationsHydrated]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !notificationsHydrated) return;
+    localStorage.setItem('noc_notifications', JSON.stringify(notifications));
+  }, [notifications, notificationsHydrated]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem('noc_section_access', JSON.stringify(sectionAccess));
+  }, [sectionAccess]);
 
   // Charger les utilisateurs, logs et tickets depuis localStorage
   useEffect(() => {
@@ -1953,6 +3535,21 @@ export default function NOCActivityApp() {
             setAuditLogs(parsed);
           }
         } catch { /* ignore */ }
+      }
+
+      const storedSectionAccess = localStorage.getItem('noc_section_access');
+      if (storedSectionAccess) {
+        try {
+          const parsed = JSON.parse(storedSectionAccess);
+          setSectionAccess({ ...DEFAULT_SECTION_ACCESS, ...(parsed || {}) });
+        } catch {
+          setSectionAccess({ ...DEFAULT_SECTION_ACCESS });
+        }
+      }
+
+      const storedAnnouncementAvatar = localStorage.getItem('noc_announcements_avatar');
+      if (storedAnnouncementAvatar) {
+        setAnnouncementAvatar(storedAnnouncementAvatar);
       }
 
       // Charger les tickets depuis localStorage
@@ -1984,6 +3581,29 @@ export default function NOCActivityApp() {
     return () => clearTimeout(timer);
   }, []);
 
+  const syncUsersFromApi = useCallback(async () => {
+    if (!isAuthenticated || !user?.id) return;
+
+    setIsUsersSyncing(true);
+    try {
+      const response = await fetch('/api/users', { cache: 'no-store' });
+      if (!response.ok) return;
+      const data = await response.json();
+      if (!data?.success || !Array.isArray(data.users)) return;
+
+      setAllUsers(data.users);
+      localStorage.setItem('noc_all_users', JSON.stringify(data.users));
+    } catch {
+      // fallback to current local cache
+    } finally {
+      setIsUsersSyncing(false);
+    }
+  }, [isAuthenticated, user?.id]);
+
+  useEffect(() => {
+    void syncUsersFromApi();
+  }, [syncUsersFromApi]);
+
   // Sauvegarder les tickets dans localStorage à chaque modification
   useEffect(() => {
     if (tickets.length > 0) {
@@ -1991,139 +3611,321 @@ export default function NOCActivityApp() {
     }
   }, [tickets]);
 
-  // Initialiser les conversations de démo pour la messagerie WhatsApp
-  useEffect(() => {
-    if (isAuthenticated && user && conversations.length === 0) {
-      const initDemoConversations = () => {
-        // Créer des conversations de démo avec les autres utilisateurs
-        const otherUsers = Object.values(DEMO_USERS).filter(u => u.id !== user.id);
-        const demoConversations: Conversation[] = otherUsers.slice(0, 5).map((u, index) => ({
-          id: `conv-${index}`,
-          type: 'individual' as const,
-          participants: [
-            { id: user.id, name: user.name, role: 'member' as const, joinedAt: new Date() },
-            { id: u.id, name: u.name, avatar: u.avatar, role: 'member' as const, joinedAt: new Date() }
-          ],
-          unreadCount: index === 0 ? 2 : 0,
-          isPinned: index < 2,
-          isMuted: false,
-          isArchived: false,
-          createdBy: user.id,
-          createdAt: new Date(Date.now() - Math.random() * 86400000 * 7),
-          updatedAt: new Date()
-        }));
+  // L'effet de récupération des conversations est déjà déclenché plus haut. Cette section reste vide pour éviter les appels doubles.
 
-        // Ajouter un groupe de démo
-        const shiftGroup: Conversation = {
-          id: 'group-shift',
-          type: 'group',
-          name: user.shift ? `Shift ${user.shift.name} - Équipe` : 'Équipe NOC',
-          description: 'Groupe de discussion de l\'équipe',
-          participants: [
-            { id: user.id, name: user.name, role: 'admin' as const, joinedAt: new Date() },
-            ...otherUsers.slice(0, 3).map(u => ({ id: u.id, name: u.name, role: 'member' as const, joinedAt: new Date() }))
-          ],
-          unreadCount: 5,
-          isPinned: true,
-          isMuted: false,
-          isArchived: false,
-          createdBy: user.id,
-          createdAt: new Date(Date.now() - 86400000 * 30),
-          updatedAt: new Date()
-        };
+  const isAnnouncementsConversation = useCallback((conversation?: Conversation | null) => {
+    if (!conversation || conversation.type !== 'individual') return false;
+    const otherParticipant = conversation.participants.find((participant) => participant.id !== user?.id);
+    return otherParticipant?.id === 'system-annonces';
+  }, [user?.id]);
 
-        // Contact spécial "Annonces" - géré par superviseur/admin
-        const annoncesConversation: Conversation = {
-          id: 'conv-annonces',
-          type: 'individual' as const,
-          participants: [
-            { id: user.id, name: user.name, role: 'member' as const, joinedAt: new Date() },
-            { id: 'system-annonces', name: 'Annonces', avatar: '/logo_sc_icon.png', role: 'admin' as const, joinedAt: new Date() }
-          ],
-          unreadCount: 1,
-          isPinned: true,
-          isMuted: false,
-          isArchived: false,
-          createdBy: 'system',
-          createdAt: new Date(Date.now() - 86400000 * 60),
-          updatedAt: new Date()
-        };
+  const updateConversationAvatar = useCallback((conversationId: string, avatarData: string) => {
+    setConversations((prev) =>
+      prev.map((conversation) =>
+        conversation.id === conversationId
+          ? {
+              ...conversation,
+              avatar: avatarData,
+              updatedAt: new Date(),
+            }
+          : conversation
+      )
+    );
 
-        setConversations([annoncesConversation, shiftGroup, ...demoConversations]);
-
-        // Ajouter quelques messages de démo
-        const demoMessages: ChatMessage[] = [
-          {
-            id: 'msg-annonce-1',
-            conversationId: 'conv-annonces',
-            senderId: 'system-annonces',
-            senderName: 'Annonces',
-            senderAvatar: '/logo_sc_icon.png',
-            type: 'text',
-            content: 'Bienvenue dans le canal des annonces officielles de Silicone Connect ! Les superviseurs et administrateurs publieront ici les informations importantes.',
-            status: 'read',
-            isEdited: false,
-            isDeleted: false,
-            deletedForEveryone: false,
-            isPinned: true,
-            isArchived: false,
-            reactions: [],
-            readBy: [],
-            createdAt: new Date(Date.now() - 86400000),
-            updatedAt: new Date(Date.now() - 86400000)
-          },
-          {
-            id: 'msg-1',
-            conversationId: 'group-shift',
-            senderId: otherUsers[0]?.id || '',
-            senderName: otherUsers[0]?.name || 'User',
-            type: 'text',
-            content: 'Bonjour à tous ! Prêts pour le shift ?',
-            status: 'read',
-            isEdited: false,
-            isDeleted: false,
-            deletedForEveryone: false,
-            isPinned: false,
-            isArchived: false,
-            reactions: [],
-            readBy: [],
-            createdAt: new Date(Date.now() - 3600000),
-            updatedAt: new Date(Date.now() - 3600000)
-          },
-          {
-            id: 'msg-2',
-            conversationId: 'group-shift',
-            senderId: user.id,
-            senderName: user.name,
-            type: 'text',
-            content: 'Oui, je suis prêt. On commence par le monitoring.',
-            status: 'read',
-            isEdited: false,
-            isDeleted: false,
-            deletedForEveryone: false,
-            isPinned: false,
-            isArchived: false,
-            reactions: [{ userId: otherUsers[1]?.id || '', userName: otherUsers[1]?.name || '', emoji: '👍' }],
-            readBy: [],
-            createdAt: new Date(Date.now() - 3000000),
-            updatedAt: new Date(Date.now() - 3000000)
+    setSelectedConversation((prev) =>
+      prev && prev.id === conversationId
+        ? {
+            ...prev,
+            avatar: avatarData,
+            updatedAt: new Date(),
           }
-        ];
-        setChatMessages(demoMessages);
+        : prev
+    );
+  }, []);
 
-        // Initialiser la présence des utilisateurs
-        const presence: Record<string, PresenceStatus> = {};
-        otherUsers.forEach((u, i) => {
-          presence[u.id] = i < 3 ? 'online' : 'offline';
-        });
-        setUserPresence(presence);
-      };
-      
-      // Use setTimeout to avoid synchronous setState
-      const timer = setTimeout(initDemoConversations, 100);
-      return () => clearTimeout(timer);
+  const openConversationAvatarUploader = useCallback((target: { mode: 'announcement' | 'group'; conversationId?: string }) => {
+    setChatAvatarUploadTarget(target);
+    chatAvatarInputRef.current?.click();
+  }, []);
+
+  const handleConversationAvatarUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+
+    if (!file || !chatAvatarUploadTarget) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Fichier invalide', { description: 'Veuillez choisir une image.' });
+      return;
     }
-  }, [isAuthenticated, user, conversations.length]);
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const imageData = typeof reader.result === 'string' ? reader.result : '';
+      if (!imageData) {
+        toast.error('Image invalide');
+        return;
+      }
+
+      if (chatAvatarUploadTarget.mode === 'announcement') {
+        setAnnouncementAvatar(imageData);
+        localStorage.setItem('noc_announcements_avatar', imageData);
+        toast.success('Photo des annonces mise à jour');
+      } else if (chatAvatarUploadTarget.mode === 'group' && chatAvatarUploadTarget.conversationId) {
+        updateConversationAvatar(chatAvatarUploadTarget.conversationId, imageData);
+        toast.success('Photo du groupe mise à jour');
+      }
+    };
+
+    reader.onerror = () => {
+      toast.error('Erreur', { description: 'Impossible de lire l\'image sélectionnée.' });
+    };
+
+    reader.readAsDataURL(file);
+    setChatAvatarUploadTarget(null);
+  }, [chatAvatarUploadTarget, updateConversationAvatar]);
+
+  type ChatMessageInput = {
+    conversationId: string;
+    senderId: string;
+    senderName: string;
+    senderAvatar?: string;
+    type: ChatMessageType;
+    content: string;
+    mediaUrl?: string;
+    mediaData?: string; // base64
+    fileName?: string;
+    fileSize?: number;
+    fileType?: string;
+    duration?: number;
+    status?: ChatMessageStatus;
+    replyTo?: ChatMessage;
+    isEdited?: boolean;
+    isDeleted?: boolean;
+    deletedForEveryone?: boolean;
+    isPinned?: boolean;
+    isArchived?: boolean;
+    reactions?: Array<{ userId: string; userName: string; emoji: string }>;
+    readBy?: Array<{ userId: string; userName: string; readAt: Date }>;
+  };
+
+  const sendChatMessage = useCallback(async (messagePayload: ChatMessageInput) => {
+    let conversationId = messagePayload.conversationId || selectedConversation?.id;
+    if (!conversationId) {
+      toast.error('Aucune conversation sélectionnée (conversationId manquant)');
+      return;
+    }
+
+    if (!user) {
+      toast.error('Utilisateur non authentifié');
+      return;
+    }
+
+    const targetConversation = conversations.find((conversation) => conversation.id === conversationId) || selectedConversation;
+    if (isAnnouncementsConversation(targetConversation) && !canManageAnnouncements(user)) {
+      toast.error('Action non autorisée', {
+        description: 'Seuls les Admins, Responsables et Super Admins peuvent publier des annonces.',
+      });
+      return;
+    }
+
+    try {
+      // Always send base64 data as mediaUrl for images/files
+      const buildBody = (targetConversationId: string) => ({
+        conversationId: targetConversationId,
+        senderId: user.id,
+        senderName: user.name,
+        senderAvatar: user.avatar,
+        type: messagePayload.type,
+        content: messagePayload.content,
+        mediaUrl: messagePayload.mediaData || messagePayload.mediaUrl || undefined,
+        fileName: messagePayload.fileName,
+        fileSize: messagePayload.fileSize,
+        fileType: messagePayload.fileType,
+        duration: messagePayload.duration,
+        status: messagePayload.status || 'sent',
+        replyToId: messagePayload.replyTo?.id,
+      });
+
+      let response = await fetch(`/api/chat/conversations/${conversationId}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(buildBody(conversationId)),
+      });
+
+      if (!response.ok && response.status === 404 && selectedConversation) {
+        const participantIds = selectedConversation.participants
+          .map((participant) => participant.id)
+          .filter((id) => id && id !== user.id);
+
+        if (participantIds.length > 0) {
+          const recreatedConversation = await createConversationInDb({
+            type: selectedConversation.type,
+            name: selectedConversation.name,
+            description: selectedConversation.description,
+            participantIds,
+          });
+
+          if (recreatedConversation) {
+            const previousConversationId = selectedConversation.id;
+            conversationId = recreatedConversation.id;
+            setConversations((prev) => [
+              recreatedConversation,
+              ...prev.filter((conversation) => conversation.id !== previousConversationId && conversation.id !== recreatedConversation.id),
+            ]);
+            setSelectedConversation(recreatedConversation);
+
+            response = await fetch(`/api/chat/conversations/${conversationId}/messages`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(buildBody(conversationId)),
+            });
+          }
+        }
+      }
+
+      if (!response.ok) {
+        let errMsg = `Erreur envoi du message (${response.status})`;
+        try {
+          const errJson = await response.json();
+          if (errJson?.error) {
+            errMsg = `Erreur envoi du message (${response.status}) : ${errJson.error}`;
+          }
+        } catch (_e) {
+          // peut être non-JSON
+        }
+        console.error('Erreur API send message', response.status, errMsg);
+        toast.error(errMsg);
+        return;
+      }
+
+      const result = await response.json();
+      if (result.success && result.message) {
+        // On s'assure que le mapping est bien à plat pour l'affichage
+        const createdMessage: ChatMessage = {
+          ...result.message,
+          createdAt: new Date(result.message.createdAt),
+          updatedAt: new Date(result.message.updatedAt),
+          readAt: result.message.readAt ? new Date(result.message.readAt) : undefined,
+          mediaData: result.message.mediaUrl || result.message.mediaData || undefined,
+          fileName: result.message.fileName,
+          fileSize: result.message.fileSize,
+          fileType: result.message.fileType,
+          type: result.message.type,
+          reactions: result.message.reactions || [],
+          readBy: result.message.readBy || [],
+          isEdited: result.message.isEdited || false,
+          isDeleted: result.message.isDeleted || false,
+          deletedForEveryone: result.message.deletedForEveryone || false,
+          isPinned: result.message.isPinned || false,
+          isImportant: result.message.isImportant || false,
+          isArchived: result.message.isArchived || false,
+          replyTo: messagePayload.replyTo,
+        };
+
+        setChatMessages(prev => {
+          if (prev.some(m => m.id === createdMessage.id)) return prev;
+          return [...prev, createdMessage];
+        });
+        setConversations(prev => prev.map(c => c.id === conversationId ? { ...c, lastMessage: createdMessage, updatedAt: new Date() } : c));
+
+        return createdMessage;
+      }
+
+      toast.error('Erreur envoi du message');
+    } catch (error) {
+      console.error('Erreur sendChatMessage', error);
+      toast.error('Erreur envoi du message');
+    }
+  }, [selectedConversation, conversations, user, createConversationInDb, isAnnouncementsConversation]);
+  const handleConversationSelect = useCallback(
+    (conversation: Conversation) => {
+      const isSameConversation = selectedConversationRef.current?.id === conversation.id;
+
+      setConversations((prev) =>
+        prev.map((item) => (item.id === conversation.id ? { ...item, unreadCount: 0 } : item))
+      );
+      setNotifications((prev) =>
+        prev.map((notification) =>
+          notification.conversationId === conversation.id ? { ...notification, read: true } : notification
+        )
+      );
+
+      if (isSameConversation) return;
+
+      setShowEmojiPicker(false);
+      setShowLiveReactionPicker(false);
+      setShowScrollToBottom(false);
+      setSelectedConversation(conversation);
+      void fetchMessages(conversation.id);
+    },
+    [fetchMessages]
+  );
+
+  const updateChatMessage = useCallback(
+    async (
+      conversationId: string,
+      messageId: string,
+      action: 'deleteForMe' | 'deleteForEveryone' | 'togglePin' | 'toggleImportant' | 'editContent',
+      payload?: { content?: string; isPinned?: boolean; isImportant?: boolean }
+    ) => {
+      if (!user?.id) return null;
+
+      try {
+        const response = await fetch(`/api/chat/conversations/${conversationId}/messages/${messageId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action, userId: user.id, ...(payload || {}) }),
+        });
+
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({}));
+          toast.error(err?.error || 'Erreur mise à jour du message');
+          return null;
+        }
+
+        const data = await response.json();
+        if (!data?.success || !data?.message) {
+          toast.error('Erreur mise à jour du message');
+          return null;
+        }
+
+        const mappedMessage: ChatMessage = {
+          ...data.message,
+          createdAt: new Date(data.message.createdAt),
+          updatedAt: new Date(data.message.updatedAt),
+          readAt: data.message.readAt ? new Date(data.message.readAt) : undefined,
+          mediaData: data.message.mediaUrl || undefined,
+          reactions: data.message.reactions || [],
+          readBy: data.message.readBy || [],
+          isEdited: data.message.isEdited || false,
+          isDeleted: data.message.isDeleted || false,
+          deletedForEveryone: data.message.deletedForEveryone || false,
+          isPinned: data.message.isPinned || false,
+          isImportant: data.message.isImportant || false,
+          isArchived: data.message.isArchived || false,
+        };
+
+        setChatMessages((prev) =>
+          prev.map((message) => (message.id === messageId ? { ...message, ...mappedMessage } : message))
+        );
+
+        setConversations((prev) =>
+          prev.map((conversation) => {
+            if (conversation.id !== conversationId) return conversation;
+            if (conversation.lastMessage?.id !== messageId) return conversation;
+            return { ...conversation, lastMessage: { ...conversation.lastMessage, ...mappedMessage } };
+          })
+        );
+
+        return mappedMessage;
+      } catch (error) {
+        console.error('Erreur updateChatMessage', error);
+        toast.error('Erreur mise à jour du message');
+        return null;
+      }
+    },
+    [user]
+  );
 
   // Mettre à jour l'activité sur les actions utilisateur
   const updateActivity = useCallback(() => {
@@ -2173,23 +3975,8 @@ export default function NOCActivityApp() {
 
     await new Promise(resolve => setTimeout(resolve, 500));
 
-    // Chercher l'utilisateur par pseudo ou email (insensible à la casse)
-    // D'abord chercher dans allUsers (localStorage), puis dans DEMO_USERS
-    let foundUser = allUsers.find(
-      u => u.username?.toLowerCase() === loginIdentifier.toLowerCase() ||
-           u.email?.toLowerCase() === loginIdentifier.toLowerCase()
-    );
-
-    // Si pas trouvé dans allUsers, chercher dans DEMO_USERS
-    if (!foundUser) {
-      foundUser = Object.values(DEMO_USERS).find(
-        u => u.username?.toLowerCase() === loginIdentifier.toLowerCase() ||
-             u.email?.toLowerCase() === loginIdentifier.toLowerCase()
-      );
-    }
-
     // Fonction pour gérer l'échec de connexion
-    const handleFailedLogin = () => {
+    const handleFailedLogin = (explicitMessage?: string) => {
       const newAttempts = failedAttempts + 1;
       setFailedAttempts(newAttempts);
 
@@ -2205,57 +3992,72 @@ export default function NOCActivityApp() {
         setLockoutSeconds(lockoutTime);
       }
 
-      setLoginError('Pseudo/Email ou mot de passe incorrect');
+      setLoginError(explicitMessage || 'Pseudo/Email ou mot de passe incorrect');
       setIsLoading(false);
       toast.error(lockoutTime > 0 ? 'Trop de tentatives' : 'Erreur de connexion', {
         id: lockoutTime > 0 ? 'auth-lockout-error' : 'auth-login-error',
         description: lockoutTime > 0
           ? `Veuillez attendre ${lockoutTime} secondes avant de réessayer`
-          : 'Identifiants invalides'
+          : explicitMessage || 'Identifiants invalides'
       });
     };
 
-    if (!foundUser) {
-      handleFailedLogin();
-      return;
-    }
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          login: loginIdentifier,
+          password,
+        }),
+      });
 
-    // Vérifier si le compte est bloqué
-    if (foundUser.isBlocked) {
-      setLoginError('Votre compte a été bloqué. Contactez l\'administrateur.');
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result?.success || !result?.user) {
+        const apiError = typeof result?.error === 'string' ? result.error : undefined;
+        handleFailedLogin(apiError);
+        return;
+      }
+
+      const loggedUser = {
+        ...result.user,
+        lastActivity: new Date(),
+      };
+
+      setFailedAttempts(0);
+      setShowForgotMessage(false);
+      setUser(loggedUser);
+      setIsAuthenticated(true);
+      setLastActivity(new Date());
+      localStorage.setItem('noc_user', JSON.stringify(loggedUser));
+      if (result.token) {
+        localStorage.setItem('noc_auth_token', String(result.token));
+      }
+
+      setAllUsers((prev) => {
+        const updated = [...prev.filter((u) => u.id !== loggedUser.id), loggedUser];
+        localStorage.setItem('noc_all_users', JSON.stringify(updated));
+        return updated;
+      });
+
+      toast.success(`Bienvenue, ${loggedUser.name} !`, {
+        id: 'auth-login-success',
+        description: loggedUser.mustChangePassword
+          ? 'Connexion réussie. Changement de mot de passe obligatoire avant toute action.'
+          : 'Connexion réussie',
+      });
+
+      if (loggedUser.mustChangePassword) {
+        setTimeout(() => {
+          openSecurityDialog();
+        }, 150);
+      }
+    } catch {
+      handleFailedLogin('Impossible de joindre le serveur d\'authentification');
+      return;
+    } finally {
       setIsLoading(false);
-      toast.error('Compte bloqué', { description: 'Contactez la direction' });
-      return;
     }
-
-    // Vérifier le mot de passe avec la fonction de vérification sécurisée
-    const passwordValid = verifyPassword(password, foundUser.passwordHash || '');
-    if (!passwordValid) {
-      handleFailedLogin();
-      return;
-    }
-
-    // Connexion réussie - réinitialiser les tentatives
-    setFailedAttempts(0);
-    setShowForgotMessage(false);
-
-    const updatedUser = {
-      ...foundUser,
-      lastActivity: new Date()
-    };
-
-    setUser(updatedUser);
-    setIsAuthenticated(true);
-    setLastActivity(new Date());
-    localStorage.setItem('noc_user', JSON.stringify(updatedUser));
-    setIsLoading(false);
-
-    toast.success(`Bienvenue, ${foundUser.name} !`, {
-      id: 'auth-login-success',
-      description: foundUser.mustChangePassword
-        ? 'Connexion réussie. Veuillez modifier votre mot de passe dans Mon profil → Sécuriser mon compte'
-        : 'Connexion réussie'
-    });
   };
 
   // Effect pour le compte à rebours du verrouillage
@@ -2521,7 +4323,7 @@ export default function NOCActivityApp() {
     };
   }, [callDialogOpen, activeCall]);
 
-  // Call state management - calling -> ringing -> connected, auto-hangup after 1min
+  // Call state management - calling -> ringing, then explicit response or auto-timeout after 1min
   useEffect(() => {
     if (!callDialogOpen || !activeCall) {
       setCallState('calling');
@@ -2536,24 +4338,16 @@ export default function NOCActivityApp() {
     // After 2 seconds, switch to ringing
     const ringingTimeout = setTimeout(() => {
       setCallState('ringing');
+      addNotification('Sonnerie en cours...', 'info', { conversationId: activeCall.conversationId });
     }, 2000);
-
-    // After 8-15 seconds (simulated answer), switch to connected
-    const answerDelay = 8000 + Math.random() * 7000;
-    const answerTimeout = setTimeout(() => {
-      setCallState('connected');
-      setCallTimer(0); // Reset timer when connected
-      setCallStartTime(new Date());
-      toast.success('Appel connecté');
-    }, answerDelay);
 
     // Auto-hangup after 60 seconds if no answer
     const autoHangupTimeout = setTimeout(() => {
-      setCallDialogOpen(false);
-      setActiveCall(null);
-      setCallTimer(0);
-      setCallState('ended');
-      setCallParticipants([]);
+      closeCallSession(
+        'missed',
+        "La personne n'est pas apte pour répondre pour l'instant",
+        activeCall
+      );
       toast.info('Pas de réponse', { description: 'L\'appel n\'a pas été répondu après 1 minute' });
     }, 60000);
 
@@ -2561,10 +4355,9 @@ export default function NOCActivityApp() {
 
     return () => {
       clearTimeout(ringingTimeout);
-      clearTimeout(answerTimeout);
       clearTimeout(autoHangupTimeout);
     };
-  }, [callDialogOpen, activeCall]);
+  }, [activeCall, addNotification, callDialogOpen, closeCallSession]);
 
   // Close context menu on click outside
   useEffect(() => {
@@ -2575,53 +4368,189 @@ export default function NOCActivityApp() {
     }
   }, [showContextMenu]);
 
-  const handleAvatarUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64 = reader.result as string;
-        setTempProfilePhoto(base64);
-        setProfilePhotoDialogOpen(true);
-      };
-      reader.readAsDataURL(file);
+  const persistUserProfile = useCallback(
+    async (payload: {
+      firstName?: string;
+      lastName?: string;
+      name?: string;
+      email?: string;
+      username?: string;
+      avatar?: string | null;
+    }) => {
+      if (!user?.id) return null;
+
+      const response = await fetch('/api/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, actorId: user.id, ...payload }),
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result?.success || !result?.user) {
+        throw new Error(result?.error || 'Erreur lors de la mise à jour du profil');
+      }
+
+      const updatedUser = { ...user, ...result.user };
+      setUser(updatedUser);
+      localStorage.setItem('noc_user', JSON.stringify(updatedUser));
+
+      setAllUsers((prev) => {
+        const exists = prev.some((entry) => entry.id === updatedUser.id);
+        const updated = exists
+          ? prev.map((entry) => (entry.id === updatedUser.id ? { ...entry, ...updatedUser } : entry))
+          : [...prev, updatedUser];
+        localStorage.setItem('noc_all_users', JSON.stringify(updated));
+        return updated;
+      });
+
+      setConversations((prev) =>
+        prev.map((conversation) => ({
+          ...conversation,
+          participants: conversation.participants.map((participant) =>
+            participant.id === updatedUser.id ? { ...participant, avatar: updatedUser.avatar } : participant
+          ),
+        }))
+      );
+
+      setChatMessages((prev) =>
+        prev.map((message) =>
+          message.senderId === updatedUser.id
+            ? { ...message, senderAvatar: updatedUser.avatar, senderName: updatedUser.name }
+            : message
+        )
+      );
+
+      return updatedUser;
+    },
+    [user]
+  );
+
+  const openProfileCropDialog = useCallback(() => {
+    if (profilePhotoDialogTimerRef.current) {
+      clearTimeout(profilePhotoDialogTimerRef.current);
+      profilePhotoDialogTimerRef.current = null;
     }
+
+    setProfilePhotoDialogOpen(false);
+    profilePhotoDialogTimerRef.current = setTimeout(() => {
+      setProfilePhotoDialogOpen(true);
+
+      // Retry once to avoid occasional dialog race conditions on desktop browsers.
+      profilePhotoDialogTimerRef.current = setTimeout(() => {
+        setProfilePhotoDialogOpen((current) => (current ? current : true));
+      }, 180);
+    }, 80);
+  }, []);
+
+  const handleAvatarFileSelection = useCallback(
+    (file: File | null | undefined) => {
+      if (!file) return;
+
+      const fileName = (file.name || '').toLowerCase();
+      const hasImageExt = /\.(jpg|jpeg|png|webp|gif|heic|heif|bmp)$/i.test(fileName);
+      if (file.type && !file.type.startsWith('image/') && !hasImageExt) {
+        toast.error('Fichier invalide', { description: 'Veuillez choisir une image.' });
+        return;
+      }
+
+      if (tempAvatarObjectUrlRef.current) {
+        URL.revokeObjectURL(tempAvatarObjectUrlRef.current);
+        tempAvatarObjectUrlRef.current = null;
+      }
+
+      const objectUrl = URL.createObjectURL(file);
+      tempAvatarObjectUrlRef.current = objectUrl;
+      setTempProfilePhoto(objectUrl);
+      setProfileCrop({ x: 0, y: 0 });
+      setProfileZoom(1.2);
+      setProfileCroppedAreaPixels(null);
+      setProfileDialogOpen(false);
+      openProfileCropDialog();
+    },
+    [openProfileCropDialog]
+  );
+
+  const handleAvatarUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    handleAvatarFileSelection(event.target.files?.[0]);
+    event.target.value = '';
   };
 
+  const clearTempAvatarObjectUrl = useCallback(() => {
+    if (tempAvatarObjectUrlRef.current) {
+      URL.revokeObjectURL(tempAvatarObjectUrlRef.current);
+      tempAvatarObjectUrlRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (profilePhotoDialogTimerRef.current) {
+        clearTimeout(profilePhotoDialogTimerRef.current);
+        profilePhotoDialogTimerRef.current = null;
+      }
+      clearTempAvatarObjectUrl();
+    };
+  }, [clearTempAvatarObjectUrl]);
+
   // Save cropped profile photo
-  const handleSaveCroppedPhoto = () => {
-    if (tempProfilePhoto && user) {
-      // Create canvas for cropping
+  const handleSaveCroppedPhoto = async () => {
+    if (!tempProfilePhoto || !user) return;
+
+    try {
+      if (!profileCroppedAreaPixels) {
+        toast.error('Rognage incomplet', { description: 'Veuillez sélectionner une zone de rognage.' });
+        return;
+      }
+
       const img = new window.Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-        
-        const outputSize = 200;
-        canvas.width = outputSize;
-        canvas.height = outputSize;
-        
-        const scale = Math.min(img.width, img.height) / cropArea.size;
-        ctx.drawImage(
-          img,
-          cropArea.x * scale,
-          cropArea.y * scale,
-          cropArea.size * scale,
-          cropArea.size * scale,
-          0, 0,
-          outputSize, outputSize
-        );
-        
-        const croppedData = canvas.toDataURL('image/jpeg', 0.9);
-        const updatedUser = { ...user, avatar: croppedData };
-        setUser(updatedUser);
-        localStorage.setItem('noc_user', JSON.stringify(updatedUser));
-        setProfilePhotoDialogOpen(false);
-        setTempProfilePhoto(null);
-        toast.success('Photo mise à jour', { description: 'Votre photo de profil a été modifiée' });
-      };
-      img.src = tempProfilePhoto;
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error('Image invalide'));
+        img.src = tempProfilePhoto;
+      });
+
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        toast.error('Erreur rognage', { description: 'Canvas indisponible' });
+        return;
+      }
+
+      const outputSize = 320;
+      canvas.width = outputSize;
+      canvas.height = outputSize;
+
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, outputSize, outputSize);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(
+        img,
+        profileCroppedAreaPixels.x,
+        profileCroppedAreaPixels.y,
+        profileCroppedAreaPixels.width,
+        profileCroppedAreaPixels.height,
+        0,
+        0,
+        outputSize,
+        outputSize
+      );
+
+      const croppedData = canvas.toDataURL('image/jpeg', 0.92);
+      await persistUserProfile({ avatar: croppedData });
+      await fetchConversations();
+
+      setProfilePhotoDialogOpen(false);
+      setTempProfilePhoto(null);
+      clearTempAvatarObjectUrl();
+      toast.success('Photo mise à jour', {
+        description: 'Votre photo est enregistrée dans la base de données.',
+      });
+    } catch (error) {
+      console.error('Erreur sauvegarde photo profil', error);
+      toast.error('Erreur mise à jour photo', {
+        description: 'Impossible d\'enregistrer la photo de profil.',
+      });
     }
   };
 
@@ -2650,6 +4579,43 @@ export default function NOCActivityApp() {
     }
   }, [soundEnabled, soundOnNotification]);
 
+  useEffect(() => {
+    if (!selectedConversation || !user) return;
+
+    const conversationId = selectedConversation.id;
+    const incomingIds = chatMessages
+      .filter((message) => message.conversationId === conversationId && message.senderId !== user.id)
+      .map((message) => message.id);
+
+    const seenMap = seenIncomingMessageIdsByConversationRef.current;
+    const seenIds = seenMap[conversationId];
+
+    if (!seenIds) {
+      seenMap[conversationId] = new Set(incomingIds);
+      return;
+    }
+
+    const newIncomingIds = incomingIds.filter((id) => !seenIds.has(id));
+    const newIncomingCount = newIncomingIds.length;
+    if (newIncomingCount > 0) {
+      playMessageReceiveSound();
+      playNotificationSound();
+
+      const latestIncoming = chatMessages
+        .filter((message) => newIncomingIds.includes(message.id))
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+
+      if (latestIncoming) {
+        addNotification(`${latestIncoming.senderName}: ${latestIncoming.type === 'text' ? latestIncoming.content || 'Nouveau message' : `a envoyé ${latestIncoming.type}`}`, 'info', {
+          conversationId,
+          messageId: latestIncoming.id,
+        });
+      }
+
+      incomingIds.forEach((id) => seenIds.add(id));
+    }
+  }, [chatMessages, selectedConversation, user, playMessageReceiveSound, playNotificationSound]);
+
   // Set custom background
   const handleSetBackground = (imageUrl: string | null) => {
     setCustomBackgroundImage(imageUrl);
@@ -2661,20 +4627,48 @@ export default function NOCActivityApp() {
     toast.success('Fond d\'écran mis à jour');
   };
 
-  const addNotification = (message: string, type: NotificationItem['type']) => {
-    const notif: NotificationItem = {
-      id: Date.now().toString(),
-      message,
-      type,
-      read: false,
-      createdAt: new Date()
-    };
-    setNotifications(prev => [notif, ...prev]);
-  };
-
   const markNotificationRead = (id: string) => {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
   };
+
+  const handleNotificationClick = async (notification: NotificationItem) => {
+    markNotificationRead(notification.id);
+
+    if (notification.conversationId) {
+      setCurrentTabSafely('messagerie');
+
+      const targetConversation = conversations.find((conversation) => conversation.id === notification.conversationId);
+      if (targetConversation) {
+        setSelectedConversation(targetConversation);
+        setConversations((prev) =>
+          prev.map((conversation) =>
+            conversation.id === notification.conversationId
+              ? { ...conversation, unreadCount: 0 }
+              : conversation
+          )
+        );
+      }
+
+      await fetchMessages(notification.conversationId);
+      await fetchConversations();
+
+      if (notification.messageId) {
+        setTimeout(() => {
+          const target = document.getElementById(`message-${notification.messageId}`);
+          if (target) {
+            target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            target.classList.add('ring-2', 'ring-cyan-400');
+            setTimeout(() => target.classList.remove('ring-2', 'ring-cyan-400'), 1500);
+          }
+        }, 250);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (!notificationsOpen) return;
+    setNotifications((prev) => prev.map((notification) => ({ ...notification, read: true })));
+  }, [notificationsOpen]);
 
   // ============================================
   // HANDLERS GESTION UTILISATEURS
@@ -2692,78 +4686,293 @@ export default function NOCActivityApp() {
   };
 
   // Sauvegarder les modifications du profil
-  const handleSaveProfile = () => {
+  const handleSaveProfile = async () => {
     if (!user) return;
-    
-    const updatedUser = {
-      ...user,
-      firstName: editFirstName,
-      lastName: editLastName,
-      name: `${editFirstName} ${editLastName}`.trim(),
-      email: editEmail,
-      username: editUsername || user.username,
-      updatedAt: new Date()
-    };
-    
-    setUser(updatedUser);
-    localStorage.setItem('noc_user', JSON.stringify(updatedUser));
-    
-    // Mettre à jour dans allUsers
-    setAllUsers(prev => {
-      const updated = prev.map(u => u.id === user.id ? updatedUser : u);
-      localStorage.setItem('noc_all_users', JSON.stringify(updated));
-      return updated;
-    });
-    
-    addAuditLog('PROFILE_UPDATE', `Profil modifié: ${updatedUser.name}`);
-    setEditProfileDialogOpen(false);
-    toast.success('Profil mis à jour', { description: 'Vos informations ont été enregistrées' });
+
+    try {
+      const nextName = `${editFirstName} ${editLastName}`.trim() || user.name;
+      const updatedUser = await persistUserProfile({
+        firstName: editFirstName,
+        lastName: editLastName,
+        name: nextName,
+        email: editEmail,
+        username: editUsername || user.username,
+      });
+
+      if (updatedUser) {
+        addAuditLog('PROFILE_UPDATE', `Profil modifié: ${updatedUser.name}`);
+      }
+
+      setEditProfileDialogOpen(false);
+      toast.success('Profil mis à jour', {
+        description: 'Vos informations ont été enregistrées dans la base de données.',
+      });
+    } catch (error) {
+      console.error('Erreur save profile', error);
+      toast.error('Erreur', { description: 'Impossible de mettre à jour le profil' });
+    }
   };
+
+  const openAvatarViewer = useCallback((src?: string | null, name?: string) => {
+    if (!src) return;
+    setAvatarViewerData({ src, name: name || 'Photo de profil' });
+    setAvatarViewerOpen(true);
+  }, []);
+
+  const clampSidebarWidth = useCallback((width: number) => {
+    return Math.max(220, Math.min(420, width));
+  }, []);
+
+  const startSidebarResize = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      if (sidebarCollapsed) return;
+
+      event.preventDefault();
+      setIsSidebarResizing(true);
+      document.body.style.userSelect = 'none';
+      document.body.style.cursor = 'col-resize';
+
+      const handleMouseMove = (moveEvent: MouseEvent) => {
+        const targetWidth =
+          sidebarPosition === 'left'
+            ? moveEvent.clientX
+            : window.innerWidth - moveEvent.clientX;
+
+        if (sidebarResizeFrameRef.current) {
+          cancelAnimationFrame(sidebarResizeFrameRef.current);
+        }
+
+        sidebarResizeFrameRef.current = requestAnimationFrame(() => {
+          setSidebarWidth(clampSidebarWidth(targetWidth));
+        });
+      };
+
+      const handleMouseUp = () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+        if (sidebarResizeFrameRef.current) {
+          cancelAnimationFrame(sidebarResizeFrameRef.current);
+          sidebarResizeFrameRef.current = null;
+        }
+        document.body.style.userSelect = '';
+        document.body.style.cursor = '';
+        setIsSidebarResizing(false);
+      };
+
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    },
+    [clampSidebarWidth, sidebarCollapsed, sidebarPosition]
+  );
+
+  useEffect(() => {
+    try {
+      const savedPosition = localStorage.getItem('noc_sidebar_position');
+      const savedWidth = localStorage.getItem('noc_sidebar_width');
+
+      if (savedPosition === 'left' || savedPosition === 'right') {
+        setSidebarPosition(savedPosition);
+      }
+
+      if (savedWidth) {
+        const parsedWidth = Number(savedWidth);
+        if (!Number.isNaN(parsedWidth)) {
+          setSidebarWidth(clampSidebarWidth(parsedWidth));
+        }
+      }
+    } catch (error) {
+      console.error('Impossible de charger les préférences de sidebar', error);
+    }
+  }, [clampSidebarWidth]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('noc_sidebar_position', sidebarPosition);
+      localStorage.setItem('noc_sidebar_width', String(sidebarWidth));
+    } catch (error) {
+      console.error('Impossible de sauvegarder les préférences de sidebar', error);
+    }
+  }, [sidebarPosition, sidebarWidth]);
+
+  useEffect(() => {
+    return () => {
+      if (sidebarResizeFrameRef.current) {
+        cancelAnimationFrame(sidebarResizeFrameRef.current);
+        sidebarResizeFrameRef.current = null;
+      }
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const storageKey = `noc_security_banner_dismissed_${user.id}`;
+    const dismissed = localStorage.getItem(storageKey) === '1';
+    setHideSecurityBanner(dismissed);
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id || user.mustChangePassword) return;
+    const storageKey = `noc_security_banner_dismissed_${user.id}`;
+    localStorage.removeItem(storageKey);
+    setHideSecurityBanner(false);
+  }, [user?.id, user?.mustChangePassword]);
 
   // Ouvrir le dialog de sécurité
   const openSecurityDialog = () => {
+    setSelectedUser(null);
     setEditPassword('');
     setConfirmPassword('');
     setSecurityDialogOpen(true);
   };
 
+  const openCreateUserDialog = () => {
+    setUserToEdit(null);
+    setEditFirstName('');
+    setEditLastName('');
+    setEditEmail('');
+    setEditUsername('');
+    setEditPassword('');
+    setConfirmPassword('');
+    setEditRole('USER');
+    setEditShift('');
+    setEditResponsibility('');
+    setEditUserIsActive(true);
+    setEditUserIsBlocked(false);
+    setCreateUserDialogOpen(true);
+  };
+
+  const openEditUserDialog = (targetUser: UserProfile) => {
+    setUserToEdit(targetUser);
+    setEditFirstName(targetUser.firstName || '');
+    setEditLastName(targetUser.lastName || '');
+    setEditEmail(targetUser.email || '');
+    setEditUsername(targetUser.username || '');
+    setEditPassword('');
+    setConfirmPassword('');
+    setEditRole(targetUser.role);
+    setEditShift(targetUser.shift?.name || (targetUser.shiftId?.replace('shift-', '').toUpperCase() || ''));
+    setEditResponsibility(targetUser.responsibility || '');
+    setEditUserIsActive(Boolean(targetUser.isActive));
+    setEditUserIsBlocked(Boolean(targetUser.isBlocked));
+    setEditUserDialogOpen(true);
+  };
+
   // Sauvegarder les paramètres de sécurité
-  const handleSaveSecurity = () => {
+  const handleSaveSecurity = async () => {
     if (!user) return;
-    
+
     // Validation du mot de passe
     const validation = validatePassword(editPassword);
     if (!validation.isValid) {
       toast.error('Mot de passe invalide', { description: 'Le mot de passe doit contenir au moins 8 caractères, une majuscule, un chiffre et un caractère spécial' });
       return;
     }
-    
+
     if (editPassword !== confirmPassword) {
       toast.error('Erreur', { description: 'Les mots de passe ne correspondent pas' });
       return;
     }
-    
-    const updatedUser = {
-      ...user,
-      passwordHash: hashPassword(editPassword),
-      mustChangePassword: false,
-      isFirstLogin: false,
-      updatedAt: new Date()
-    };
-    
-    setUser(updatedUser);
-    localStorage.setItem('noc_user', JSON.stringify(updatedUser));
-    
-    // Mettre à jour dans allUsers
-    setAllUsers(prev => {
-      const updated = prev.map(u => u.id === user.id ? updatedUser : u);
-      localStorage.setItem('noc_all_users', JSON.stringify(updated));
-      return updated;
-    });
-    
+
+    if (isAdminPasswordResetMode && selectedUser) {
+      await handleResetUserPassword(selectedUser, editPassword);
+      setSecurityDialogOpen(false);
+      setSelectedUser(null);
+      setEditPassword('');
+      setConfirmPassword('');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          actorId: user.id,
+          newPassword: editPassword,
+          changePassword: true,
+        }),
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result?.success || !result?.user) {
+        throw new Error(result?.error || 'Échec de mise à jour du mot de passe');
+      }
+
+      const updatedUser = {
+        ...user,
+        ...result.user,
+        mustChangePassword: false,
+        isFirstLogin: false,
+        updatedAt: new Date(),
+      };
+
+      setUser(updatedUser);
+      localStorage.setItem('noc_user', JSON.stringify(updatedUser));
+
+      setAllUsers(prev => {
+        const updated = prev.map(u => u.id === user.id ? updatedUser : u);
+        localStorage.setItem('noc_all_users', JSON.stringify(updated));
+        return updated;
+      });
+    } catch (error) {
+      toast.error('Erreur', { description: error instanceof Error ? error.message : 'Impossible de sauvegarder le mot de passe en base' });
+      return;
+    }
+
     addAuditLog('PASSWORD_CHANGE', 'Mot de passe modifié');
     setSecurityDialogOpen(false);
-    toast.success('Sécurité mise à jour', { description: 'Votre mot de passe a été changé avec succès' });
+    setSelectedUser(null);
+    toast.success('Sécurité mise à jour', { description: 'Votre mot de passe a été changé en base de données avec succès' });
+  };
+
+  const handleChangeUserRole = async (targetUser: UserProfile, nextRole: UserRole) => {
+    if (!canManageUsers || !user?.id) return;
+    if (targetUser.role === nextRole) return;
+    if (targetUser.role === 'SUPER_ADMIN' && user?.id !== targetUser.id) {
+      toast.error('Action interdite', { description: 'Impossible de modifier le rôle d\'un Super Admin' });
+      return;
+    }
+
+    setUsersActionInProgress(`role:${targetUser.id}`);
+    try {
+      const response = await fetch('/api/users', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          adminId: user.id,
+          userId: targetUser.id,
+          role: nextRole,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result?.success || !result?.user) {
+        throw new Error(result?.error || 'Erreur lors de la mise à jour du rôle');
+      }
+
+      const updatedUser = { ...targetUser, ...result.user, updatedAt: new Date() };
+
+      setAllUsers((prev) => {
+        const updated = prev.map((entry) => (entry.id === targetUser.id ? updatedUser : entry));
+        localStorage.setItem('noc_all_users', JSON.stringify(updated));
+        return updated;
+      });
+
+      if (user?.id === targetUser.id) {
+        setUser(updatedUser);
+        localStorage.setItem('noc_user', JSON.stringify(updatedUser));
+      }
+    } catch (error) {
+      toast.error('Erreur', { description: error instanceof Error ? error.message : 'Mise à jour du rôle impossible' });
+      return;
+    } finally {
+      setUsersActionInProgress(null);
+    }
+
+    addAuditLog('USER_ROLE_CHANGED', `Rôle modifié pour ${targetUser.name}: ${targetUser.role} -> ${nextRole}`);
+    toast.success('Rôle mis à jour', { description: `${targetUser.name} est maintenant ${ROLE_CONFIG[nextRole].label}` });
   };
 
   // Ouvrir le dialog de définition du shift
@@ -2808,8 +5017,8 @@ export default function NOCActivityApp() {
   };
 
   // Créer un nouvel utilisateur (Super Admin uniquement)
-  const handleCreateUser = () => {
-    if (!isSuperAdmin(user)) return;
+  const handleCreateUser = async () => {
+    if (!canManageUsers || !user?.id) return;
     
     if (!editEmail.endsWith('@siliconeconnect.com')) {
       toast.error('Email invalide', { description: 'L\'email doit être @siliconeconnect.com' });
@@ -2822,33 +5031,48 @@ export default function NOCActivityApp() {
       return;
     }
     
-    const newUser: UserProfile = {
-      id: generateId(),
-      email: editEmail,
-      name: `${editFirstName} ${editLastName}`.trim(),
-      firstName: editFirstName,
-      lastName: editLastName,
-      username: editUsername || editEmail.split('@')[0],
-      passwordHash: hashPassword(editPassword),
-      role: editRole,
-      isActive: true,
-      isBlocked: false,
-      isFirstLogin: true,
-      mustChangePassword: true,
-      failedLoginAttempts: 0,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
+    const nextShiftId = editShift ? `shift-${editShift.toLowerCase()}` : undefined;
+
+    setUsersActionInProgress('create');
+    try {
+      const response = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          adminId: user.id,
+          email: editEmail,
+          name: `${editFirstName} ${editLastName}`.trim(),
+          firstName: editFirstName,
+          lastName: editLastName,
+          username: editUsername || editEmail.split('@')[0],
+          password: editPassword,
+          role: editRole,
+          shiftId: nextShiftId,
+          responsibility: editResponsibility || undefined,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result?.success || !result?.user) {
+        throw new Error(result?.error || 'Erreur lors de la création de l\'utilisateur');
+      }
+
+      const createdUser = { ...result.user, updatedAt: new Date(), createdAt: new Date() } as UserProfile;
+
+      setAllUsers(prev => {
+        const updated = [...prev.filter((u) => u.id !== createdUser.id), createdUser];
+        localStorage.setItem('noc_all_users', JSON.stringify(updated));
+        return updated;
+      });
+    } catch (error) {
+      toast.error('Erreur', { description: error instanceof Error ? error.message : 'Création impossible' });
+      return;
+    } finally {
+      setUsersActionInProgress(null);
+    }
     
-    setAllUsers(prev => {
-      const updated = [...prev, newUser];
-      localStorage.setItem('noc_all_users', JSON.stringify(updated));
-      return updated;
-    });
-    
-    addAuditLog('USER_CREATED', `Utilisateur créé: ${newUser.name} (${newUser.role})`);
+    addAuditLog('USER_CREATED', `Utilisateur créé: ${editFirstName} ${editLastName} (${editRole})`);
     setCreateUserDialogOpen(false);
-    toast.success('Utilisateur créé', { description: `${newUser.name} a été ajouté avec succès` });
+    toast.success('Utilisateur créé', { description: `${editFirstName} ${editLastName}`.trim() + ' a été ajouté avec succès' });
     
     // Réinitialiser le formulaire
     setEditFirstName('');
@@ -2858,11 +5082,77 @@ export default function NOCActivityApp() {
     setEditPassword('');
     setConfirmPassword('');
     setEditRole('USER');
+    setEditShift('');
+    setEditResponsibility('');
+  };
+
+  const handleUpdateUserDetails = async () => {
+    if (!canManageUsers || !user?.id || !userToEdit) return;
+
+    if (!editEmail.endsWith('@siliconeconnect.com')) {
+      toast.error('Email invalide', { description: 'L\'email doit être @siliconeconnect.com' });
+      return;
+    }
+
+    const fullName = `${editFirstName} ${editLastName}`.trim();
+    if (!fullName) {
+      toast.error('Nom requis', { description: 'Le prénom et/ou le nom doivent être renseignés' });
+      return;
+    }
+
+    const nextShiftId = editShift ? `shift-${editShift.toLowerCase()}` : null;
+
+    setUsersActionInProgress(`edit:${userToEdit.id}`);
+    try {
+      const response = await fetch('/api/users', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          adminId: user.id,
+          userId: userToEdit.id,
+          name: fullName,
+          firstName: editFirstName,
+          lastName: editLastName,
+          email: editEmail,
+          username: editUsername || null,
+          role: editRole,
+          shiftId: nextShiftId,
+          responsibility: editResponsibility || null,
+          isActive: editUserIsActive,
+          isBlocked: editUserIsBlocked,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result?.success || !result?.user) {
+        throw new Error(result?.error || 'Mise à jour impossible');
+      }
+
+      const updatedUser = { ...userToEdit, ...result.user, updatedAt: new Date() } as UserProfile;
+      setAllUsers((prev) => {
+        const updated = prev.map((entry) => (entry.id === userToEdit.id ? updatedUser : entry));
+        localStorage.setItem('noc_all_users', JSON.stringify(updated));
+        return updated;
+      });
+
+      if (user.id === userToEdit.id) {
+        setUser(updatedUser);
+        localStorage.setItem('noc_user', JSON.stringify(updatedUser));
+      }
+
+      addAuditLog('USER_UPDATED', `Utilisateur modifié: ${updatedUser.name} (${updatedUser.role})`);
+      toast.success('Utilisateur modifié', { description: 'Toutes les informations ont été enregistrées en base' });
+      setEditUserDialogOpen(false);
+      setUserToEdit(null);
+    } catch (error) {
+      toast.error('Erreur', { description: error instanceof Error ? error.message : 'Mise à jour impossible' });
+    } finally {
+      setUsersActionInProgress(null);
+    }
   };
 
   // Bloquer/Débloquer un utilisateur
-  const handleToggleBlockUser = (targetUser: UserProfile) => {
-    if (!isSuperAdmin(user)) return;
+  const handleToggleBlockUser = async (targetUser: UserProfile) => {
+    if (!canManageUsers || !user?.id) return;
     
     const updatedUser = {
       ...targetUser,
@@ -2870,19 +5160,42 @@ export default function NOCActivityApp() {
       updatedAt: new Date()
     };
     
-    setAllUsers(prev => {
-      const updated = prev.map(u => u.id === targetUser.id ? updatedUser : u);
-      localStorage.setItem('noc_all_users', JSON.stringify(updated));
-      return updated;
-    });
+    setUsersActionInProgress(`block:${targetUser.id}`);
+    try {
+      const response = await fetch('/api/users', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          adminId: user.id,
+          userId: targetUser.id,
+          isBlocked: !targetUser.isBlocked,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result?.success || !result?.user) {
+        throw new Error(result?.error || 'Erreur lors du blocage/déblocage');
+      }
+
+      const syncedUser = { ...updatedUser, ...result.user };
+      setAllUsers(prev => {
+        const updated = prev.map(u => u.id === targetUser.id ? syncedUser : u);
+        localStorage.setItem('noc_all_users', JSON.stringify(updated));
+        return updated;
+      });
+    } catch (error) {
+      toast.error('Erreur', { description: error instanceof Error ? error.message : 'Blocage/déblocage impossible' });
+      return;
+    } finally {
+      setUsersActionInProgress(null);
+    }
     
     addAuditLog('USER_BLOCK_TOGGLE', `Utilisateur ${updatedUser.isBlocked ? 'bloqué' : 'débloqué'}: ${targetUser.name}`);
     toast.success(updatedUser.isBlocked ? 'Utilisateur bloqué' : 'Utilisateur débloqué');
   };
 
   // Réinitialiser le mot de passe d'un utilisateur
-  const handleResetUserPassword = (targetUser: UserProfile, newPassword: string) => {
-    if (!isSuperAdmin(user)) return;
+  const handleResetUserPassword = async (targetUser: UserProfile, newPassword: string) => {
+    if (!canManageUsers || !user?.id) return;
     
     const updatedUser = {
       ...targetUser,
@@ -2891,33 +5204,152 @@ export default function NOCActivityApp() {
       updatedAt: new Date()
     };
     
-    setAllUsers(prev => {
-      const updated = prev.map(u => u.id === targetUser.id ? updatedUser : u);
-      localStorage.setItem('noc_all_users', JSON.stringify(updated));
-      return updated;
-    });
+    setUsersActionInProgress(`reset:${targetUser.id}`);
+    try {
+      const response = await fetch('/api/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          adminId: user.id,
+          targetUserId: targetUser.id,
+          newPassword,
+          forceResetPassword: true,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result?.success || !result?.user) {
+        throw new Error(result?.error || 'Erreur lors de la réinitialisation du mot de passe');
+      }
+
+      const syncedUser = { ...updatedUser, ...result.user };
+      setAllUsers(prev => {
+        const updated = prev.map(u => u.id === targetUser.id ? syncedUser : u);
+        localStorage.setItem('noc_all_users', JSON.stringify(updated));
+        return updated;
+      });
+    } catch (error) {
+      toast.error('Erreur', { description: error instanceof Error ? error.message : 'Réinitialisation impossible' });
+      return;
+    } finally {
+      setUsersActionInProgress(null);
+    }
     
     addAuditLog('PASSWORD_RESET', `Mot de passe réinitialisé pour: ${targetUser.name}`);
     toast.success('Mot de passe réinitialisé', { description: `Le mot de passe de ${targetUser.name} a été réinitialisé` });
   };
 
   // Supprimer un utilisateur
-  const handleDeleteUser = (targetUser: UserProfile) => {
-    if (!isSuperAdmin(user)) return;
+  const handleDeleteUser = async (targetUser: UserProfile) => {
+    if (!isSuperAdmin(user) || !user?.id) return;
     if (targetUser.role === 'SUPER_ADMIN') {
       toast.error('Action interdite', { description: 'Impossible de supprimer un Super Admin' });
       return;
     }
     
+    // Ouvrir le dialog de confirmation au lieu de supprimer directement
+    setUserToDelete(targetUser);
+    setDeleteConfirmationInput('');
+    setDeleteConfirmationOpen(true);
+  };
+
+  const confirmDeleteUser = async () => {
+    if (!userToDelete || !user?.id) return;
+    if (!isSuperAdmin(user)) return;
+
+    // Récupérer le pseudo ou le nom pour la confirmation
+    const requiredText = userToDelete.username || userToDelete.name;
+    
+    // Vérifier que l'utilisateur a bien recopié le pseudo/nom
+    if (deleteConfirmationInput.trim() !== requiredText) {
+      toast.error('Erreur', { description: 'Le pseudo/nom saisi ne correspond pas' });
+      return;
+    }
+
+    setUsersActionInProgress(`delete:${userToDelete.id}`);
+    setDeleteConfirmationOpen(false);
+    
+    try {
+      const response = await fetch(`/api/users?adminId=${encodeURIComponent(user.id)}&userId=${encodeURIComponent(userToDelete.id)}&permanent=true`, {
+        method: 'DELETE',
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result?.success) {
+        throw new Error(result?.error || 'Erreur lors de la suppression de l\'utilisateur');
+      }
+    } catch (error) {
+      toast.error('Erreur', { description: error instanceof Error ? error.message : 'Suppression impossible' });
+      return;
+    } finally {
+      setUsersActionInProgress(null);
+    }
+
     setAllUsers(prev => {
-      const updated = prev.filter(u => u.id !== targetUser.id);
+      const updated = prev.filter(u => u.id !== userToDelete.id);
       localStorage.setItem('noc_all_users', JSON.stringify(updated));
       return updated;
     });
     
-    addAuditLog('USER_DELETED', `Utilisateur supprimé: ${targetUser.name}`);
+    addAuditLog('USER_DELETED', `Utilisateur supprimé: ${userToDelete.name}`);
     toast.success('Utilisateur supprimé');
+    setUserToDelete(null);
+    setDeleteConfirmationInput('');
   };
+
+  // Rafraîchir le journal d'activité
+  const refreshAuditLog = async () => {
+    setAuditLogRefreshing(true);
+    try {
+      const response = await fetch('/api/system?action=getAuditLog', {
+        method: 'GET',
+      });
+      if (response.ok) {
+        const result = await response.json();
+        setAuditLogs(result.logs || []);
+        toast.success('Journal d\'activité rafraîchi');
+      }
+    } catch (error) {
+      toast.error('Erreur lors du rafraîchissement', {
+        description: 'Impossible de récupérer le journal d\'activité'
+      });
+    } finally {
+      setAuditLogRefreshing(false);
+    }
+  };
+
+  // Filtrer le journal d'activité
+  const filteredAuditLogs = auditLogs.filter(log => {
+    // Filtre par date
+    const logDate = new Date(log.createdAt);
+    if (auditLogDateFrom) {
+      const fromDate = new Date(auditLogDateFrom);
+      if (logDate < fromDate) return false;
+    }
+    if (auditLogDateTo) {
+      const toDate = new Date(auditLogDateTo);
+      toDate.setHours(23, 59, 59, 999);
+      if (logDate > toDate) return false;
+    }
+    
+    // Filtre par type d'action
+    if (auditLogActionType !== 'all' && log.action !== auditLogActionType) {
+      return false;
+    }
+    
+    // Filtre par statut
+    if (auditLogStatusFilter !== 'all' && log.status !== auditLogStatusFilter) {
+      return false;
+    }
+    
+    // Filtre par utilisateur
+    if (auditLogUserFilter && !log.userName.toLowerCase().includes(auditLogUserFilter.toLowerCase())) {
+      return false;
+    }
+    
+    return true;
+  });
+
+  // Obtenir les types d'actions uniques
+  const uniqueActionTypes = Array.from(new Set(auditLogs.map(log => log.action))).sort();
 
   // Filtrer les utilisateurs
   const filteredUsers = allUsers.filter(u => {
@@ -4022,7 +6454,7 @@ export default function NOCActivityApp() {
               <AlertTriangle className="w-5 h-5 flex-shrink-0 animate-pulse" />
               <div className="flex-1 text-center">
                 <span className="font-semibold">⚠️ SÉCURITÉ REQUISE :</span>{' '}
-                <span>Pour des raisons de sécurité, vous devez changer votre mot de passe avant de continuer.</span>
+                <span>Vous devez changer votre mot de passe avant de pouvoir utiliser l'application.</span>
               </div>
               <Button
                 variant="secondary"
@@ -4034,6 +6466,29 @@ export default function NOCActivityApp() {
                 Changer maintenant
               </Button>
             </div>
+          </div>
+        )}
+
+        {user?.mustChangePassword && !securityDialogOpen && (
+          <div className="fixed inset-0 z-[65] bg-black/60 backdrop-blur-[2px] flex items-center justify-center p-4">
+            <Card className="w-full max-w-xl">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-amber-600">
+                  <AlertTriangle className="w-5 h-5" />
+                  Changement de mot de passe obligatoire
+                </CardTitle>
+                <CardDescription>
+                  Votre compte est temporairement restreint. Vous devez définir un nouveau mot de passe pour continuer.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col sm:flex-row gap-2 justify-end">
+                <Button variant="outline" onClick={handleLogout}>Se déconnecter</Button>
+                <Button onClick={openSecurityDialog}>
+                  <Lock className="w-4 h-4 mr-2" />
+                  Ouvrir le formulaire
+                </Button>
+              </CardContent>
+            </Card>
           </div>
         )}
 
@@ -4069,7 +6524,7 @@ export default function NOCActivityApp() {
             </div>
             
             {/* Notifications */}
-            <Popover>
+            <Popover open={notificationsOpen} onOpenChange={setNotificationsOpen}>
               <PopoverTrigger asChild>
                 <Button variant="ghost" size="icon" className="relative">
                   <Bell className="h-5 w-5" />
@@ -4086,7 +6541,9 @@ export default function NOCActivityApp() {
                   {notifications.map(n => (
                     <div
                       key={n.id}
-                      onClick={() => markNotificationRead(n.id)}
+                      onClick={() => {
+                        void handleNotificationClick(n);
+                      }}
                       className={`p-3 border-b hover:bg-muted/50 cursor-pointer flex items-start gap-2 ${n.read ? 'opacity-60' : ''}`}
                     >
                       {n.type === 'success' && <CheckCircle2 className="w-4 h-4 text-green-500 mt-0.5" />}
@@ -4109,14 +6566,33 @@ export default function NOCActivityApp() {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="gap-2 h-9">
-                  <Avatar className="h-8 w-8">
-                    {user?.avatar ? (
-                      <AvatarImage src={user.avatar} alt={user.name} />
-                    ) : null}
-                    <AvatarFallback className="bg-gradient-to-br from-blue-500 to-cyan-500 text-white text-sm">
-                      {user?.name?.charAt(0) || 'U'}
-                    </AvatarFallback>
-                  </Avatar>
+                  <div 
+                    className="relative h-8 w-8 cursor-pointer group"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      if (event.detail === 2) {
+                        // Double-click pour ouvrir le dialog de changement
+                        setProfileDialogOpen(true);
+                      } else {
+                        // Simple click pour voir la photo en grand
+                        openAvatarViewer(user?.avatar, user?.name);
+                      }
+                    }}
+                    title="Clic simple: voir la photo | Double-clic: changer la photo"
+                  >
+                    <Avatar className="h-8 w-8">
+                      {user?.avatar ? (
+                        <AvatarImage src={user.avatar} alt={user.name} />
+                      ) : null}
+                      <AvatarFallback className="bg-gradient-to-br from-blue-500 to-cyan-500 text-white text-sm">
+                        {user?.name?.charAt(0) || 'U'}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="absolute bottom-0 right-0 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Camera className="w-3 h-3 text-white" />
+                    </div>
+                  </div>
                   <div className="hidden lg:block text-left">
                     <p className="text-sm font-medium leading-none">{user?.name}</p>
                     <p className="text-xs text-muted-foreground">{user?.role}</p>
@@ -4155,7 +6631,7 @@ export default function NOCActivityApp() {
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuLabel className="text-xs text-muted-foreground">Administration</DropdownMenuLabel>
-                    <DropdownMenuItem onClick={() => setUsersManagementOpen(true)} className="gap-2">
+                    <DropdownMenuItem onClick={() => setCurrentTabSafely('admin_users')} className="gap-2">
                       <Users className="w-4 h-4" />
                       Gérer les utilisateurs
                     </DropdownMenuItem>
@@ -4171,44 +6647,71 @@ export default function NOCActivityApp() {
           </div>
         </header>
 
-        <div className="flex">
+        <div className={`flex ${sidebarPosition === 'right' ? 'lg:flex-row-reverse' : ''}`}>
           {/* Sidebar */}
-          <aside className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} fixed lg:sticky top-14 left-0 z-40 ${sidebarCollapsed ? 'lg:w-16' : 'lg:w-60'} w-60 h-[calc(100vh-3.5rem)] border-r bg-background transition-all duration-300 lg:translate-x-0`}>
+          <aside
+            className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} fixed lg:sticky top-14 left-0 z-40 w-60 lg:w-auto h-[calc(100vh-3.5rem)] border-r bg-background transition-all duration-300 lg:translate-x-0 relative`}
+            style={{ width: sidebarCollapsed ? 64 : sidebarWidth }}
+          >
             {/* Collapse/Expand Toggle - Desktop only */}
-            <div className="hidden lg:flex justify-end p-2 border-b">
+            <div className="hidden lg:flex items-center justify-between gap-2 p-2 border-b">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0"
+                onClick={() => setSidebarPosition((current) => (current === 'left' ? 'right' : 'left'))}
+                aria-label={sidebarPosition === 'left' ? 'Placer la sidebar à droite' : 'Placer la sidebar à gauche'}
+                title={sidebarPosition === 'left' ? 'Placer la sidebar à droite' : 'Placer la sidebar à gauche'}
+              >
+                {sidebarPosition === 'left' ? <AlignRight className="w-4 h-4" /> : <AlignLeft className="w-4 h-4" />}
+              </Button>
               <Button
                 variant="ghost"
                 size="sm"
                 className="h-8 w-8 p-0"
                 onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                aria-label={sidebarCollapsed ? 'Étendre la sidebar' : 'Réduire la sidebar'}
+                title={sidebarCollapsed ? 'Étendre la sidebar' : 'Réduire la sidebar'}
               >
                 {sidebarCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
               </Button>
             </div>
+            {!sidebarCollapsed && (
+              <div
+                className={`hidden lg:block absolute top-0 bottom-0 w-2 z-50 cursor-col-resize ${sidebarPosition === 'left' ? 'right-0 translate-x-1/2' : 'left-0 -translate-x-1/2'}`}
+                onMouseDown={startSidebarResize}
+                role="separator"
+                aria-label="Redimensionner la sidebar"
+                aria-orientation="vertical"
+                title="Glisser pour redimensionner"
+              >
+                <div className={`absolute inset-y-0 ${sidebarPosition === 'left' ? 'left-1' : 'right-1'} w-[2px] rounded-full ${isSidebarResizing ? 'bg-cyan-500/80' : 'bg-border/40'}`} />
+              </div>
+            )}
             <ScrollArea className="h-full">
               <nav className="p-3 space-y-1">
-                <Button variant={currentTab === 'dashboard' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTab('dashboard')}>
+                <Button variant={currentTab === 'dashboard' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTabSafely('dashboard')}>
                   <LayoutDashboard className="w-5 h-5" /> {!sidebarCollapsed && 'Tableau de bord'}
                 </Button>
-                <Button variant={currentTab === 'planning' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTab('planning')}>
+                <Button variant={currentTab === 'planning' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTabSafely('planning')}>
                   <Calendar className="w-5 h-5" /> {!sidebarCollapsed && 'Planning'}
                 </Button>
-                <Button variant={currentTab === 'tasks' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTab('tasks')}>
+                <Button variant={currentTab === 'tasks' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTabSafely('tasks')}>
                   <ClipboardList className="w-5 h-5" /> {!sidebarCollapsed && 'Mes Tâches'}
                 </Button>
-                <Button variant={currentTab === 'activities' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTab('activities')}>
+                <Button variant={currentTab === 'activities' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTabSafely('activities')}>
                   <Activity className="w-5 h-5" /> {!sidebarCollapsed && 'Activités'}
                 </Button>
-                <Button variant={currentTab === 'tickets' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTab('tickets')}>
+                <Button variant={currentTab === 'tickets' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTabSafely('tickets')}>
                   <Ticket className="w-5 h-5" /> {!sidebarCollapsed && 'Gestion Tickets'}
                 </Button>
-                <Button variant={currentTab === 'overtime' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTab('overtime')}>
+                <Button variant={currentTab === 'overtime' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTabSafely('overtime')}>
                   <Clock className="w-5 h-5" /> {!sidebarCollapsed && 'Heures Sup.'}
                 </Button>
-                <Button variant={currentTab === 'links' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTab('links')}>
+                <Button variant={currentTab === 'links' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTabSafely('links')}>
                   <ExternalLink className="w-5 h-5" /> {!sidebarCollapsed && 'Liens Externes'}
                 </Button>
-                <Button variant={currentTab === 'email' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTab('email')}>
+                <Button variant={currentTab === 'email' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTabSafely('email')}>
                   <MessageCircle className="w-5 h-5" /> {!sidebarCollapsed && 'Chats'}
                   {!sidebarCollapsed && conversations.reduce((acc, c) => acc + c.unreadCount, 0) > 0 && (
                     <Badge className="ml-auto bg-green-500 text-white text-xs px-1.5 py-0.5 min-w-[20px] justify-center">
@@ -4216,7 +6719,7 @@ export default function NOCActivityApp() {
                     </Badge>
                   )}
                 </Button>
-                <Button variant={currentTab === 'messagerie' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTab('messagerie')}>
+                <Button variant={currentTab === 'messagerie' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTabSafely('messagerie')}>
                   <Mail className="w-5 h-5" /> {!sidebarCollapsed && 'Messagerie'}
                   {!sidebarCollapsed && messages.filter(m => m.folder === 'inbox' && !m.isRead).length > 0 && (
                     <Badge className="ml-auto bg-red-500 text-white text-xs px-1.5 py-0.5 min-w-[20px] justify-center">
@@ -4224,7 +6727,7 @@ export default function NOCActivityApp() {
                     </Badge>
                   )}
                 </Button>
-                <Button variant={currentTab === 'ged' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTab('ged')}>
+                <Button variant={currentTab === 'ged' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTabSafely('ged')}>
                   <FileText className="w-5 h-5" /> {!sidebarCollapsed && 'GED Documents'}
                   {!sidebarCollapsed && gedDocuments.filter(d => d.status === 'en_attente').length > 0 && (
                     <Badge className="ml-auto bg-orange-500 text-white text-xs px-1.5 py-0.5 min-w-[20px] justify-center">
@@ -4236,15 +6739,21 @@ export default function NOCActivityApp() {
                 {(user?.role === 'RESPONSABLE' || user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && (
                   <>
                     <Separator className="my-2" />
-                    <Button variant={currentTab === 'supervision' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTab('supervision')}>
+                    <Button variant={currentTab === 'supervision' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTabSafely('supervision')}>
                       <Eye className="w-5 h-5" /> {!sidebarCollapsed && 'Supervision'}
                     </Button>
                   </>
                 )}
                 
-                {user?.role === 'ADMIN' && (
-                  <Button variant={currentTab === 'admin' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTab('admin')}>
+                {(user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && (
+                  <Button variant={currentTab === 'admin' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTabSafely('admin')}>
                     <Settings className="w-5 h-5" /> {!sidebarCollapsed && 'Administration'}
+                  </Button>
+                )}
+
+                {(user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && (
+                  <Button variant={currentTab === 'admin_users' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTabSafely('admin_users')}>
+                    <Users className="w-5 h-5" /> {!sidebarCollapsed && 'Utilisateurs'}
                   </Button>
                 )}
               </nav>
@@ -4774,7 +7283,10 @@ export default function NOCActivityApp() {
                       <div className="p-3 border-b bg-gradient-to-r from-cyan-600 to-cyan-700 text-white">
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex items-center gap-2">
-                            <Avatar className="w-10 h-10 border-2 border-white/30">
+                            <Avatar
+                              className="w-10 h-10 border-2 border-white/30 cursor-zoom-in"
+                              onClick={() => openAvatarViewer(user?.avatar, user?.name)}
+                            >
                               {user?.avatar ? <AvatarImage src={user.avatar} alt={user.name} /> : null}
                               <AvatarFallback className="bg-white/20 text-white">{user?.name?.charAt(0)?.toUpperCase() || 'U'}</AvatarFallback>
                             </Avatar>
@@ -4836,7 +7348,7 @@ export default function NOCActivityApp() {
                               )}
                             </div>
                             {/* Other users' status */}
-                            {Object.values(DEMO_USERS)
+                            {usersDirectory
                               .filter(u => u.id !== user?.id && statusList.some(s => s.userId === u.id && !s.blockedUsers.includes(user?.id || '')))
                               .map((statusUser) => {
                                 const userStatuses = statusList.filter(s => s.userId === statusUser.id && !s.blockedUsers.includes(user?.id || ''));
@@ -4907,13 +7419,17 @@ export default function NOCActivityApp() {
                               const isOnline = conversation.type === 'individual' && userPresence[otherParticipant?.id || ''] === 'online';
                               const isAnnonces = otherParticipant?.id === 'system-annonces';
                               return (
-                                <div key={conversation.id} onClick={() => { setSelectedConversation(conversation); setConversations(prev => prev.map(c => c.id === conversation.id ? {...c, unreadCount: 0} : c)); }} className={`flex items-center gap-3 p-3 cursor-pointer transition-all hover:bg-slate-50 dark:hover:bg-slate-800 ${selectedConversation?.id === conversation.id ? 'bg-slate-100 dark:bg-slate-800' : ''}`}>
+                                <div key={conversation.id} onClick={() => handleConversationSelect(conversation)} className={`flex items-center gap-3 p-3 cursor-pointer transition-all hover:bg-slate-50 dark:hover:bg-slate-800 ${selectedConversation?.id === conversation.id ? 'bg-slate-100 dark:bg-slate-800' : ''}`}>
                                   <div className="relative">
                                     <Avatar className="w-12 h-12">
                                       {isAnnonces ? (
-                                        <AvatarImage src="/logo_sc_icon.png" alt="Annonces" />
+                                        <AvatarImage src={announcementAvatar} alt="Annonces" />
+                                      ) : conversation.type === 'group' && conversation.avatar ? (
+                                        <AvatarImage src={conversation.avatar} alt={displayName || 'Groupe'} />
                                       ) : conversation.type === 'group' ? (
                                         <AvatarFallback className="bg-cyan-500 text-white"><Users className="w-6 h-6" /></AvatarFallback>
+                                      ) : otherParticipant?.avatar ? (
+                                        <AvatarImage src={otherParticipant.avatar} alt={displayName || 'Utilisateur'} />
                                       ) : (
                                         <AvatarFallback className="bg-cyan-500 text-white">{displayName?.charAt(0)?.toUpperCase()}</AvatarFallback>
                                       )}
@@ -4984,11 +7500,23 @@ export default function NOCActivityApp() {
                         <div className="relative bg-gradient-to-r from-cyan-600 to-cyan-700 text-white p-3 flex items-center justify-between z-10">
                           <div className="flex items-center gap-3">
                             <Button variant="ghost" size="icon" className="text-white lg:hidden" onClick={() => setSelectedConversation(null)}><ChevronLeft className="w-5 h-5" /></Button>
-                            <Avatar className="w-10 h-10">
-                              {selectedConversation.type === 'group' ? (
+                            <Avatar
+                              className="w-10 h-10 cursor-pointer"
+                              onClick={() =>
+                                openAvatarViewer(
+                                  selectedConversation.participants.find(p => p.id !== user?.id)?.avatar,
+                                  selectedConversation.participants.find(p => p.id !== user?.id)?.name
+                                )
+                              }
+                            >
+                              {selectedConversation.type === 'group' && selectedConversation.avatar ? (
+                                <AvatarImage src={selectedConversation.avatar} alt={selectedConversation.name || 'Groupe'} />
+                              ) : selectedConversation.type === 'group' ? (
                                 <AvatarFallback className="bg-cyan-500 text-white"><Users className="w-5 h-5" /></AvatarFallback>
                               ) : selectedConversation.participants.find(p => p.id !== user?.id)?.id === 'system-annonces' ? (
-                                <AvatarImage src="/logo_sc_icon.png" alt="Annonces" />
+                                <AvatarImage src={announcementAvatar} alt="Annonces" />
+                              ) : selectedConversation.participants.find(p => p.id !== user?.id)?.avatar ? (
+                                <AvatarImage src={selectedConversation.participants.find(p => p.id !== user?.id)?.avatar} alt={selectedConversation.participants.find(p => p.id !== user?.id)?.name || 'Utilisateur'} />
                               ) : (
                                 <AvatarFallback className="bg-cyan-500 text-white">{selectedConversation.participants.find(p => p.id !== user?.id)?.name?.charAt(0)?.toUpperCase()}</AvatarFallback>
                               )}
@@ -5000,7 +7528,8 @@ export default function NOCActivityApp() {
                               </p>
                               <p className="text-xs text-white/70">
                                 {selectedConversation.participants.find(p => p.id !== user?.id)?.id === 'system-annonces' ? 'Canal d\'annonces officiel' :
-                                typingIndicators.find(t => t.conversationId === selectedConversation.id)?.isTyping ? "En train d'écrire..." : 
+                                typingIndicators.find(t => t.conversationId === selectedConversation.id)?.isTyping ?
+                                  `${typingIndicators.find(t => t.conversationId === selectedConversation.id)?.userName || 'Utilisateur'} ${typingIndicators.find(t => t.conversationId === selectedConversation.id)?.isRecording ? 'est en train d\'enregistrer un message' : 'est en train d\'écrire...'}` : 
                                 selectedConversation.type === 'group' ? `${selectedConversation.participants.length} membres` : 
                                 userPresence[selectedConversation.participants.find(p => p.id !== user?.id)?.id || ''] === 'online' ? 'En ligne' : 'Hors ligne'}
                               </p>
@@ -5017,59 +7546,115 @@ export default function NOCActivityApp() {
                             <Button variant="ghost" size="icon" className="text-white hover:bg-white/10" onClick={() => setBackgroundSettingsOpen(true)} title="Paramètres">
                               <Settings className="w-5 h-5" />
                             </Button>
-                            <Button variant="ghost" size="icon" className="text-white hover:bg-white/10" onClick={() => { 
-                              if (selectedConversation.type === 'group') {
-                                setActiveCall({ 
-                                  id: generateId(), 
-                                  conversationId: selectedConversation.id, 
-                                  callerId: user?.id || '', 
-                                  callerName: user?.name || '', 
-                                  calleeId: selectedConversation.participants.map(p => p.id).join(','), 
-                                  calleeName: `Groupe: ${selectedConversation.name}`, 
-                                  type: 'video', 
-                                  status: 'ongoing', 
-                                  startedAt: new Date() 
-                                });
-                                setCallDialogOpen(true);
-                                setCallTimer(0);
-                              } else {
-                                const otherUser = selectedConversation.participants.find(p => p.id !== user?.id); 
-                                if (otherUser) { 
-                                  setActiveCall({ id: generateId(), conversationId: selectedConversation.id, callerId: user?.id || '', callerName: user?.name || '', calleeId: otherUser.id, calleeName: otherUser.name, type: 'video', status: 'ongoing', startedAt: new Date() }); 
-                                  setCallDialogOpen(true);
-                                  setCallTimer(0);
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-white hover:bg-white/10"
+                              onClick={() => {
+                                if (selectedConversation.type === 'group') {
+                                  const targetIds = selectedConversation.participants
+                                    .filter((participant) => participant.id !== user?.id)
+                                    .map((participant) => participant.id)
+                                    .join(',');
+
+                                  if (!targetIds) return;
+
+                                  startOutgoingCall({
+                                    conversationId: selectedConversation.id,
+                                    calleeId: targetIds,
+                                    calleeName: `Groupe: ${selectedConversation.name}`,
+                                    type: 'video',
+                                  });
+                                  return;
                                 }
-                              }
-                            }}><Video className="w-5 h-5" /></Button>
-                            <Button variant="ghost" size="icon" className="text-white hover:bg-white/10" onClick={() => { 
-                              if (selectedConversation.type === 'group') {
-                                setActiveCall({ 
-                                  id: generateId(), 
-                                  conversationId: selectedConversation.id, 
-                                  callerId: user?.id || '', 
-                                  callerName: user?.name || '', 
-                                  calleeId: selectedConversation.participants.map(p => p.id).join(','), 
-                                  calleeName: `Groupe: ${selectedConversation.name}`, 
-                                  type: 'audio', 
-                                  status: 'ongoing', 
-                                  startedAt: new Date() 
+
+                                const otherUser = selectedConversation.participants.find(
+                                  (participant) => participant.id !== user?.id
+                                );
+                                if (!otherUser) return;
+
+                                startOutgoingCall({
+                                  conversationId: selectedConversation.id,
+                                  calleeId: otherUser.id,
+                                  calleeName: otherUser.name,
+                                  type: 'video',
                                 });
-                                setCallDialogOpen(true);
-                                setCallTimer(0);
-                              } else {
-                                const otherUser = selectedConversation.participants.find(p => p.id !== user?.id); 
-                                if (otherUser) { 
-                                  setActiveCall({ id: generateId(), conversationId: selectedConversation.id, callerId: user?.id || '', callerName: user?.name || '', calleeId: otherUser.id, calleeName: otherUser.name, type: 'audio', status: 'ongoing', startedAt: new Date() }); 
-                                  setCallDialogOpen(true);
-                                  setCallTimer(0);
+                              }}
+                            >
+                              <Video className="w-5 h-5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-white hover:bg-white/10"
+                              onClick={() => {
+                                if (selectedConversation.type === 'group') {
+                                  const targetIds = selectedConversation.participants
+                                    .filter((participant) => participant.id !== user?.id)
+                                    .map((participant) => participant.id)
+                                    .join(',');
+
+                                  if (!targetIds) return;
+
+                                  startOutgoingCall({
+                                    conversationId: selectedConversation.id,
+                                    calleeId: targetIds,
+                                    calleeName: `Groupe: ${selectedConversation.name}`,
+                                    type: 'audio',
+                                  });
+                                  return;
                                 }
-                              }
-                            }}><Phone className="w-5 h-5" /></Button>
+
+                                const otherUser = selectedConversation.participants.find(
+                                  (participant) => participant.id !== user?.id
+                                );
+                                if (!otherUser) return;
+
+                                startOutgoingCall({
+                                  conversationId: selectedConversation.id,
+                                  calleeId: otherUser.id,
+                                  calleeName: otherUser.name,
+                                  type: 'audio',
+                                });
+                              }}
+                            >
+                              <Phone className="w-5 h-5" />
+                            </Button>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="text-white hover:bg-white/10"><MoreVertical className="w-5 h-5" /></Button></DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
                                 <DropdownMenuItem onClick={() => { setConversations(prev => prev.map(c => c.id === selectedConversation.id ? {...c, isPinned: !c.isPinned} : c)); toast.success(selectedConversation.isPinned ? 'Discussion désépinglée' : 'Discussion épinglée'); }}><Pin className="w-4 h-4 mr-2" />{selectedConversation.isPinned ? 'Désépingler' : 'Épingler'}</DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => { setConversations(prev => prev.map(c => c.id === selectedConversation.id ? {...c, isMuted: !c.isMuted} : c)); toast.success(selectedConversation.isMuted ? 'Notifications réactivées' : 'Notifications désactivées'); }}><BellOff className="w-4 h-4 mr-2" />{selectedConversation.isMuted ? 'Réactiver' : 'Désactiver'}</DropdownMenuItem>
+                                {selectedConversation.type === 'group' && (
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      if (!canManageAnnouncements(user)) {
+                                        toast.error('Action non autorisée');
+                                        return;
+                                      }
+                                      openConversationAvatarUploader({ mode: 'group', conversationId: selectedConversation.id });
+                                    }}
+                                  >
+                                    <Camera className="w-4 h-4 mr-2" />
+                                    Changer photo du groupe
+                                  </DropdownMenuItem>
+                                )}
+                                {selectedConversation.participants.find(p => p.id !== user?.id)?.id === 'system-annonces' && (
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      if (!canManageAnnouncements(user)) {
+                                        toast.error('Action non autorisée', {
+                                          description: 'Seuls les Admins, Responsables et Super Admins peuvent changer la photo des annonces.',
+                                        });
+                                        return;
+                                      }
+                                      openConversationAvatarUploader({ mode: 'announcement' });
+                                    }}
+                                  >
+                                    <Camera className="w-4 h-4 mr-2" />
+                                    Changer photo des annonces
+                                  </DropdownMenuItem>
+                                )}
                                 <DropdownMenuItem onClick={() => { setConversations(prev => prev.map(c => c.id === selectedConversation.id ? {...c, isArchived: true} : c)); setSelectedConversation(null); toast.success('Discussion archivée'); }}><Archive className="w-4 h-4 mr-2" />Archiver</DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
@@ -5129,7 +7714,15 @@ export default function NOCActivityApp() {
                             </div>
                           </div>
                         )}
-                        <div className="flex-1 min-h-0 overflow-y-auto p-4 relative z-10 chat-scrollbar">
+                        <div
+                          ref={messageContainerRef}
+                          className="flex-1 min-h-0 overflow-y-auto p-4 relative z-10 chat-scrollbar"
+                          onScroll={(e) => {
+                            const target = e.currentTarget;
+                            const distanceFromBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
+                            setShowScrollToBottom(distanceFromBottom > 120);
+                          }}
+                        >
                           <div className="space-y-2 max-w-3xl mx-auto">
                             {/* Pinned messages */}
                             {pinnedMessages.filter(m => m.conversationId === selectedConversation.id).length > 0 && (
@@ -5256,7 +7849,24 @@ export default function NOCActivityApp() {
                                 if (message.type === 'image' && message.mediaData) {
                                   return (
                                     <div className="max-w-[250px]">
-                                      <img src={message.mediaData} alt="Image" className="rounded-lg max-h-[200px] object-cover" />
+                                      <button
+                                        type="button"
+                                        className="block rounded-lg overflow-hidden focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                                        onClick={() => {
+                                          setChatImagePreview({
+                                            url: message.mediaData || '',
+                                            fileName: message.fileName,
+                                            message,
+                                          });
+                                          setChatImageZoom(1);
+                                        }}
+                                      >
+                                        <img
+                                          src={message.mediaData}
+                                          alt={message.fileName || 'Image'}
+                                          className="rounded-lg max-h-[200px] object-cover cursor-zoom-in"
+                                        />
+                                      </button>
                                       {message.content && <p className="text-sm mt-1">{message.content}</p>}
                                     </div>
                                   );
@@ -5271,17 +7881,57 @@ export default function NOCActivityApp() {
                                 }
                                 if (message.type === 'document') {
                                   return (
-                                    <div className="flex items-center gap-2 p-2 bg-slate-100 dark:bg-slate-600 rounded-lg">
-                                      <File className="w-8 h-8 text-cyan-500" />
-                                      <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-medium truncate">{message.fileName || 'Document'}</p>
-                                        <p className="text-xs text-muted-foreground">{message.fileSize ? `${(message.fileSize / 1024).toFixed(1)} KB` : ''}</p>
+                                    <div className="p-2 bg-slate-100 dark:bg-slate-600 rounded-lg min-w-[260px]">
+                                      <div className="flex items-center gap-2">
+                                        <File className="w-8 h-8 text-cyan-500" />
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-sm font-medium truncate">{message.fileName || 'Document'}</p>
+                                          <p className="text-xs text-muted-foreground">{message.fileSize ? `${(message.fileSize / 1024).toFixed(1)} KB` : ''}</p>
+                                        </div>
+                                      </div>
+                                      <div className="mt-2 flex gap-2">
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          className="h-7 px-2"
+                                          onClick={() => {
+                                            if (message.mediaData) {
+                                              window.open(message.mediaData, '_blank', 'noopener,noreferrer');
+                                            } else {
+                                              toast.error('Aperçu indisponible pour ce document');
+                                            }
+                                          }}
+                                        >
+                                          <EyeIcon className="w-3 h-3 mr-1" /> Lire
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          className="h-7 px-2"
+                                          onClick={() => {
+                                            if (message.mediaData) {
+                                              const link = document.createElement('a');
+                                              link.href = message.mediaData;
+                                              link.download = message.fileName || `document-${message.id}`;
+                                              document.body.appendChild(link);
+                                              link.click();
+                                              document.body.removeChild(link);
+                                            } else {
+                                              toast.error('Téléchargement indisponible pour ce document');
+                                            }
+                                          }}
+                                        >
+                                          <Download className="w-3 h-3 mr-1" /> Télécharger
+                                        </Button>
                                       </div>
                                     </div>
                                   );
                                 }
                                 // Render text with mention highlighting, search highlighting, and link detection
-                                let content = message.content;
+                                let content = (message.content || '').toString();
+                                if (content.trim() === '') {
+                                  content = '[Message sans texte]';
+                                }
                                 
                                 // URL detection and linking
                                 const urlRegex = /(https?:\/\/[^\s]+)/g;
@@ -5328,7 +7978,7 @@ export default function NOCActivityApp() {
                                   return part;
                                 });
                                 
-                                return <p className="text-sm whitespace-pre-wrap break-words">{contentWithMentions}</p>;
+                                return <p className="text-sm text-slate-800 dark:text-slate-100 whitespace-pre-wrap break-words">{contentWithMentions}</p>;
                               };
                               
                               // Helper function to apply formatting styles
@@ -5407,6 +8057,7 @@ export default function NOCActivityApp() {
                                       )}
                                       
                                       <div className="flex items-center justify-end gap-1 mt-1">
+                                        {message.isImportant && <AlertCircle className="w-3 h-3 text-yellow-500" />}
                                         {message.isEdited && <span className="text-[10px] text-muted-foreground italic mr-1">modifié</span>}
                                         {message.isArchived && <Archive className="w-3 h-3 text-slate-400 mr-1" />}
                                         <span className="text-[10px] text-muted-foreground">{format(message.createdAt, 'HH:mm')}</span>
@@ -5430,8 +8081,50 @@ export default function NOCActivityApp() {
                             {typingIndicators.find(t => t.conversationId === selectedConversation.id)?.isTyping && (
                               <div className="flex justify-start"><div className="bg-white dark:bg-slate-700 rounded-2xl px-4 py-3 shadow-sm"><div className="flex gap-1"><span className="w-2 h-2 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '0ms' }}></span><span className="w-2 h-2 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '150ms' }}></span><span className="w-2 h-2 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '300ms' }}></span></div></div></div>
                             )}
+                            <div className="pointer-events-none absolute right-4 bottom-4 z-20 flex flex-col items-end gap-2">
+                              <AnimatePresence>
+                                {liveReactions
+                                  .filter(
+                                    (item) =>
+                                      item.conversationId === selectedConversation.id &&
+                                      !item.callId
+                                  )
+                                  .slice(-6)
+                                  .map((item, index) => {
+                                    const drift = ((index % 3) - 1) * 12;
+                                    return (
+                                    <motion.div
+                                      key={item.id}
+                                      initial={{ opacity: 0, y: 14, x: 0, scale: 0.7 }}
+                                      animate={{ opacity: 1, y: -6, x: drift, scale: 1 }}
+                                      exit={{ opacity: 0, y: -36, x: drift * 1.5, scale: 0.65 }}
+                                      transition={{ duration: 0.55, ease: 'easeOut' }}
+                                      className="rounded-full bg-black/70 px-3 py-1.5 text-white shadow-lg"
+                                    >
+                                      <span className="text-lg leading-none">{item.emoji}</span>
+                                      <span className="ml-2 text-xs">{item.userName}</span>
+                                    </motion.div>
+                                  );
+                                  })}
+                              </AnimatePresence>
+                            </div>
+                            <div ref={messageEndRef} />
                           </div>
                         </div>
+                        {showScrollToBottom && (
+                          <Button
+                            type="button"
+                            size="icon"
+                            className="absolute right-6 bottom-24 z-20 rounded-full shadow-lg bg-cyan-500 hover:bg-cyan-600 text-white"
+                            onClick={() => {
+                              messageEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                              setShowScrollToBottom(false);
+                            }}
+                            title="Aller au dernier message"
+                          >
+                            <ChevronDown className="w-5 h-5" />
+                          </Button>
+                        )}
                         
                         {/* Context Menu for messages */}
                         {showContextMenu && contextMenuMessage && (
@@ -5443,7 +8136,7 @@ export default function NOCActivityApp() {
                             {/* Pin message option */}
                             <button 
                               className="w-full px-3 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2"
-                              onClick={() => {
+                              onClick={async () => {
                                 if (contextMenuMessage.isPinned) {
                                   setPinnedMessages(prev => prev.filter(m => m.id !== contextMenuMessage.id));
                                   setChatMessages(prev => prev.map(m => m.id === contextMenuMessage.id ? {...m, isPinned: false} : m));
@@ -5453,10 +8146,35 @@ export default function NOCActivityApp() {
                                   setChatMessages(prev => prev.map(m => m.id === contextMenuMessage.id ? {...m, isPinned: true} : m));
                                   toast.success('Message épinglé');
                                 }
+
+                                await updateChatMessage(
+                                  contextMenuMessage.conversationId,
+                                  contextMenuMessage.id,
+                                  'togglePin',
+                                  { isPinned: !contextMenuMessage.isPinned }
+                                );
+
                                 setShowContextMenu(false);
                               }}
                             >
                               <Pin className="w-4 h-4" /> {contextMenuMessage.isPinned ? 'Désépingler' : 'Épingler'}
+                            </button>
+                            <button 
+                              className="w-full px-3 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2"
+                              onClick={async () => {
+                                const nextImportant = !contextMenuMessage.isImportant;
+                                setChatMessages(prev => prev.map(m => m.id === contextMenuMessage.id ? {...m, isImportant: nextImportant} : m));
+                                await updateChatMessage(
+                                  contextMenuMessage.conversationId,
+                                  contextMenuMessage.id,
+                                  'toggleImportant',
+                                  { isImportant: nextImportant }
+                                );
+                                toast.success(nextImportant ? 'Message marqué important' : 'Message retiré des importants');
+                                setShowContextMenu(false);
+                              }}
+                            >
+                              <AlertCircle className="w-4 h-4" /> {contextMenuMessage.isImportant ? 'Retirer important' : 'Marquer important'}
                             </button>
                             {contextMenuMessage.senderId === user?.id && (
                               <button 
@@ -5473,8 +8191,9 @@ export default function NOCActivityApp() {
                             )}
                             <button 
                               className="w-full px-3 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2"
-                              onClick={() => {
+                              onClick={async () => {
                                 setChatMessages(prev => prev.map(m => m.id === contextMenuMessage.id ? {...m, isDeleted: true} : m));
+                                await updateChatMessage(contextMenuMessage.conversationId, contextMenuMessage.id, 'deleteForMe');
                                 toast.success('Message supprimé pour vous');
                                 setShowContextMenu(false);
                               }}
@@ -5491,7 +8210,7 @@ export default function NOCActivityApp() {
                               return canDeleteForEveryone ? (
                                 <button 
                                   className="w-full px-3 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2 text-red-600"
-                                  onClick={() => {
+                                  onClick={async () => {
                                     setChatMessages(prev => prev.map(m => m.id === contextMenuMessage.id ? {...m, deletedForEveryone: true} : m));
                                     setConversations(prev => prev.map(c => {
                                       if (c.lastMessage?.id === contextMenuMessage.id) {
@@ -5499,6 +8218,7 @@ export default function NOCActivityApp() {
                                       }
                                       return c;
                                     }));
+                                    await updateChatMessage(contextMenuMessage.conversationId, contextMenuMessage.id, 'deleteForEveryone');
                                     toast.success('Message supprimé pour tous');
                                     setShowContextMenu(false);
                                   }}
@@ -5686,16 +8406,83 @@ export default function NOCActivityApp() {
                               <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setAttachmentPreview({ file: null, preview: null, type: null })}><X className="w-4 h-4" /></Button>
                             </div>
                           )}
+
+                          {recentEmojis.length > 0 && (
+                            <div className="mb-2 flex items-center gap-1 overflow-x-auto rounded-lg border bg-white/70 p-1 dark:bg-slate-700/50">
+                              {recentEmojis.slice(0, 10).map((emoji) => (
+                                <button
+                                  key={`recent-insert-${emoji}`}
+                                  type="button"
+                                  className="h-8 w-8 shrink-0 rounded-md text-lg hover:bg-slate-100 dark:hover:bg-slate-600"
+                                  onClick={() => {
+                                    setNewMessage((prev) => prev + emoji);
+                                    registerRecentEmoji(emoji);
+                                  }}
+                                  title="Insérer"
+                                >
+                                  {emoji}
+                                </button>
+                              ))}
+                              <Separator orientation="vertical" className="mx-1 h-6" />
+                              {recentEmojis.slice(0, 6).map((emoji) => (
+                                <button
+                                  key={`recent-react-${emoji}`}
+                                  type="button"
+                                  className="h-8 w-8 shrink-0 rounded-md text-lg hover:bg-slate-100 dark:hover:bg-slate-600"
+                                  onClick={() => {
+                                    broadcastLiveReaction(emoji, 'chat');
+                                  }}
+                                  title="Réaction live"
+                                >
+                                  {emoji}
+                                </button>
+                              ))}
+                            </div>
+                          )}
                           
                           <div className="flex items-end gap-2 max-w-3xl mx-auto">
                             <Popover open={showEmojiPicker} onOpenChange={setShowEmojiPicker}>
-                              <PopoverTrigger asChild><Button variant="ghost" size="icon" className="rounded-full text-slate-500 hover:text-cyan-500"><Smile className="w-6 h-6" /></Button></PopoverTrigger>
-                              <PopoverContent className="w-72 p-2" align="start">
-                                <div className="grid grid-cols-8 gap-1">
-                                  {['😀', '😂', '😍', '🥰', '😎', '🤔', '👍', '👎', '❤️', '🔥', '🎉', '✅', '⏰', '📞', '📧', '💻', '🔧', '📊', '📈', '✨', '🌟', '💪', '🙏', '👋'].map((emoji) => (
-                                    <button key={emoji} onClick={() => { setNewMessage(prev => prev + emoji); setShowEmojiPicker(false); }} className="text-xl hover:bg-slate-100 dark:hover:bg-slate-700 rounded p-1">{emoji}</button>
-                                  ))}
-                                </div>
+                              <PopoverTrigger asChild><Button variant="ghost" size="icon" className="rounded-full text-slate-500 hover:text-cyan-500 text-xl">😀</Button></PopoverTrigger>
+                              <PopoverContent className="w-80 p-0 shadow-xl sm:w-96" align="start" sideOffset={8}>
+                                <EmojiPicker
+                                  theme={theme === 'dark' ? EmojiPickerTheme.DARK : EmojiPickerTheme.LIGHT}
+                                  lazyLoadEmojis
+                                  searchPlaceholder="Rechercher un emoji..."
+                                  previewConfig={{ showPreview: false }}
+                                  width="100%"
+                                  height={isCompactEmojiLayout ? 300 : 380}
+                                  onEmojiClick={(emojiData: EmojiClickData) => {
+                                    setNewMessage((prev) => prev + emojiData.emoji);
+                                    registerRecentEmoji(emojiData.emoji);
+                                    setShowEmojiPicker(false);
+                                  }}
+                                />
+                              </PopoverContent>
+                            </Popover>
+                            <Popover open={showLiveReactionPicker} onOpenChange={setShowLiveReactionPicker}>
+                              <PopoverTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="rounded-full text-slate-500 hover:text-cyan-500"
+                                  title="Réaction live"
+                                >
+                                  <Heart className="w-5 h-5" />
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-80 p-0 shadow-xl sm:w-96" align="start" sideOffset={8}>
+                                <EmojiPicker
+                                  theme={theme === 'dark' ? EmojiPickerTheme.DARK : EmojiPickerTheme.LIGHT}
+                                  lazyLoadEmojis
+                                  searchPlaceholder="Envoyer une réaction..."
+                                  previewConfig={{ showPreview: false }}
+                                  width="100%"
+                                  height={isCompactEmojiLayout ? 300 : 360}
+                                  onEmojiClick={(emojiData: EmojiClickData) => {
+                                    broadcastLiveReaction(emojiData.emoji, 'chat');
+                                    setShowLiveReactionPicker(false);
+                                  }}
+                                />
                               </PopoverContent>
                             </Popover>
                             {/* Selection mode toggle button */}
@@ -5724,19 +8511,19 @@ export default function NOCActivityApp() {
                               <Type className="w-5 h-5" />
                             </Button>
                             <DropdownMenu>
-                              <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="rounded-full text-slate-500 hover:text-cyan-500"><Paperclip className="w-5 h-5" /></Button></DropdownMenuTrigger>
+                              <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="rounded-full text-slate-500 hover:text-cyan-500" disabled={Boolean(selectedConversation && isAnnouncementsConversation(selectedConversation) && !canManageAnnouncements(user))}><Paperclip className="w-5 h-5" /></Button></DropdownMenuTrigger>
                               <DropdownMenuContent align="start">
-                                <DropdownMenuItem onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*'; input.onchange = (e) => { const file = (e.target as HTMLInputElement).files?.[0]; if (file) { const reader = new FileReader(); reader.onload = (e) => { setAttachmentPreview({ file, preview: e.target?.result as string, type: 'image' }); }; reader.readAsDataURL(file); } }; input.click(); }}><ImageIcon className="w-4 h-4 mr-2 text-purple-500" />Image</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'video/*'; input.onchange = (e) => { const file = (e.target as HTMLInputElement).files?.[0]; if (file) { const reader = new FileReader(); reader.onload = (e) => { setAttachmentPreview({ file, preview: e.target?.result as string, type: 'video' }); }; reader.readAsDataURL(file); } }; input.click(); }}><Film className="w-4 h-4 mr-2 text-red-500" />Vidéo</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx'; input.onchange = (e) => { const file = (e.target as HTMLInputElement).files?.[0]; if (file) { const reader = new FileReader(); reader.onload = (e) => { setAttachmentPreview({ file, preview: null, type: 'document' }); }; reader.readAsDataURL(file); } }; input.click(); }}><File className="w-4 h-4 mr-2 text-blue-500" />Document</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'audio/*'; input.onchange = (e) => { const file = (e.target as HTMLInputElement).files?.[0]; if (file) { const reader = new FileReader(); reader.onload = (e) => { setAttachmentPreview({ file, preview: e.target?.result as string, type: 'audio' }); }; reader.readAsDataURL(file); } }; input.click(); }}><Mic className="w-4 h-4 mr-2 text-green-500" />Audio</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*'; input.onchange = (e) => { const file = (e.target as HTMLInputElement).files?.[0]; if (file) { const reader = new FileReader(); reader.onload = (e) => { setAttachmentPreview({ file, preview: e.target?.result as string, type: 'image', fileType: file.type }); }; reader.readAsDataURL(file); } }; input.click(); }}><ImageIcon className="w-4 h-4 mr-2 text-purple-500" />Image</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'video/*'; input.onchange = (e) => { const file = (e.target as HTMLInputElement).files?.[0]; if (file) { const reader = new FileReader(); reader.onload = (e) => { setAttachmentPreview({ file, preview: e.target?.result as string, type: 'video', fileType: file.type }); }; reader.readAsDataURL(file); } }; input.click(); }}><Film className="w-4 h-4 mr-2 text-red-500" />Vidéo</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation'; input.onchange = (e) => { const file = (e.target as HTMLInputElement).files?.[0]; if (file) { const reader = new FileReader(); reader.onload = (e) => { setAttachmentPreview({ file, preview: e.target?.result as string, type: 'document', fileType: file.type }); }; reader.readAsDataURL(file); } }; input.click(); }}><File className="w-4 h-4 mr-2 text-blue-500" />Document</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'audio/*'; input.onchange = (e) => { const file = (e.target as HTMLInputElement).files?.[0]; if (file) { const reader = new FileReader(); reader.onload = (e) => { setAttachmentPreview({ file, preview: e.target?.result as string, type: 'audio', fileType: file.type }); }; reader.readAsDataURL(file); } }; input.click(); }}><Mic className="w-4 h-4 mr-2 text-green-500" />Audio</DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
                             <div className="flex-1 relative">
                               {/* Mention suggestions */}
                               {showMentionSuggestions && (
                                 <div className="absolute bottom-full left-0 right-0 bg-white dark:bg-slate-800 border rounded-t-lg shadow-lg max-h-40 overflow-y-auto z-10">
-                                  {Object.values(DEMO_USERS)
+                                  {usersDirectory
                                     .filter(u => u.id !== user?.id && u.name.toLowerCase().includes(mentionQuery.toLowerCase()))
                                     .slice(0, 5)
                                     .map((u) => (
@@ -5756,11 +8543,35 @@ export default function NOCActivityApp() {
                                 </div>
                               )}
                               <Input 
-                                placeholder="Écrire un message..." 
+                                placeholder={selectedConversation && isAnnouncementsConversation(selectedConversation) && !canManageAnnouncements(user)
+                                  ? 'Seuls les admins/responsables peuvent publier des annonces'
+                                  : 'Écrire un message...'}
                                 value={newMessage} 
+                                disabled={Boolean(selectedConversation && isAnnouncementsConversation(selectedConversation) && !canManageAnnouncements(user))}
                                 onChange={(e) => {
                                   const value = e.target.value;
                                   setNewMessage(value);
+
+                                  if (selectedConversation && user?.id && user?.name) {
+                                    broadcastTypingStatus({
+                                      isTyping: value.trim().length > 0,
+                                      isRecording: false,
+                                    });
+
+                                    if (typingStopTimeoutRef.current) {
+                                      clearTimeout(typingStopTimeoutRef.current);
+                                    }
+
+                                    if (value.trim().length > 0) {
+                                      typingStopTimeoutRef.current = setTimeout(() => {
+                                        broadcastTypingStatus({
+                                          isTyping: false,
+                                          isRecording: false,
+                                        });
+                                      }, 1200);
+                                    }
+                                  }
+
                                   // Check for @ mentions
                                   const lastAtIndex = value.lastIndexOf('@');
                                   if (lastAtIndex !== -1) {
@@ -5775,51 +8586,50 @@ export default function NOCActivityApp() {
                                     setShowMentionSuggestions(false);
                                   }
                                 }} 
-                                onKeyDown={(e) => { 
-                                  if (e.key === 'Enter' && !e.shiftKey && newMessage.trim()) { 
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' && !e.shiftKey && newMessage.trim()) {
                                     e.preventDefault();
-                                    const messageType = attachmentPreview.type || 'text';
-                                    const message: ChatMessage = { 
-                                      id: generateId(), 
-                                      conversationId: selectedConversation.id, 
-                                      senderId: user?.id || '', 
-                                      senderName: user?.name || '', 
+                                    if (typingStopTimeoutRef.current) {
+                                      clearTimeout(typingStopTimeoutRef.current);
+                                      typingStopTimeoutRef.current = null;
+                                    }
+                                    if (selectedConversation && user?.id && user?.name) {
+                                      broadcastTypingStatus({
+                                        isTyping: false,
+                                        isRecording: false,
+                                      });
+                                    }
+                                    const { file, preview, type, fileType } = attachmentPreview;
+                                    const messageType = (type === 'audio' ? 'voice' : (type || 'text')) as ChatMessageType;
+                                    void sendChatMessage({
+                                      conversationId: selectedConversation?.id || '',
+                                      senderId: user?.id || '',
+                                      senderName: user?.name || '',
                                       senderAvatar: user?.avatar,
-                                      type: messageType as ChatMessageType, 
-                                      content: newMessage.trim(), 
-                                      mediaData: attachmentPreview.preview || undefined,
-                                      fileName: attachmentPreview.file?.name,
-                                      fileSize: attachmentPreview.file?.size,
-                                      status: 'sent', 
+                                      type: messageType,
+                                      content: newMessage.trim(),
+                                      mediaData: preview || undefined,
+                                      fileName: file?.name,
+                                      fileSize: file?.size,
+                                      fileType: fileType || file?.type,
+                                      duration: messageType === 'voice' ? recordingTime : undefined,
                                       replyTo: replyingTo || undefined,
-                                      isEdited: false, 
-                                      isDeleted: false, 
-                                      deletedForEveryone: false, 
+                                      isEdited: false,
+                                      isDeleted: false,
+                                      deletedForEveryone: false,
                                       isPinned: false,
                                       isArchived: false,
-                                      formatting: (currentFormatting.bold || currentFormatting.italic || currentFormatting.underline || currentFormatting.fontSize !== 'normal' || currentFormatting.color !== '#000000') ? {
-                                        bold: currentFormatting.bold,
-                                        italic: currentFormatting.italic,
-                                        underline: currentFormatting.underline,
-                                        fontSize: currentFormatting.fontSize,
-                                        color: currentFormatting.color,
-                                      } : undefined,
-                                      reactions: [], 
-                                      readBy: [], 
-                                      createdAt: new Date(), 
-                                      updatedAt: new Date() 
-                                    }; 
-                                    setChatMessages(prev => [...prev, message]); 
-                                    setConversations(prev => prev.map(c => c.id === selectedConversation.id ? {...c, lastMessage: message, updatedAt: new Date()} : c)); 
-                                    setNewMessage(''); 
-                                    setAttachmentPreview({ file: null, preview: null, type: null });
+                                      reactions: [],
+                                      readBy: [],
+                                    });
+                                    setNewMessage('');
+                                    setAttachmentPreview({ file: null, preview: null, type: null, fileType: undefined });
                                     setLastReplyTo(replyingTo);
                                     setReplyingTo(null);
                                     setMentionedUsers([]);
                                     playMessageSendSound();
-                                    // Simulate typing indicator for other user after a short delay
                                     setTimeout(() => {
-                                      if (selectedConversation.type === 'individual') {
+                                      if (selectedConversation?.type === 'individual') {
                                         const otherUser = selectedConversation.participants.find(p => p.id !== user?.id);
                                         if (otherUser) {
                                           setSimulatedTyping({ userId: otherUser.id, userName: otherUser.name, isRecording: false });
@@ -5835,56 +8645,102 @@ export default function NOCActivityApp() {
                             {newMessage.trim() || attachmentPreview.file ? (
                               <Button 
                                 className="rounded-full bg-cyan-500 hover:bg-cyan-600 text-white h-10 w-10 p-0" 
-                                onClick={() => { 
-                                  const messageType = attachmentPreview.type || 'text';
-                                  const message: ChatMessage = { 
-                                    id: generateId(), 
-                                    conversationId: selectedConversation.id, 
-                                    senderId: user?.id || '', 
-                                    senderName: user?.name || '', 
-                                    senderAvatar: user?.avatar,
-                                    type: messageType as ChatMessageType, 
-                                    content: newMessage.trim(), 
-                                    mediaData: attachmentPreview.preview || undefined,
-                                    fileName: attachmentPreview.file?.name,
-                                    fileSize: attachmentPreview.file?.size,
-                                    status: 'sent', 
-                                    replyTo: replyingTo || undefined,
-                                    isEdited: false, 
-                                    isDeleted: false, 
-                                    deletedForEveryone: false, 
-                                    isPinned: false,
-                                    isArchived: false,
-                                    formatting: (currentFormatting.bold || currentFormatting.italic || currentFormatting.underline || currentFormatting.fontSize !== 'normal' || currentFormatting.color !== '#000000') ? {
-                                      bold: currentFormatting.bold,
-                                      italic: currentFormatting.italic,
-                                      underline: currentFormatting.underline,
-                                      fontSize: currentFormatting.fontSize,
-                                      color: currentFormatting.color,
-                                    } : undefined,
-                                    reactions: [], 
-                                    readBy: [], 
-                                    createdAt: new Date(), 
-                                    updatedAt: new Date() 
-                                  }; 
-                                  setChatMessages(prev => [...prev, message]); 
-                                  setConversations(prev => prev.map(c => c.id === selectedConversation.id ? {...c, lastMessage: message, updatedAt: new Date()} : c)); 
-                                  setNewMessage(''); 
-                                  setAttachmentPreview({ file: null, preview: null, type: null });
-                                  setLastReplyTo(replyingTo);
-                                  setReplyingTo(null);
-                                  setMentionedUsers([]);
-                                  playMessageSendSound();
-                                  // Simulate typing indicator
-                                  setTimeout(() => {
-                                    if (selectedConversation.type === 'individual') {
-                                      const otherUser = selectedConversation.participants.find(p => p.id !== user?.id);
-                                      if (otherUser) {
-                                        setSimulatedTyping({ userId: otherUser.id, userName: otherUser.name, isRecording: false });
-                                        setTimeout(() => setSimulatedTyping(null), 3000);
+                                disabled={Boolean(selectedConversation && isAnnouncementsConversation(selectedConversation) && !canManageAnnouncements(user))}
+                                onClick={async () => { 
+                                  if (typingStopTimeoutRef.current) {
+                                    clearTimeout(typingStopTimeoutRef.current);
+                                    typingStopTimeoutRef.current = null;
+                                  }
+                                  if (selectedConversation && user?.id && user?.name) {
+                                    broadcastTypingStatus({
+                                      isTyping: false,
+                                      isRecording: false,
+                                    });
+                                  }
+                                  const { file, preview, type, fileType } = attachmentPreview;
+                                  const messageType = (type === 'audio' ? 'voice' : (type || 'text')) as ChatMessageType;
+                                  let mediaData = preview;
+                                  // Always ensure base64 for all file types
+                                  if (file && !preview) {
+                                    const reader = new FileReader();
+                                    reader.onload = async (e) => {
+                                      mediaData = e.target?.result as string;
+                                      await sendChatMessage({
+                                        conversationId: selectedConversation?.id || '',
+                                        senderId: user?.id || '',
+                                        senderName: user?.name || '',
+                                        senderAvatar: user?.avatar,
+                                        type: messageType,
+                                        content: newMessage.trim(),
+                                        mediaData: mediaData || undefined,
+                                        fileName: file?.name,
+                                        fileSize: file?.size,
+                                        fileType: fileType || file?.type,
+                                        duration: messageType === 'voice' ? recordingTime : undefined,
+                                        replyTo: replyingTo || undefined,
+                                        isEdited: false,
+                                        isDeleted: false,
+                                        deletedForEveryone: false,
+                                        isPinned: false,
+                                        isArchived: false,
+                                        reactions: [],
+                                        readBy: [],
+                                      });
+                                      setNewMessage('');
+                                      setAttachmentPreview({ file: null, preview: null, type: null, fileType: undefined });
+                                      setLastReplyTo(replyingTo);
+                                      setReplyingTo(null);
+                                      setMentionedUsers([]);
+                                      playMessageSendSound();
+                                      setTimeout(() => {
+                                        if (selectedConversation?.type === 'individual') {
+                                          const otherUser = selectedConversation.participants.find(p => p.id !== user?.id);
+                                          if (otherUser) {
+                                            setSimulatedTyping({ userId: otherUser.id, userName: otherUser.name, isRecording: false });
+                                            setTimeout(() => setSimulatedTyping(null), 3000);
+                                          }
+                                        }
+                                      }, 2000);
+                                    };
+                                    reader.readAsDataURL(file);
+                                  } else {
+                                    await sendChatMessage({
+                                      conversationId: selectedConversation?.id || '',
+                                      senderId: user?.id || '',
+                                      senderName: user?.name || '',
+                                      senderAvatar: user?.avatar,
+                                      type: messageType,
+                                      content: newMessage.trim(),
+                                      mediaData: mediaData || undefined,
+                                      fileName: file?.name,
+                                      fileSize: file?.size,
+                                      fileType: fileType || file?.type,
+                                      duration: messageType === 'voice' ? recordingTime : undefined,
+                                      replyTo: replyingTo || undefined,
+                                      isEdited: false,
+                                      isDeleted: false,
+                                      deletedForEveryone: false,
+                                      isPinned: false,
+                                      isArchived: false,
+                                      reactions: [],
+                                      readBy: [],
+                                    });
+                                    setNewMessage('');
+                                    setAttachmentPreview({ file: null, preview: null, type: null, fileType: undefined });
+                                    setLastReplyTo(replyingTo);
+                                    setReplyingTo(null);
+                                    setMentionedUsers([]);
+                                    playMessageSendSound();
+                                    setTimeout(() => {
+                                      if (selectedConversation?.type === 'individual') {
+                                        const otherUser = selectedConversation.participants.find(p => p.id !== user?.id);
+                                        if (otherUser) {
+                                          setSimulatedTyping({ userId: otherUser.id, userName: otherUser.name, isRecording: false });
+                                          setTimeout(() => setSimulatedTyping(null), 3000);
+                                        }
                                       }
-                                    }
-                                  }, 2000);
+                                    }, 2000);
+                                  }
                                 }}
                               >
                                 <Send className="w-5 h-5" />
@@ -5908,6 +8764,7 @@ export default function NOCActivityApp() {
                                     mediaRecorder.start();
                                     setIsRecording(true); 
                                     setRecordingTime(0);
+                                    broadcastTypingStatus({ isTyping: true, isRecording: true });
                                     
                                     // Play start recording sound
                                     if (soundEnabled && soundOnSend) {
@@ -5927,28 +8784,24 @@ export default function NOCActivityApp() {
                                       reader.onloadend = () => {
                                         const audioData = reader.result as string;
                                         if (recordingTime > 0) {
-                                          const message: ChatMessage = { 
-                                            id: generateId(), 
-                                            conversationId: selectedConversation.id, 
-                                            senderId: user?.id || '', 
-                                            senderName: user?.name || '', 
-                                            type: 'voice', 
-                                            content: '', 
-                                            mediaData: audioData,
-                                            duration: recordingTime, 
-                                            status: 'sent', 
-                                            isEdited: false, 
-                                            isDeleted: false, 
-                                            deletedForEveryone: false, 
+                                          void sendChatMessage({
+                                            conversationId: selectedConversation?.id || '',
+                                            senderId: user?.id || '',
+                                            senderName: user?.name || '',
+                                            senderAvatar: user?.avatar,
+                                            type: 'voice',
+                                            content: '',
+                                            mediaUrl: audioData,
+                                            duration: recordingTime,
+                                            status: 'sent',
+                                            isEdited: false,
+                                            isDeleted: false,
+                                            deletedForEveryone: false,
                                             isPinned: false,
                                             isArchived: false,
-                                            reactions: [], 
-                                            readBy: [], 
-                                            createdAt: new Date(), 
-                                            updatedAt: new Date() 
-                                          }; 
-                                          setChatMessages(prev => [...prev, message]); 
-                                          setConversations(prev => prev.map(c => c.id === selectedConversation.id ? {...c, lastMessage: message, updatedAt: new Date()} : c));
+                                            reactions: [],
+                                            readBy: [],
+                                          });
                                           playMessageSendSound();
                                         }
                                       };
@@ -5957,6 +8810,7 @@ export default function NOCActivityApp() {
                                     mediaRecorderRef.current.stop();
                                     mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
                                   }
+                                  broadcastTypingStatus({ isTyping: false, isRecording: false });
                                   setIsRecording(false); 
                                   setRecordingTime(0); 
                                 }}
@@ -5965,6 +8819,7 @@ export default function NOCActivityApp() {
                                     mediaRecorderRef.current.stop();
                                     mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
                                   }
+                                  broadcastTypingStatus({ isTyping: false, isRecording: false });
                                   setIsRecording(false);
                                   setRecordingTime(0);
                                 }}
@@ -6010,13 +8865,19 @@ export default function NOCActivityApp() {
                         <DialogClose asChild><Button variant="outline">Annuler</Button></DialogClose>
                         <Button 
                           className="bg-cyan-500 hover:bg-cyan-600"
-                          onClick={() => {
+                          onClick={async () => {
                             if (editingMessage && editMessageContent.trim()) {
                               setChatMessages(prev => prev.map(m => 
                                 m.id === editingMessage.id 
                                   ? {...m, content: editMessageContent, isEdited: true, updatedAt: new Date()} 
                                   : m
                               ));
+                              await updateChatMessage(
+                                editingMessage.conversationId,
+                                editingMessage.id,
+                                'editContent',
+                                { content: editMessageContent }
+                              );
                               setEditingMessage(null);
                               setEditMessageContent('');
                               setEditMessageDialogOpen(false);
@@ -6029,6 +8890,198 @@ export default function NOCActivityApp() {
                       </DialogFooter>
                     </DialogContent>
                   </Dialog>
+
+                  {/* Chat Image Preview Dialog */}
+                  <Dialog
+                    open={Boolean(chatImagePreview)}
+                    onOpenChange={(open) => {
+                      if (!open) {
+                        setChatImagePreview(null);
+                        setChatImageZoom(1);
+                      }
+                    }}
+                  >
+                    <DialogContent className="max-w-6xl w-[96vw] p-2 sm:p-4 bg-black/95 border-slate-700">
+                      <DialogHeader>
+                        <DialogTitle className="text-slate-100 text-sm sm:text-base truncate pr-8">
+                          {chatImagePreview?.fileName || 'Aperçu image'}
+                        </DialogTitle>
+                      </DialogHeader>
+
+                      <div className="flex flex-wrap items-center gap-2 pb-2 border-b border-slate-700/70">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="text-slate-100 border-slate-600 hover:bg-slate-800"
+                          onClick={async () => {
+                            if (!chatImagePreview?.url) return;
+                            try {
+                              const absoluteUrl = chatImagePreview.url.startsWith('http')
+                                ? chatImagePreview.url
+                                : `${window.location.origin}${chatImagePreview.url}`;
+
+                              if (navigator.share) {
+                                await navigator.share({
+                                  title: chatImagePreview.fileName || 'Image',
+                                  url: absoluteUrl,
+                                });
+                              } else if (navigator.clipboard?.writeText) {
+                                await navigator.clipboard.writeText(absoluteUrl);
+                                toast.success('Lien copié pour transfert');
+                              } else {
+                                window.open(absoluteUrl, '_blank', 'noopener,noreferrer');
+                              }
+                            } catch {
+                              toast.error('Transfert annulé ou indisponible');
+                            }
+                          }}
+                        >
+                          <Forward className="w-4 h-4 mr-1" /> Transférer
+                        </Button>
+
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="text-slate-100 border-slate-600 hover:bg-slate-800"
+                          onClick={() => {
+                            if (!chatImagePreview?.url) return;
+                            const link = document.createElement('a');
+                            link.href = chatImagePreview.url;
+                            link.download =
+                              chatImagePreview.fileName ||
+                              `image-${chatImagePreview.message.id}.jpg`;
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                            toast.success('Téléchargement lancé');
+                          }}
+                        >
+                          <Download className="w-4 h-4 mr-1" /> Télécharger
+                        </Button>
+
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="text-slate-100 border-slate-600 hover:bg-slate-800"
+                          onClick={() => setChatImageZoom((prev) => (prev > 1 ? 1 : 1.8))}
+                        >
+                          {chatImageZoom > 1 ? <Minimize2 className="w-4 h-4 mr-1" /> : <Maximize2 className="w-4 h-4 mr-1" />} Zoomer
+                        </Button>
+
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="text-slate-100 border-slate-600 hover:bg-slate-800"
+                          onClick={async () => {
+                            if (!chatImagePreview?.message) return;
+                            const message = chatImagePreview.message;
+                            const nextPinned = !message.isPinned;
+
+                            setChatMessages((prev) =>
+                              prev.map((m) =>
+                                m.id === message.id ? { ...m, isPinned: nextPinned } : m
+                              )
+                            );
+
+                            setPinnedMessages((prev) => {
+                              if (!nextPinned) {
+                                return prev.filter((m) => m.id !== message.id);
+                              }
+                              const updated = { ...message, isPinned: true };
+                              if (prev.some((m) => m.id === message.id)) {
+                                return prev.map((m) => (m.id === message.id ? updated : m));
+                              }
+                              return [...prev, updated];
+                            });
+
+                            await updateChatMessage(
+                              message.conversationId,
+                              message.id,
+                              'togglePin',
+                              { isPinned: nextPinned }
+                            );
+
+                            setChatImagePreview((prev) =>
+                              prev ? { ...prev, message: { ...prev.message, isPinned: nextPinned } } : prev
+                            );
+
+                            toast.success(nextPinned ? 'Image épinglée' : 'Image désépinglée');
+                          }}
+                        >
+                          <Pin className="w-4 h-4 mr-1" />
+                          {chatImagePreview?.message?.isPinned ? 'Désépingler' : 'Épingler'}
+                        </Button>
+
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="destructive"
+                          onClick={async () => {
+                            if (!chatImagePreview?.message || !user?.id) return;
+                            const message = chatImagePreview.message;
+
+                            if (message.senderId === user.id) {
+                              const minutesPassed = (Date.now() - new Date(message.createdAt).getTime()) / 60000;
+
+                              if (minutesPassed <= 10) {
+                                setChatMessages((prev) =>
+                                  prev.map((m) =>
+                                    m.id === message.id ? { ...m, deletedForEveryone: true } : m
+                                  )
+                                );
+                                await updateChatMessage(message.conversationId, message.id, 'deleteForEveryone');
+                                toast.success('Image supprimée pour tous');
+                              } else {
+                                setChatMessages((prev) =>
+                                  prev.map((m) => (m.id === message.id ? { ...m, isDeleted: true } : m))
+                                );
+                                await updateChatMessage(message.conversationId, message.id, 'deleteForMe');
+                                toast.success('Image supprimée pour vous');
+                              }
+                            } else {
+                              setChatMessages((prev) =>
+                                prev.map((m) => (m.id === message.id ? { ...m, isDeleted: true } : m))
+                              );
+                              await updateChatMessage(message.conversationId, message.id, 'deleteForMe');
+                              toast.success('Image supprimée pour vous');
+                            }
+
+                            setChatImagePreview(null);
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4 mr-1" /> Supprimer
+                        </Button>
+
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="text-slate-100 hover:bg-slate-800"
+                          onClick={() => {
+                            setChatImagePreview(null);
+                            setChatImageZoom(1);
+                          }}
+                        >
+                          <X className="w-4 h-4 mr-1" /> Fermer
+                        </Button>
+                      </div>
+
+                      <div className="flex items-center justify-center max-h-[80vh] overflow-auto py-2">
+                        {chatImagePreview?.url ? (
+                          <img
+                            src={chatImagePreview.url}
+                            alt={chatImagePreview.fileName || 'Aperçu image'}
+                            className="max-w-full max-h-[75vh] object-contain rounded transition-transform duration-200"
+                            style={{ transform: `scale(${chatImageZoom})` }}
+                          />
+                        ) : null}
+                      </div>
+                    </DialogContent>
+                  </Dialog>
                   
                   <Dialog open={createGroupOpen} onOpenChange={setCreateGroupOpen}>
                     <DialogContent className="max-w-md">
@@ -6036,15 +9089,140 @@ export default function NOCActivityApp() {
                       <div className="space-y-4 py-4">
                         <div className="grid gap-2"><Label>Nom du groupe *</Label><Input value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)} placeholder="Ex: Shift A Discussion" /></div>
                         <div className="grid gap-2"><Label>Description</Label><Textarea value={newGroupDescription} onChange={(e) => setNewGroupDescription(e.target.value)} placeholder="Description du groupe..." /></div>
-                        <div className="grid gap-2"><Label>Membres</Label><ScrollArea className="h-48 border rounded-lg p-2">{Object.values(DEMO_USERS).filter(u => u.id !== user?.id).map((u) => (<div key={u.id} className="flex items-center gap-2 p-2 hover:bg-slate-50 dark:hover:bg-slate-800 rounded cursor-pointer" onClick={() => { setSelectedMembers(prev => prev.includes(u.id) ? prev.filter(id => id !== u.id) : [...prev, u.id]); }}><Checkbox checked={selectedMembers.includes(u.id)} /><Avatar className="w-8 h-8"><AvatarFallback className="bg-cyan-500 text-white text-xs">{u.name.charAt(0)}</AvatarFallback></Avatar><div className="flex-1 min-w-0"><p className="text-sm font-medium truncate">{u.name}</p><p className="text-xs text-muted-foreground truncate">{u.role}</p></div></div>))}</ScrollArea></div>
+                        <div className="grid gap-2"><Label>Membres</Label><ScrollArea className="h-48 border rounded-lg p-2">{usersDirectory.filter(u => u.id !== user?.id).map((u) => (<div key={u.id} className="flex items-center gap-2 p-2 hover:bg-slate-50 dark:hover:bg-slate-800 rounded cursor-pointer" onClick={() => { setSelectedMembers(prev => prev.includes(u.id) ? prev.filter(id => id !== u.id) : [...prev, u.id]); }}><Checkbox checked={selectedMembers.includes(u.id)} /><Avatar className="w-8 h-8">{u.avatar ? <AvatarImage src={u.avatar} alt={u.name} /> : null}<AvatarFallback className="bg-cyan-500 text-white text-xs">{u.name.charAt(0)}</AvatarFallback></Avatar><div className="flex-1 min-w-0"><p className="text-sm font-medium truncate">{u.name}</p><p className="text-xs text-muted-foreground truncate">{u.role}</p></div></div>))}</ScrollArea></div>
                       </div>
                       <DialogFooter>
                         <DialogClose asChild><Button variant="outline">Annuler</Button></DialogClose>
-                        <Button className="bg-cyan-500 hover:bg-cyan-600" disabled={!newGroupName.trim() || selectedMembers.length === 0} onClick={() => { const conversation: Conversation = { id: generateId(), type: 'group', name: newGroupName, description: newGroupDescription, participants: [{ id: user?.id || '', name: user?.name || '', role: 'admin', joinedAt: new Date() }, ...selectedMembers.map(id => { const u = Object.values(DEMO_USERS).find(u => u.id === id); return { id, name: u?.name || '', role: 'member' as const, joinedAt: new Date() }; })], unreadCount: 0, isPinned: false, isMuted: false, isArchived: false, createdBy: user?.id || '', createdAt: new Date(), updatedAt: new Date() }; setConversations(prev => [conversation, ...prev]); setSelectedConversation(conversation); setNewGroupName(''); setNewGroupDescription(''); setSelectedMembers([]); setCreateGroupOpen(false); toast.success('Groupe créé'); }}>Créer le groupe</Button>
+                        <Button
+                          className="bg-cyan-500 hover:bg-cyan-600"
+                          disabled={!newGroupName.trim() || selectedMembers.length === 0}
+                          onClick={async () => {
+                            const createdConversation = await createConversationInDb({
+                              type: 'group',
+                              name: newGroupName.trim(),
+                              description: newGroupDescription.trim(),
+                              participantIds: selectedMembers,
+                            });
+
+                            if (!createdConversation) {
+                              return;
+                            }
+
+                            setConversations((prev) => [
+                              createdConversation,
+                              ...prev.filter((conversation) => conversation.id !== createdConversation.id),
+                            ]);
+                            setSelectedConversation(createdConversation);
+                            setNewGroupName('');
+                            setNewGroupDescription('');
+                            setSelectedMembers([]);
+                            setCreateGroupOpen(false);
+                            toast.success('Groupe créé');
+                          }}
+                        >
+                          Créer le groupe
+                        </Button>
                       </DialogFooter>
                     </DialogContent>
                   </Dialog>
                   
+                  {/* Incoming Call Dialog */}
+                  <Dialog
+                    open={Boolean(incomingCall)}
+                    onOpenChange={(open) => {
+                      if (!open && incomingCall) {
+                        handleIncomingCallAction('ignore');
+                      }
+                    }}
+                  >
+                    <DialogContent className="max-w-md p-0 bg-gradient-to-b from-slate-900 to-slate-800 border-0 text-white">
+                      <div className="text-center py-8 px-6">
+                        <div className="flex justify-center mb-4">
+                          <Badge variant="outline" className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30">
+                            Appel entrant {incomingCall?.type === 'video' ? 'vidéo' : 'audio'}
+                          </Badge>
+                        </div>
+
+                        <Avatar className="w-28 h-28 mx-auto mb-4 ring-4 ring-emerald-500/30 ring-offset-4 ring-offset-slate-900">
+                          <AvatarFallback className="bg-gradient-to-br from-emerald-500 to-cyan-600 text-white text-3xl">
+                            {incomingCall?.callerName?.charAt(0)?.toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+
+                        <h3 className="text-2xl font-semibold mb-1">{incomingCall?.callerName}</h3>
+                        <p className="text-slate-300 mb-6">
+                          {activeCall && callState === 'connected'
+                            ? 'Vous avez un deuxième appel'
+                            : 'Souhaitez-vous répondre ?'}
+                        </p>
+
+                        {activeCall && callState === 'connected' && (
+                          <div className="mb-5 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg p-2">
+                            Appel actuel: {activeCall.calleeName}
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            onClick={() => handleIncomingCallAction('reject')}
+                          >
+                            Rejeter
+                          </Button>
+                          <Button
+                            type="button"
+                            className="bg-emerald-500 hover:bg-emerald-600 text-white"
+                            onClick={() => handleIncomingCallAction('accept')}
+                          >
+                            {activeCall && callState === 'connected' ? 'Mettre en attente et répondre' : 'Accepter'}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="border-slate-500 text-slate-100 hover:bg-slate-700"
+                            onClick={() => handleIncomingCallAction('ignore')}
+                          >
+                            Ignorer
+                          </Button>
+                        </div>
+
+                        {activeCall && callState === 'connected' && (
+                          <Button
+                            type="button"
+                            className="mt-3 w-full bg-cyan-500 hover:bg-cyan-600"
+                            onClick={() => {
+                              if (!incomingCall || !activeCall) return;
+                              setConferenceEnabled(true);
+                              setHeldCall(null);
+                              setCallParticipants((prev) => {
+                                const base = [...prev];
+                                const incomingParticipant = {
+                                  id: incomingCall.callerId,
+                                  name: incomingCall.callerName,
+                                  avatar: undefined,
+                                  isMuted: false,
+                                  isVideoOn: incomingCall.type === 'video',
+                                  isSpeaking: false,
+                                };
+                                if (!base.some((participant) => participant.id === incomingParticipant.id)) {
+                                  base.push(incomingParticipant);
+                                }
+                                return base;
+                              });
+                              handleIncomingCallAction('accept');
+                              addNotification('Conférence fusionnée', 'success', {
+                                conversationId: incomingCall.conversationId,
+                              });
+                            }}
+                          >
+                            Mettre en conférence (fusionner)
+                          </Button>
+                        )}
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+
                   {/* Call Dialog - PROFESSIONNEL */}
                   <Dialog open={callDialogOpen} onOpenChange={setCallDialogOpen}>
                     <DialogContent className="max-w-md p-0 bg-gradient-to-b from-slate-900 to-slate-800 border-0 text-white">
@@ -6088,6 +9266,31 @@ export default function NOCActivityApp() {
                           )}
                           {callState === 'ended' && 'Appel terminé'}
                         </p>
+                        <div className="min-h-[56px] mb-3 flex justify-center">
+                          <div className="pointer-events-none flex flex-col items-center gap-2">
+                            <AnimatePresence>
+                              {liveReactions
+                                .filter((item) => item.callId === activeCall?.id)
+                                .slice(-4)
+                                .map((item, index) => {
+                                  const drift = ((index % 3) - 1) * 10;
+                                  return (
+                                  <motion.div
+                                    key={item.id}
+                                    initial={{ opacity: 0, y: 16, x: 0, scale: 0.8 }}
+                                    animate={{ opacity: 1, y: -4, x: drift, scale: 1 }}
+                                    exit={{ opacity: 0, y: -30, x: drift * 1.4, scale: 0.72 }}
+                                    transition={{ duration: 0.5, ease: 'easeOut' }}
+                                    className="rounded-full bg-slate-700/80 px-3 py-1 text-sm"
+                                  >
+                                    <span className="text-lg align-middle">{item.emoji}</span>
+                                    <span className="ml-2 text-xs text-slate-200 align-middle">{item.userName}</span>
+                                  </motion.div>
+                                  );
+                                })}
+                            </AnimatePresence>
+                          </div>
+                        </div>
                         
                         {/* Ringing animation */}
                         {(callState === 'calling' || callState === 'ringing') && (
@@ -6179,6 +9382,34 @@ export default function NOCActivityApp() {
                           >
                             {isCallSpeakerOn ? <Volume2 className="w-6 h-6" /> : <VolumeX className="w-6 h-6" />}
                           </Button>
+                          {callState === 'connected' && (
+                            <Popover open={showCallReactionPicker} onOpenChange={setShowCallReactionPicker}>
+                              <PopoverTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="rounded-full h-14 w-14 bg-slate-700 text-white hover:bg-slate-600"
+                                  title="Réagir pendant l'appel"
+                                >
+                                  <Smile className="w-6 h-6" />
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-80 p-0 shadow-xl sm:w-96" align="center" sideOffset={8}>
+                                <EmojiPicker
+                                  theme={theme === 'dark' ? EmojiPickerTheme.DARK : EmojiPickerTheme.LIGHT}
+                                  lazyLoadEmojis
+                                  searchPlaceholder="Réagir en direct..."
+                                  previewConfig={{ showPreview: false }}
+                                  width="100%"
+                                  height={isCompactEmojiLayout ? 290 : 340}
+                                  onEmojiClick={(emojiData: EmojiClickData) => {
+                                    broadcastLiveReaction(emojiData.emoji, 'call');
+                                    setShowCallReactionPicker(false);
+                                  }}
+                                />
+                              </PopoverContent>
+                            </Popover>
+                          )}
                           
                           {/* End call button */}
                           <Button 
@@ -6189,6 +9420,8 @@ export default function NOCActivityApp() {
                               setCallTimer(0);
                               setCallState('ended');
                               setCallParticipants([]);
+                              setShowCallReactionPicker(false);
+                              setLiveReactions((prev) => prev.filter((item) => item.callId !== activeCall?.id));
                               if (callTimeoutRef.current) {
                                 clearTimeout(callTimeoutRef.current);
                               }
@@ -6216,7 +9449,7 @@ export default function NOCActivityApp() {
                       </DialogHeader>
                       <ScrollArea className="h-[300px] py-4">
                         <div className="space-y-2">
-                          {Object.values(DEMO_USERS)
+                          {usersDirectory
                             .filter(u => u.id !== user?.id && !callParticipants.find(p => p.id === u.id))
                             .map((u) => (
                               <div 
@@ -6282,7 +9515,7 @@ export default function NOCActivityApp() {
                         </div>
                         <ScrollArea className="h-[300px]">
                           <div className="space-y-1">
-                            {Object.values(DEMO_USERS)
+                            {usersDirectory
                               .filter(u => u.id !== user?.id)
                               .filter(u => 
                                 u.name.toLowerCase().includes(newConversationSearch.toLowerCase()) ||
@@ -6299,30 +9532,27 @@ export default function NOCActivityApp() {
                                 return (
                                   <div
                                     key={contact.id}
-                                    onClick={() => {
+                                    onClick={async () => {
                                       if (existingConv) {
                                         setSelectedConversation(existingConv);
                                         setConversations(prev => prev.map(c => 
                                           c.id === existingConv.id ? {...c, unreadCount: 0} : c
                                         ));
                                       } else {
-                                        const newConv: Conversation = {
-                                          id: generateId(),
+                                        const createdConversation = await createConversationInDb({
                                           type: 'individual',
-                                          participants: [
-                                            { id: user?.id || '', name: user?.name || '', role: 'admin', joinedAt: new Date() },
-                                            { id: contact.id, name: contact.name, avatar: contact.avatar, role: 'member', joinedAt: new Date() }
-                                          ],
-                                          unreadCount: 0,
-                                          isPinned: false,
-                                          isMuted: false,
-                                          isArchived: false,
-                                          createdBy: user?.id || '',
-                                          createdAt: new Date(),
-                                          updatedAt: new Date()
-                                        };
-                                        setConversations(prev => [newConv, ...prev]);
-                                        setSelectedConversation(newConv);
+                                          participantIds: [contact.id],
+                                        });
+
+                                        if (!createdConversation) {
+                                          return;
+                                        }
+
+                                        setConversations((prev) => [
+                                          createdConversation,
+                                          ...prev.filter((conversation) => conversation.id !== createdConversation.id),
+                                        ]);
+                                        setSelectedConversation(createdConversation);
                                       }
                                       setNewConversationOpen(false);
                                       setNewConversationSearch('');
@@ -6495,7 +9725,16 @@ export default function NOCActivityApp() {
                   </Dialog>
                   
                   {/* Dialog Recadrage Photo de Profil - AMÉLIORÉ */}
-                  <Dialog open={profilePhotoDialogOpen} onOpenChange={setProfilePhotoDialogOpen}>
+                  <Dialog
+                    open={profilePhotoDialogOpen}
+                    onOpenChange={(open) => {
+                      setProfilePhotoDialogOpen(open);
+                      if (!open) {
+                        setTempProfilePhoto(null);
+                        clearTempAvatarObjectUrl();
+                      }
+                    }}
+                  >
                     <DialogContent className="max-w-2xl">
                       <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
@@ -6512,57 +9751,18 @@ export default function NOCActivityApp() {
                             {/* Zone de recadrage */}
                             <div className="space-y-3">
                               <Label className="text-sm font-medium">Zone de recadrage</Label>
-                              <div 
-                                className="relative w-full aspect-square bg-slate-100 dark:bg-slate-800 rounded-lg overflow-hidden cursor-move"
-                                onMouseDown={(e) => {
-                                  const rect = e.currentTarget.getBoundingClientRect();
-                                  const startX = e.clientX;
-                                  const startY = e.clientY;
-                                  const startXPos = cropArea.x;
-                                  const startYPos = cropArea.y;
-                                  
-                                  const handleMouseMove = (moveEvent: MouseEvent) => {
-                                    const deltaX = ((moveEvent.clientX - startX) / rect.width) * 100;
-                                    const deltaY = ((moveEvent.clientY - startY) / rect.height) * 100;
-                                    setCropArea(prev => ({
-                                      ...prev,
-                                      x: Math.max(0, Math.min(100, startXPos - deltaX)),
-                                      y: Math.max(0, Math.min(100, startYPos - deltaY))
-                                    }));
-                                  };
-                                  
-                                  const handleMouseUp = () => {
-                                    document.removeEventListener('mousemove', handleMouseMove);
-                                    document.removeEventListener('mouseup', handleMouseUp);
-                                  };
-                                  
-                                  document.addEventListener('mousemove', handleMouseMove);
-                                  document.addEventListener('mouseup', handleMouseUp);
-                                }}
-                              >
-                                <img 
-                                  src={tempProfilePhoto} 
-                                  alt="Source" 
-                                  className="w-full h-full object-cover"
-                                  style={{
-                                    transform: `scale(${cropArea.size / 50})`,
-                                    transformOrigin: `${cropArea.x}% ${cropArea.y}%`
-                                  }}
-                                  draggable={false}
+                              <div className="relative w-full aspect-square bg-slate-100 dark:bg-slate-800 rounded-lg overflow-hidden">
+                                <Cropper
+                                  image={tempProfilePhoto}
+                                  crop={profileCrop}
+                                  zoom={profileZoom}
+                                  aspect={1}
+                                  cropShape="round"
+                                  showGrid
+                                  onCropChange={setProfileCrop}
+                                  onZoomChange={setProfileZoom}
+                                  onCropComplete={(_, croppedAreaPixels) => setProfileCroppedAreaPixels(croppedAreaPixels)}
                                 />
-                                {/* Cercle de sélection */}
-                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                  <div className="w-[80%] aspect-square border-4 border-white rounded-full shadow-[0_0_0_9999px_rgba(0,0,0,0.5)]" />
-                                </div>
-                                {/* Grille d'aide */}
-                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                  <div className="w-[80%] aspect-square relative">
-                                    <div className="absolute top-1/3 left-0 right-0 border-t border-white/30" />
-                                    <div className="absolute top-2/3 left-0 right-0 border-t border-white/30" />
-                                    <div className="absolute left-1/3 top-0 bottom-0 border-l border-white/30" />
-                                    <div className="absolute left-2/3 top-0 bottom-0 border-l border-white/30" />
-                                  </div>
-                                </div>
                               </div>
                             </div>
                             
@@ -6574,30 +9774,18 @@ export default function NOCActivityApp() {
                                   <AvatarImage 
                                     src={tempProfilePhoto} 
                                     className="object-cover"
-                                    style={{
-                                      transform: `scale(${cropArea.size / 50})`,
-                                      transformOrigin: `${cropArea.x}% ${cropArea.y}%`
-                                    }}
                                   />
                                 </Avatar>
                                 <Avatar className="w-20 h-20 ring-2 ring-cyan-500 ring-offset-2">
                                   <AvatarImage 
                                     src={tempProfilePhoto} 
                                     className="object-cover"
-                                    style={{
-                                      transform: `scale(${cropArea.size / 50})`,
-                                      transformOrigin: `${cropArea.x}% ${cropArea.y}%`
-                                    }}
                                   />
                                 </Avatar>
                                 <Avatar className="w-10 h-10 ring-1 ring-cyan-500">
                                   <AvatarImage 
                                     src={tempProfilePhoto} 
                                     className="object-cover"
-                                    style={{
-                                      transform: `scale(${cropArea.size / 50})`,
-                                      transformOrigin: `${cropArea.x}% ${cropArea.y}%`
-                                    }}
                                   />
                                 </Avatar>
                               </div>
@@ -6608,14 +9796,15 @@ export default function NOCActivityApp() {
                           <div className="space-y-2">
                             <div className="flex justify-between">
                               <Label className="text-sm">Zoom</Label>
-                              <span className="text-sm text-muted-foreground">{Math.round(cropArea.size * 2)}%</span>
+                              <span className="text-sm text-muted-foreground">{Math.round(profileZoom * 100)}%</span>
                             </div>
                             <input 
                               type="range" 
-                              min="50" 
-                              max="200" 
-                              value={cropArea.size}
-                              onChange={(e) => setCropArea(prev => ({ ...prev, size: parseInt(e.target.value) }))}
+                              min="1"
+                              max="3"
+                              step="0.01"
+                              value={profileZoom}
+                              onChange={(e) => setProfileZoom(parseFloat(e.target.value))}
                               className="w-full accent-cyan-500 h-2 rounded-lg appearance-none cursor-pointer bg-slate-200 dark:bg-slate-700"
                             />
                           </div>
@@ -6623,7 +9812,10 @@ export default function NOCActivityApp() {
                             <Button 
                               variant="outline" 
                               size="sm"
-                              onClick={() => setCropArea({ x: 50, y: 50, size: 100 })}
+                              onClick={() => {
+                                setProfileCrop({ x: 0, y: 0 });
+                                setProfileZoom(1.2);
+                              }}
                             >
                               <RotateCcw className="w-4 h-4 mr-1" /> Réinitialiser
                             </Button>
@@ -6635,15 +9827,7 @@ export default function NOCActivityApp() {
                                 input.type = 'file';
                                 input.accept = 'image/*';
                                 input.onchange = (e) => {
-                                  const file = (e.target as HTMLInputElement).files?.[0];
-                                  if (file) {
-                                    const reader = new FileReader();
-                                    reader.onload = (ev) => {
-                                      setTempProfilePhoto(ev.target?.result as string);
-                                      setCropArea({ x: 50, y: 50, size: 100 });
-                                    };
-                                    reader.readAsDataURL(file);
-                                  }
+                                  handleAvatarFileSelection((e.target as HTMLInputElement).files?.[0]);
                                 };
                                 input.click();
                               }}
@@ -6654,7 +9838,14 @@ export default function NOCActivityApp() {
                         </div>
                       </div>
                       <DialogFooter>
-                        <Button variant="outline" onClick={() => { setProfilePhotoDialogOpen(false); setTempProfilePhoto(null); }}>
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setProfilePhotoDialogOpen(false);
+                            setTempProfilePhoto(null);
+                            clearTempAvatarObjectUrl();
+                          }}
+                        >
                           Annuler
                         </Button>
                         <Button onClick={handleSaveCroppedPhoto} className="bg-cyan-500 hover:bg-cyan-600">
@@ -6768,13 +9959,13 @@ export default function NOCActivityApp() {
                             <span className="text-xs text-muted-foreground">
                               {statusBlockedContacts.length === 0 
                                 ? 'Tous les contacts' 
-                                : `${Object.values(DEMO_USERS).filter(u => u.id !== user?.id).length - statusBlockedContacts.length} contact(s)`
+                                : `${usersDirectory.filter(u => u.id !== user?.id).length - statusBlockedContacts.length} contact(s)`
                               }
                             </span>
                           </div>
                           <div className="border rounded-lg p-3 space-y-2 max-h-40 overflow-y-auto">
                             <p className="text-xs text-muted-foreground mb-2">Exclure des contacts:</p>
-                            {Object.values(DEMO_USERS)
+                            {usersDirectory
                               .filter(u => u.id !== user?.id)
                               .map((contact) => (
                                 <label 
@@ -9990,14 +13181,239 @@ export default function NOCActivityApp() {
                 </motion.div>
               )}
               
+              {/* Gestion utilisateurs - page dédiée */}
+              {currentTab === 'admin_users' && canManageUsers && (
+                <motion.div key="admin_users" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-4">
+                  <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                      <h1 className="text-2xl lg:text-3xl font-bold">Gestion des utilisateurs</h1>
+                      <p className="text-muted-foreground">Administration complète des comptes, rôles, accès et sécurité</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button variant="outline" onClick={() => void syncUsersFromApi()} disabled={isUsersSyncing}>
+                        <RefreshCw className={`w-4 h-4 mr-2 ${isUsersSyncing ? 'animate-spin' : ''}`} />
+                        Actualiser
+                      </Button>
+                      <Button variant="outline" onClick={() => setCurrentTabSafely('admin')}>
+                        <Settings className="w-4 h-4 mr-2" />
+                        Aller à Administration
+                      </Button>
+                    </div>
+                  </div>
+
+                  <Card>
+                    <CardHeader className="pb-2 pt-4">
+                      <CardTitle className="text-base">Créer un utilisateur</CardTitle>
+                      <CardDescription>Utilisez le formulaire popup standard pour créer un nouveau compte.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="pb-4 flex items-center justify-between gap-3">
+                      <p className="text-sm text-muted-foreground">La création s'enregistre directement en base de données.</p>
+                      <Button onClick={openCreateUserDialog}>
+                        <Plus className="w-4 h-4 mr-2" /> Nouveau compte
+                      </Button>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="pb-2 pt-4">
+                      <CardTitle className="text-base">Répertoire utilisateurs</CardTitle>
+                      <CardDescription>Gérez les rôles, blocages, réinitialisations et suppressions.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4 pb-4">
+                      <div className="flex flex-col gap-3 md:flex-row">
+                        <Input
+                          placeholder="Rechercher un utilisateur..."
+                          value={userSearchQuery}
+                          onChange={(e) => setUserSearchQuery(e.target.value)}
+                          className="md:flex-1"
+                        />
+                        <Select value={roleFilter} onValueChange={setRoleFilter}>
+                          <SelectTrigger className="md:w-[220px]">
+                            <SelectValue placeholder="Filtrer par rôle" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Tous les rôles</SelectItem>
+                            <SelectItem value="SUPER_ADMIN">Super Admin</SelectItem>
+                            <SelectItem value="ADMIN">Admin</SelectItem>
+                            <SelectItem value="RESPONSABLE">Responsable</SelectItem>
+                            <SelectItem value="TECHNICIEN">Technicien</SelectItem>
+                            <SelectItem value="TECHNICIEN_NO">Technicien NOC</SelectItem>
+                            <SelectItem value="USER">Utilisateur</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2 max-h-[460px] overflow-y-auto pr-1">
+                        {filteredUsers.map((u) => (
+                          <div key={u.id} className="flex flex-col gap-3 rounded-lg border bg-card p-3 lg:flex-row lg:items-center lg:justify-between">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <Avatar className="h-10 w-10">
+                                <AvatarImage src={u.avatar} />
+                                <AvatarFallback>{u.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+                              </Avatar>
+                              <div className="min-w-0">
+                                <p className="font-medium truncate">{u.name}</p>
+                                <p className="text-xs text-muted-foreground truncate">{u.email}</p>
+                              </div>
+                              <Badge className={ROLE_CONFIG[u.role].color}>{ROLE_CONFIG[u.role].label}</Badge>
+                              {u.isBlocked && <Badge variant="destructive">Bloqué</Badge>}
+                              {u.mustChangePassword && <Badge variant="outline" className="text-yellow-600">Mot de passe à changer</Badge>}
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 lg:w-[860px]">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => openEditUserDialog(u)}
+                                disabled={Boolean(usersActionInProgress)}
+                              >
+                                <Edit className="w-4 h-4 mr-1" /> Modifier
+                              </Button>
+                              <Select
+                                value={u.role}
+                                onValueChange={(value) => void handleChangeUserRole(u, value as UserRole)}
+                                disabled={Boolean(usersActionInProgress) || (u.role === 'SUPER_ADMIN' && user?.id !== u.id)}
+                              >
+                                <SelectTrigger className="h-9 text-xs">
+                                  <SelectValue placeholder="Changer le rôle" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="USER">Utilisateur</SelectItem>
+                                  <SelectItem value="TECHNICIEN">Technicien</SelectItem>
+                                  <SelectItem value="TECHNICIEN_NO">Technicien NOC</SelectItem>
+                                  <SelectItem value="RESPONSABLE">Responsable</SelectItem>
+                                  <SelectItem value="ADMIN">Admin</SelectItem>
+                                  {user?.id === u.id && <SelectItem value="SUPER_ADMIN">Super Admin</SelectItem>}
+                                </SelectContent>
+                              </Select>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => void handleToggleBlockUser(u)}
+                                disabled={Boolean(usersActionInProgress) || u.role === 'SUPER_ADMIN'}
+                              >
+                                {u.isBlocked ? 'Débloquer' : 'Bloquer'}
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedUser(u);
+                                  setEditPassword('');
+                                  setConfirmPassword('');
+                                  setSecurityDialogOpen(true);
+                                }}
+                                disabled={Boolean(usersActionInProgress) || (u.role === 'SUPER_ADMIN' && user?.id !== u.id)}
+                              >
+                                Réinitialiser MDP
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => void handleDeleteUser(u)}
+                                disabled={Boolean(usersActionInProgress) || u.role === 'SUPER_ADMIN' || !isSuperAdmin(user)}
+                              >
+                                <Trash2 className="w-4 h-4 mr-1" /> Supprimer
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="pb-2 pt-4">
+                      <CardTitle className="text-base">Journal d'activité</CardTitle>
+                      <CardDescription>Traçabilité des actions sensibles réalisées sur les comptes.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="pb-4">
+                      <div className="space-y-2 max-h-[260px] overflow-y-auto pr-1">
+                        {auditLogs.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">Aucune activité enregistrée.</p>
+                        ) : (
+                          auditLogs.map((log) => (
+                            <div key={log.id} className="flex items-center justify-between rounded-lg border bg-card p-3">
+                              <div>
+                                <p className="text-sm font-medium">{log.action}</p>
+                                <p className="text-xs text-muted-foreground">{log.details}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-sm">{log.userName}</p>
+                                <p className="text-xs text-muted-foreground">{new Date(log.createdAt).toLocaleString('fr-FR')}</p>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              )}
+
               {/* Admin */}
-              {currentTab === 'admin' && user?.role === 'ADMIN' && (
+              {currentTab === 'admin' && canManageUsers && (
                 <motion.div key="admin" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-4">
                   <div>
                     <h1 className="text-2xl lg:text-3xl font-bold">Administration</h1>
                     <p className="text-muted-foreground">Gestion des utilisateurs et paramètres</p>
                   </div>
+
+                  <Card>
+                    <CardContent className="pt-6 pb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <p className="font-medium">Gestion des comptes utilisateurs</p>
+                        <p className="text-sm text-muted-foreground">Accédez à la page dédiée pour gérer rôles, sécurité et accès.</p>
+                      </div>
+                      <Button onClick={() => setCurrentTabSafely('admin_users')}>
+                        <Users className="w-4 h-4 mr-2" /> Ouvrir la gestion utilisateurs
+                      </Button>
+                    </CardContent>
+                  </Card>
                   
+                  <Card>
+                    <CardHeader className="pb-2 pt-4">
+                      <CardTitle className="text-base">Contrôle des Rubriques</CardTitle>
+                      <CardDescription>Activez ou désactivez les rubriques visibles pour les utilisateurs.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="pb-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {Object.entries(SECTION_LABELS)
+                          .filter(([key]) => key !== 'admin')
+                          .map(([key, label]) => (
+                            <div key={key} className="flex items-center justify-between rounded-lg border p-3">
+                              <span className="text-sm font-medium">{label}</span>
+                              <Switch
+                                checked={sectionAccess[key as AppSectionKey]}
+                                onCheckedChange={(checked) =>
+                                  setSectionAccess((prev) => ({
+                                    ...prev,
+                                    [key]: checked,
+                                  }))
+                                }
+                              />
+                            </div>
+                          ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="pb-2 pt-4">
+                      <CardTitle className="text-base">Types d'Alertes Disponibles</CardTitle>
+                      <CardDescription>Types utilisables pour qualifier les alertes NOC.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="pb-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                        {Object.entries(ALERT_TYPE_CONFIG).map(([key, config]) => (
+                          <Badge key={key} variant="outline" className={`justify-center py-1 ${config.colorClass}`}>
+                            {config.label}
+                          </Badge>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+
                   <Card>
                     <CardHeader className="pb-2 pt-4">
                       <CardTitle className="text-base">Configuration des Shifts</CardTitle>
@@ -10038,6 +13454,14 @@ export default function NOCActivityApp() {
             </AnimatePresence>
           </main>
         </div>
+
+        <input
+          ref={chatAvatarInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleConversationAvatarUpload}
+        />
         
         {/* Rest Dialog */}
         <Dialog open={restDialogOpen} onOpenChange={setRestDialogOpen}>
@@ -10090,7 +13514,10 @@ export default function NOCActivityApp() {
               <DialogDescription>Téléchargez votre photo de profil</DialogDescription>
             </DialogHeader>
             <div className="flex flex-col items-center gap-4 py-4">
-              <Avatar className="h-24 w-24">
+              <Avatar
+                className="h-24 w-24 cursor-zoom-in"
+                onClick={() => openAvatarViewer(user?.avatar, user?.name)}
+              >
                 {user?.avatar ? (
                   <AvatarImage src={user.avatar} alt={user.name} />
                 ) : null}
@@ -10099,30 +13526,38 @@ export default function NOCActivityApp() {
                 </AvatarFallback>
               </Avatar>
               
-              <Label htmlFor="avatar-upload" className="cursor-pointer">
-                <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90">
-                  <Upload className="w-4 h-4" />
-                  Choisir une image
-                </div>
-                <Input
-                  id="avatar-upload"
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleAvatarUpload}
-                />
-              </Label>
+              <Button
+                type="button"
+                className="flex items-center gap-2"
+                onClick={() => avatarFileInputRef.current?.click()}
+              >
+                <Upload className="w-4 h-4" />
+                Choisir une image
+              </Button>
+              <Input
+                id="avatar-upload"
+                ref={avatarFileInputRef}
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                onChange={handleAvatarUpload}
+              />
               
               {user?.avatar && (
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => {
-                    if (user) {
-                      const updatedUser = { ...user, avatar: undefined };
-                      setUser(updatedUser);
-                      localStorage.setItem('noc_user', JSON.stringify(updatedUser));
-                      toast.success('Photo supprimée');
+                  onClick={async () => {
+                    if (!user) return;
+                    try {
+                      await persistUserProfile({ avatar: null });
+                      await fetchConversations();
+                      toast.success('Photo supprimée', {
+                        description: 'La suppression est enregistrée en base de données.',
+                      });
+                    } catch (error) {
+                      console.error('Erreur suppression avatar', error);
+                      toast.error('Erreur', { description: 'Impossible de supprimer la photo de profil' });
                     }
                   }}
                 >
@@ -10195,14 +13630,28 @@ export default function NOCActivityApp() {
         </Dialog>
 
         {/* Dialog Sécuriser le compte */}
-        <Dialog open={securityDialogOpen} onOpenChange={setSecurityDialogOpen}>
+        <Dialog
+          open={securityDialogOpen}
+          onOpenChange={(open) => {
+            setSecurityDialogOpen(open);
+            if (!open) {
+              setSelectedUser(null);
+              setEditPassword('');
+              setConfirmPassword('');
+            }
+          }}
+        >
           <DialogContent className="sm:max-w-[450px]">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Settings className="w-5 h-5" />
-                Sécuriser mon compte
+                {isAdminPasswordResetMode ? 'Réinitialiser mot de passe' : 'Sécuriser mon compte'}
               </DialogTitle>
-              <DialogDescription>Définissez votre mot de passe sécurisé</DialogDescription>
+              <DialogDescription>
+                {isAdminPasswordResetMode
+                  ? `Définissez un nouveau mot de passe temporaire pour ${selectedUser?.name || 'cet utilisateur'}`
+                  : 'Définissez votre mot de passe sécurisé'}
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
@@ -10280,7 +13729,7 @@ export default function NOCActivityApp() {
             <DialogFooter>
               <DialogClose asChild><Button variant="outline">Annuler</Button></DialogClose>
               <Button onClick={handleSaveSecurity} disabled={!validatePassword(editPassword).isValid || editPassword !== confirmPassword}>
-                Sécuriser
+                {isAdminPasswordResetMode ? 'Réinitialiser' : 'Sécuriser'}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -10408,7 +13857,7 @@ export default function NOCActivityApp() {
         </Dialog>
 
         {/* Dialog Gestion des Utilisateurs (Super Admin) */}
-        {isSuperAdmin(user) && (
+        {false && isSuperAdmin(user) && (
           <Dialog open={usersManagementOpen} onOpenChange={setUsersManagementOpen}>
             <DialogContent className="sm:max-w-[900px] max-h-[80vh]">
               <DialogHeader>
@@ -10470,6 +13919,23 @@ export default function NOCActivityApp() {
                           )}
                         </div>
                         <div className="flex items-center gap-2">
+                          <Select
+                            value={u.role}
+                            onValueChange={(value) => handleChangeUserRole(u, value as UserRole)}
+                            disabled={u.role === 'SUPER_ADMIN' && user?.id !== u.id}
+                          >
+                            <SelectTrigger className="w-[170px] h-8 text-xs">
+                              <SelectValue placeholder="Changer le rôle" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="USER">Utilisateur</SelectItem>
+                              <SelectItem value="TECHNICIEN">Technicien</SelectItem>
+                              <SelectItem value="TECHNICIEN_NO">Technicien NOC</SelectItem>
+                              <SelectItem value="RESPONSABLE">Responsable</SelectItem>
+                              <SelectItem value="ADMIN">Admin</SelectItem>
+                              {user?.id === u.id && <SelectItem value="SUPER_ADMIN">Super Admin</SelectItem>}
+                            </SelectContent>
+                          </Select>
                           <Button
                             variant="outline"
                             size="sm"
@@ -10484,6 +13950,7 @@ export default function NOCActivityApp() {
                             onClick={() => {
                               setSelectedUser(u);
                               setEditPassword('');
+                              setConfirmPassword('');
                               setSecurityDialogOpen(true);
                             }}
                             disabled={u.role === 'SUPER_ADMIN' && user?.id !== u.id}
@@ -10515,7 +13982,7 @@ export default function NOCActivityApp() {
         )}
 
         {/* Dialog Créer un utilisateur */}
-        {isSuperAdmin(user) && (
+        {canManageUsers && (
           <Dialog open={createUserDialogOpen} onOpenChange={setCreateUserDialogOpen}>
             <DialogContent className="sm:max-w-[500px]">
               <DialogHeader>
@@ -10553,8 +14020,40 @@ export default function NOCActivityApp() {
                       <SelectItem value="TECHNICIEN_NO">Technicien NOC</SelectItem>
                       <SelectItem value="RESPONSABLE">Responsable</SelectItem>
                       <SelectItem value="ADMIN">Admin</SelectItem>
+                      {isSuperAdmin(user) && <SelectItem value="SUPER_ADMIN">Super Admin</SelectItem>}
                     </SelectContent>
                   </Select>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Shift (optionnel)</Label>
+                    <Select value={editShift || 'none'} onValueChange={(v) => setEditShift(v === 'none' ? '' : v)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Aucun</SelectItem>
+                        <SelectItem value="A">Shift A</SelectItem>
+                        <SelectItem value="B">Shift B</SelectItem>
+                        <SelectItem value="C">Shift C</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Fonction (optionnel)</Label>
+                    <Select value={editResponsibility || 'none'} onValueChange={(v) => setEditResponsibility(v === 'none' ? '' : (v as ResponsibilityType))}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Aucune</SelectItem>
+                        <SelectItem value="CALL_CENTER">Call Center</SelectItem>
+                        <SelectItem value="MONITORING">Monitoring</SelectItem>
+                        <SelectItem value="REPORTING_1">Reporting 1</SelectItem>
+                        <SelectItem value="REPORTING_2">Reporting 2</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label>Mot de passe par défaut</Label>
@@ -10564,39 +14063,295 @@ export default function NOCActivityApp() {
               </div>
               <DialogFooter>
                 <DialogClose asChild><Button variant="outline">Annuler</Button></DialogClose>
-                <Button onClick={handleCreateUser}>Créer l'utilisateur</Button>
+                <Button onClick={() => void handleCreateUser()} disabled={usersActionInProgress === 'create'}>Créer l'utilisateur</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
         )}
 
+        {/* Dialog Modifier un utilisateur */}
+        {canManageUsers && (
+          <Dialog open={editUserDialogOpen} onOpenChange={setEditUserDialogOpen}>
+            <DialogContent className="sm:max-w-[560px]">
+              <DialogHeader>
+                <DialogTitle>Modifier un utilisateur</DialogTitle>
+                <DialogDescription>Mettez à jour toutes les informations du compte.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Prénom</Label>
+                    <Input value={editFirstName} onChange={(e) => setEditFirstName(e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Nom</Label>
+                    <Input value={editLastName} onChange={(e) => setEditLastName(e.target.value)} />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Email</Label>
+                  <Input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} placeholder="@siliconeconnect.com" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Pseudo (optionnel)</Label>
+                  <Input value={editUsername} onChange={(e) => setEditUsername(e.target.value)} />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Rôle</Label>
+                    <Select value={editRole} onValueChange={(v) => setEditRole(v as UserRole)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="USER">Utilisateur</SelectItem>
+                        <SelectItem value="TECHNICIEN">Technicien</SelectItem>
+                        <SelectItem value="TECHNICIEN_NO">Technicien NOC</SelectItem>
+                        <SelectItem value="RESPONSABLE">Responsable</SelectItem>
+                        <SelectItem value="ADMIN">Admin</SelectItem>
+                        {isSuperAdmin(user) && <SelectItem value="SUPER_ADMIN">Super Admin</SelectItem>}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Shift</Label>
+                    <Select value={editShift || 'none'} onValueChange={(v) => setEditShift(v === 'none' ? '' : v)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Aucun</SelectItem>
+                        <SelectItem value="A">Shift A</SelectItem>
+                        <SelectItem value="B">Shift B</SelectItem>
+                        <SelectItem value="C">Shift C</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Fonction</Label>
+                  <Select value={editResponsibility || 'none'} onValueChange={(v) => setEditResponsibility(v === 'none' ? '' : (v as ResponsibilityType))}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Aucune</SelectItem>
+                      <SelectItem value="CALL_CENTER">Call Center</SelectItem>
+                      <SelectItem value="MONITORING">Monitoring</SelectItem>
+                      <SelectItem value="REPORTING_1">Reporting 1</SelectItem>
+                      <SelectItem value="REPORTING_2">Reporting 2</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex items-center justify-between rounded-lg border p-3">
+                    <Label>Compte actif</Label>
+                    <Switch checked={editUserIsActive} onCheckedChange={setEditUserIsActive} />
+                  </div>
+                  <div className="flex items-center justify-between rounded-lg border p-3">
+                    <Label>Compte bloqué</Label>
+                    <Switch checked={editUserIsBlocked} onCheckedChange={setEditUserIsBlocked} />
+                  </div>
+                </div>
+              </div>
+              <DialogFooter>
+                <DialogClose asChild><Button variant="outline">Annuler</Button></DialogClose>
+                <Button onClick={() => void handleUpdateUserDetails()} disabled={usersActionInProgress === `edit:${userToEdit?.id || ''}`}>
+                  Enregistrer
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
+
+        {/* Dialog Suppression sécurisée d'utilisateur */}
+        <Dialog open={deleteConfirmationOpen} onOpenChange={(open) => {
+          setDeleteConfirmationOpen(open);
+          if (!open) {
+            setUserToDelete(null);
+            setDeleteConfirmationInput('');
+          }
+        }}>
+          <DialogContent className="sm:max-w-[450px]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-destructive">
+                <AlertTriangle className="w-5 h-5" />
+                Supprimer cet utilisateur?
+              </DialogTitle>
+              <DialogDescription>
+                Cette action est définitive et ne peut pas être annulée.
+              </DialogDescription>
+            </DialogHeader>
+            {userToDelete && (
+              <div className="space-y-4 py-4">
+                <Card className="bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-800">
+                  <CardContent className="pt-4">
+                    <p className="text-sm">
+                      Vous allez supprimer le compte: <span className="font-semibold">{userToDelete.name}</span>
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Rôle: <span className="font-medium">{userToDelete.role}</span>
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <div className="space-y-2">
+                  <Label className="text-base font-semibold">
+                    Confirmez en recopiant le pseudo/nom ci-dessous:
+                  </Label>
+                  <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-lg border-2 border-slate-200 dark:border-slate-700">
+                    <p className="font-mono font-bold text-main text-center">{userToDelete.username || userToDelete.name}</p>
+                  </div>
+                  <Input
+                    placeholder="Entrez le pseudo/nom pour confirmer"
+                    value={deleteConfirmationInput}
+                    onChange={(e) => setDeleteConfirmationInput(e.target.value)}
+                    className="font-mono"
+                  />
+                </div>
+
+                <div className="bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 p-3 rounded-lg">
+                  <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                    ⚠️ La suppression est définitive. Toutes les données associées seront perdues.
+                  </p>
+                </div>
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDeleteConfirmationOpen(false)}>
+                Annuler
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={confirmDeleteUser}
+                disabled={!userToDelete || deleteConfirmationInput.trim() !== (userToDelete.username || userToDelete.name)}
+              >
+                Supprimer définitivement
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         {/* Dialog Journal d'activité */}
         {isSuperAdmin(user) && (
           <Dialog open={auditLogDialogOpen} onOpenChange={setAuditLogDialogOpen}>
-            <DialogContent className="sm:max-w-[900px] max-h-[80vh]">
+            <DialogContent className="sm:max-w-[1000px] max-h-[85vh]">
               <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <FileText className="w-5 h-5" />
-                  Journal d'activité (Audit Log)
-                </DialogTitle>
-                <DialogDescription>Historique de toutes les actions</DialogDescription>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-5 h-5" />
+                    <div>
+                      <DialogTitle>Journal d'activité (Audit Log)</DialogTitle>
+                      <DialogDescription>Historique de toutes les actions | Traçabilité des actions sensibles</DialogDescription>
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={refreshAuditLog}
+                    disabled={auditLogRefreshing}
+                    className="gap-2"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${auditLogRefreshing ? 'animate-spin' : ''}`} />
+                    Rafraîchir
+                  </Button>
+                </div>
               </DialogHeader>
-              <ScrollArea className="h-[500px]">
+
+              {/* Contrôles de filtre */}
+              <div className="space-y-4 mb-4 pb-4 border-b">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {/* Filtre Date - De */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Date de début</label>
+                    <input
+                      type="date"
+                      value={auditLogDateFrom}
+                      onChange={(e) => setAuditLogDateFrom(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-md text-sm"
+                    />
+                  </div>
+
+                  {/* Filtre Date - À */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Date de fin</label>
+                    <input
+                      type="date"
+                      value={auditLogDateTo}
+                      onChange={(e) => setAuditLogDateTo(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-md text-sm"
+                    />
+                  </div>
+
+                  {/* Filtre Type d'action */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Type d'action</label>
+                    <select
+                      value={auditLogActionType}
+                      onChange={(e) => setAuditLogActionType(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-md text-sm"
+                    >
+                      <option value="all">Tous les types</option>
+                      {uniqueActionTypes.map(type => (
+                        <option key={type} value={type}>{type}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Filtre Statut */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Statut</label>
+                    <select
+                      value={auditLogStatusFilter}
+                      onChange={(e) => setAuditLogStatusFilter(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-md text-sm"
+                    >
+                      <option value="all">Tous les statuts</option>
+                      <option value="SUCCESS">Succès</option>
+                      <option value="FAILED">Erreur</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Filtre Utilisateur */}
                 <div className="space-y-2">
-                  {auditLogs.length === 0 ? (
-                    <p className="text-center text-muted-foreground py-8">Aucune activité enregistrée</p>
+                  <label className="text-sm font-medium">Filtre par utilisateur</label>
+                  <input
+                    type="text"
+                    placeholder="Rechercher par nom d'utilisateur..."
+                    value={auditLogUserFilter}
+                    onChange={(e) => setAuditLogUserFilter(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-md text-sm"
+                  />
+                </div>
+
+                {/* Indicateur de résultats filtrés */}
+                {(auditLogDateFrom || auditLogDateTo || auditLogActionType !== 'all' || auditLogStatusFilter !== 'all' || auditLogUserFilter) && (
+                  <div className="text-sm text-muted-foreground">
+                    {filteredAuditLogs.length} résultat(s) correspondant aux filtres
+                  </div>
+                )}
+              </div>
+
+              {/* Liste des logs filtrés */}
+              <ScrollArea className="h-[400px]">
+                <div className="space-y-2 pr-4">
+                  {filteredAuditLogs.length === 0 ? (
+                    <p className="text-center text-muted-foreground py-8">
+                      {auditLogs.length === 0 ? 'Aucune activité enregistrée' : 'Aucun résultat ne correspond aux filtres'}
+                    </p>
                   ) : (
-                    auditLogs.map((log) => (
-                      <div key={log.id} className="flex items-center justify-between p-3 rounded-lg border bg-card">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-2 h-2 rounded-full ${log.status === 'SUCCESS' ? 'bg-green-500' : 'bg-red-500'}`} />
-                          <div>
-                            <p className="font-medium">{log.action}</p>
-                            <p className="text-xs text-muted-foreground">{log.details}</p>
+                    filteredAuditLogs.map((log) => (
+                      <div key={log.id} className="flex items-start justify-between p-3 rounded-lg border bg-card hover:bg-accent transition">
+                        <div className="flex items-start gap-3 flex-1">
+                          <div className={`w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0 ${log.status === 'SUCCESS' ? 'bg-green-500' : 'bg-red-500'}`} />
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm">{log.action}</p>
+                            <p className="text-xs text-muted-foreground break-words">{log.details}</p>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <p className="text-sm">{log.userName}</p>
+                        <div className="text-right ml-4 flex-shrink-0">
+                          <p className="text-sm font-medium">{log.userName}</p>
                           <p className="text-xs text-muted-foreground">
                             {new Date(log.createdAt).toLocaleString('fr-FR')}
                           </p>
@@ -10606,6 +14361,7 @@ export default function NOCActivityApp() {
                   )}
                 </div>
               </ScrollArea>
+
               <DialogFooter>
                 <DialogClose asChild><Button>Fermer</Button></DialogClose>
               </DialogFooter>
@@ -10663,7 +14419,7 @@ export default function NOCActivityApp() {
               {/* Suggestions */}
               {showSuggestions && toInput && (
                 <div className="border rounded-lg bg-white dark:bg-slate-900 shadow-lg max-h-40 overflow-auto">
-                  {Object.values(DEMO_USERS)
+                  {usersDirectory
                     .filter(u => 
                       u.name.toLowerCase().includes(toInput.toLowerCase()) ||
                       u.email.toLowerCase().includes(toInput.toLowerCase())
@@ -10910,6 +14666,38 @@ export default function NOCActivityApp() {
                 Enregistrer le brouillon
               </Button>
             </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={avatarViewerOpen} onOpenChange={setAvatarViewerOpen}>
+          <DialogContent className="max-w-xl">
+            <DialogHeader>
+              <DialogTitle>{avatarViewerData?.name || 'Photo de profil'}</DialogTitle>
+            </DialogHeader>
+            {avatarViewerData?.src ? (
+              <div className="flex flex-col items-center justify-center gap-4">
+                <img
+                  src={avatarViewerData.src}
+                  alt={avatarViewerData.name || 'Photo de profil'}
+                  className="max-h-[70vh] w-auto rounded-lg object-contain"
+                />
+                <Button
+                  onClick={() => {
+                    if (!avatarViewerData?.src) return;
+                    const link = document.createElement('a');
+                    link.href = avatarViewerData.src;
+                    link.download = `${avatarViewerData.name || 'photo'}.jpg`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                  }}
+                  className="gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  <Download className="w-4 h-4" />
+                  Télécharger
+                </Button>
+              </div>
+            ) : null}
           </DialogContent>
         </Dialog>
       </div>

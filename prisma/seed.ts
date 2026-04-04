@@ -1,4 +1,4 @@
-import { PrismaClient, Role, DayType, ResponsibilityType } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -58,7 +58,7 @@ async function main() {
         name: member.name,
         firstName: member.firstName,
         lastName: member.lastName,
-        role: Role.AGENT,
+        role: 'TECHNICIEN_NO',
         shiftId: shiftA.id,
         isActive: true
       }
@@ -82,7 +82,7 @@ async function main() {
         name: member.name,
         firstName: member.firstName,
         lastName: member.lastName,
-        role: Role.AGENT,
+        role: 'TECHNICIEN_NO',
         shiftId: shiftB.id,
         isActive: true
       }
@@ -106,7 +106,7 @@ async function main() {
         name: member.name,
         firstName: member.firstName,
         lastName: member.lastName,
-        role: Role.AGENT,
+        role: 'TECHNICIEN_NO',
         shiftId: shiftC.id,
         isActive: true
       }
@@ -124,7 +124,7 @@ async function main() {
       name: 'Admin',
       firstName: 'Admin',
       lastName: 'User',
-      role: Role.ADMIN,
+      role: 'ADMIN',
       isActive: true
     }
   });
@@ -138,7 +138,7 @@ async function main() {
       name: 'Supervisor',
       firstName: 'Super',
       lastName: 'Visor',
-      role: Role.SUPERVISOR,
+      role: 'RESPONSABLE',
       isActive: true
     }
   });

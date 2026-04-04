@@ -1,0 +1,41 @@
+[
+  {
+    "userId": "agent-a3",
+    "subscription": {
+      "endpoint": "https://fcm.googleapis.com/fcm/send/f7nLGqKnqO8:APA91bFwh3MXST4rmsotgNdC_lZsWtYOp0bYFDguLO0if3vcRzPTGR14fSewjrK-SVUY4ZwM56-xup2QCkPCsrTGK6FCbI2i6Nv4YXbKiutiY1Wxv8XVmYcLDDqUxTLb8UtE1gZEOghc",
+      "expirationTime": null,
+      "keys": {
+        "p256dh": "BHhF-Vgg_kGb_oVwPg_4yfYDsmk6yn4ttLnkhaOWtDLya2KbzCR13l_yw_Z-B8nfXEHBR6I_UHTadlpZeBMv5ZY",
+        "auth": "bFuN1sO_01ioqiSRxhZRAA"
+      }
+    },
+    "createdAt": "2026-04-02T09:10:18.112Z",
+    "updatedAt": "2026-04-02T16:26:05.100Z"
+  },
+  {
+    "userId": "agent-c4",
+    "subscription": {
+      "endpoint": "https://updates.push.services.mozilla.com/wpush/v2/gAAAAABpzjcmeD3YADFO5vu90GssnOb2KJ-0gktLPiTdtterVvOg2FPqDej8ERVZB1oYuElEleynipAVExolIGudDbV1rzVEotKe3oTyL0wMueQ_MnwkfIS4uC_RFAAsmQNSpoZLcmuzsOOGoRQ1NsbIg-OrIjHPhFywJklSAVD1KXjziXBQeH0",
+      "expirationTime": null,
+      "keys": {
+        "p256dh": "BEMjNson1sPOwXfjPdisc5atK18XN3clUsZy_tV-CCiYYJc1vregPMsj2M11bbX8ODNDLIvwBiQGRzWZU9paKeI",
+        "auth": "T59BODCnOIUb5zVCVSpI4g"
+      }
+    },
+    "createdAt": "2026-04-02T09:30:16.700Z",
+    "updatedAt": "2026-04-02T16:26:04.338Z"
+  },
+  {
+    "userId": "agent-c1",
+    "subscription": {
+      "endpoint": "https://wns2-par02p.notify.windows.com/w/?token=BQYAAADwz7AS8yAGYmyBHOoNnzA%2fleGEP2nsPSFoeD46A4PlhT%2fBs%2bkLd1f7dWSDulnQbK0oqLWBNetFM54uBnx0zU0GOlcqN16IWXqBMUWzvBad7QJYkwMFI2GQeL5r7%2f4BHVKQvexbyCN44HdruubNg5fqSCk7F8OS0zxdQkeX4ntUYrt0JD8jiQGrQd1oPQM%2f%2bQ7IYJNvaGu%2fXl%2bYR7kQBlNWRXUnO3%2fp1EvpExUueNqCEcBKibfTwaV2RdhbFLD6I1ehHlK18KaL%2fTX6cHwuYHlyY1DE%2bIRAop%2b%2byVjnPTaOUaFEXMZcGJLjORDPPR3rHn4%3d",
+      "expirationTime": null,
+      "keys": {
+        "p256dh": "BJSjlRDZH_Davw7zgCh_xx_apRD316Aj4j59YLfVgNHsurYaHQrLv-5k6m9qGfR-rFiiXtOk7aoPxijbs0KaQaI",
+        "auth": "-vDOndi7-1l1br8ifAVzOg"
+      }
+    },
+    "createdAt": "2026-04-02T13:00:19.862Z",
+    "updatedAt": "2026-04-02T14:46:02.231Z"
+  }
+]

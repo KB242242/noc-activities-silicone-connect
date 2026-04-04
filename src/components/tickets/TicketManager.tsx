@@ -38,7 +38,7 @@ import {
   Paperclip, ThumbsUp, ThumbsDown, ArrowUpCircle, Folder, FolderOpen, File,
   Bold, Italic, AlignLeft, AlignCenter, AlignRight, List as ListIcon, Palette, Type,
   Archive, Bookmark, MoreHorizontal, Printer, Share2, Copy, RotateCcw, Trash,
-  Bell, BellOff, Pin, PinOff, ExternalLink, Settings, ChevronUp, Info, Warning,
+  Bell, BellOff, Pin, PinOff, ExternalLink, Settings, ChevronUp, Info,
   Upload
 } from 'lucide-react';
 

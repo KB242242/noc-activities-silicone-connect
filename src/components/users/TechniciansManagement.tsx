@@ -29,6 +29,7 @@ export default function TechniciansManagement({ userRole }: TechniciansManagemen
       // Initialize with default technicians
       return DEFAULT_TECHNICIANS.map(t => ({
         ...t,
+        department: 'Technique',
         id: generateId(),
         isActive: true,
         assignedTicketsCount: 0,

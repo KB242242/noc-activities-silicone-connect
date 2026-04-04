@@ -1,0 +1,62 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String @id @default(cuid())
+  name      String
+  email     String @unique
+  username  String @unique
+  role      String @default("USER")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sentMessages ChatMessage[] @relation("SentMessages")
+  conversations ConversationParticipant[]
+}
+
+model Conversation {
+  id        String @id @default(cuid())
+  type      String @default("individual")
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  participants ConversationParticipant[]
+  messages     ChatMessage[]
+}
+
+model ConversationParticipant {
+  id             String @id @default(cuid())
+  conversationId String
+  userId         String
+  role           String @default("member")
+  joinedAt       DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+}
+
+model ChatMessage {
+  id             String @id @default(cuid())
+  conversationId String
+  senderId       String
+  senderName     String
+  senderAvatar   String?
+  type           String
+  content        String @db.Text
+  status         String @default("sent")
+  readAt         DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+}

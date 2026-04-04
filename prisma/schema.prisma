@@ -54,6 +54,10 @@ model User {
   assignedTickets     Ticket[]                 @relation("TicketAssignee")
   reportedTickets     Ticket[]                 @relation("TicketReporter")
   shift               Shift?                   @relation(fields: [shiftId], references: [id], onUpdate: NoAction, map: "fk_users_shift")
+  conversationParticipants ConversationParticipant[]
+  sentMessages        ChatMessage[]            @relation("UserSentMessages")
+  organizedMeetings   ScheduledMeeting[]       @relation("MeetingOrganizer")
+  meetingParticipants MeetingParticipant[]     @relation("MeetingParticipants")
 
   @@index([role], map: "idx_users_role")
   @@index([shiftId], map: "idx_users_shift_id")
@@ -390,7 +394,7 @@ model Notification {
 model Session {
   id        String    @id @default(cuid())
   userId    String    @map("user_id")
-  token     String    @unique(map: "uk_sessions_token") @db.VarChar(500)
+  token     String    @unique(map: "uk_sessions_token") @db.VarChar(191)
   expiresAt DateTime? @map("expires_at")
   createdAt DateTime? @default(now()) @map("created_at")
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_sessions_user")
@@ -601,6 +605,7 @@ enum tasks_status {
   COMPLETED
   ON_HOLD
   CANCELLED
+
   LATE
 }
 
@@ -609,6 +614,7 @@ enum tickets_status {
   IN_PROGRESS
   PENDING
   ESCALATED
+
   SUSPENDED
   WAITING_FICHE
   RESOLVED
@@ -620,6 +626,7 @@ enum tasks_category {
   MAINTENANCE
   SURVEILLANCE
   ADMINISTRATIVE
+
   OTHER
 }
 
@@ -673,4 +680,116 @@ enum users_presence_status {
   OFFLINE
   AWAY
   BUSY
+}
+
+model Conversation {
+  id           String                    @id @default(cuid()) @db.VarChar(191)
+  title        String?                   @db.VarChar(191)
+  createdAt    DateTime                  @default(now()) @map("created_at")
+  updatedAt    DateTime                  @updatedAt @map("updated_at")
+  participants ConversationParticipant[]
+  messages     ChatMessage[]
+
+  @@map("conversations")
+}
+
+model ConversationParticipant {
+  id             String       @id @default(cuid()) @db.VarChar(191)
+  conversationId String       @map("conversation_id") @db.VarChar(191)
+  userId         String       @map("user_id") @db.VarChar(191)
+  role           String?      @db.VarChar(50)
+  joinedAt       DateTime     @default(now()) @map("joined_at")
+  lastReadAt     DateTime?    @map("last_read_at")
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages       ChatMessage[]
+
+  @@unique([conversationId, userId])
+  @@index([userId], map: "idx_conversation_participants_user_id")
+  @@map("conversation_participants")
+}
+
+model ChatMessage {
+  id             String                  @id @default(cuid()) @db.VarChar(191)
+  conversationId String                  @map("conversation_id") @db.VarChar(191)
+  senderId       String                  @map("sender_id") @db.VarChar(191)
+  participantId  String                  @map("participant_id") @db.VarChar(191)
+  content        String                  @db.Text
+  sentAt         DateTime                @default(now()) @map("sent_at")
+  status         String?                 @db.VarChar(50)
+  readAt         DateTime?               @map("read_at")
+  updatedAt      DateTime                @default(now()) @updatedAt @map("updated_at")
+  conversation   Conversation            @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User                    @relation("UserSentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  participant    ConversationParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, sentAt], map: "idx_chat_messages_conversation_sent_at")
+  @@index([senderId], map: "idx_chat_messages_sender_id")
+  @@map("chat_messages")
+}
+
+// Video Call Models
+model ScheduledMeeting {
+  id                  String    @id @default(cuid())
+  title               String    @db.VarChar(500)
+  description         String?   @db.Text
+  conversationId      String    @map("conversation_id")
+  organizerId         String    @map("organizer_id")
+  scheduledStartTime  DateTime  @map("scheduled_start_time")
+  scheduledEndTime    DateTime  @map("scheduled_end_time")
+  callType            String    @default("video") @map("call_type") @db.VarChar(50)
+  meetingLink         String?   @map("meeting_link") @db.VarChar(500)
+  maxParticipants     Int?      @map("max_participants")
+  allowScreenShare    Boolean   @default(true) @map("allow_screen_share")
+  allowRecording      Boolean   @default(false) @map("allow_recording")
+  reminderSentAt      DateTime? @map("reminder_sent_at")
+  status              String    @default("scheduled") @db.VarChar(50)
+  notes               String?   @db.Text
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @default(now()) @updatedAt @map("updated_at")
+  organizer           User      @relation("MeetingOrganizer", fields: [organizerId], references: [id], onDelete: Cascade)
+  participants        MeetingParticipant[]
+  callHistory         CallHistory?
+
+  @@index([organizerId], map: "idx_scheduled_meetings_organizer_id")
+  @@index([conversationId], map: "idx_scheduled_meetings_conversation_id")
+  @@index([scheduledStartTime], map: "idx_scheduled_meetings_start_time")
+  @@index([status], map: "idx_scheduled_meetings_status")
+  @@map("scheduled_meetings")
+}
+
+model MeetingParticipant {
+  id          String            @id @default(cuid())
+  meetingId   String            @map("meeting_id")
+  userId      String            @map("user_id")
+  status      String            @default("invited") @db.VarChar(50)
+  joinedAt    DateTime?         @map("joined_at")
+  leftAt      DateTime?         @map("left_at")
+  createdAt   DateTime          @default(now()) @map("created_at")
+  meeting     ScheduledMeeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  user        User              @relation("MeetingParticipants", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([meetingId, userId])
+  @@index([userId], map: "idx_meeting_participants_user_id")
+  @@map("meeting_participants")
+}
+
+model CallHistory {
+  id              String    @id @default(cuid())
+  meetingId       String?   @map("meeting_id")
+  conversationId  String    @map("conversation_id")
+  callType        String    @db.VarChar(50)
+  startTime       DateTime  @map("start_time")
+  endTime         DateTime  @map("end_time")
+  duration        Int       @default(0)
+  participantIds  String    @map("participant_ids") @db.Text
+  recordingUrl    String?   @map("recording_url") @db.VarChar(500)
+  notes           String?   @db.Text
+  createdAt       DateTime  @default(now()) @map("created_at")
+  meeting         ScheduledMeeting? @relation(fields: [meetingId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId], map: "idx_call_history_conversation_id")
+  @@index([startTime], map: "idx_call_history_start_time")
+  @@index([meetingId], map: "idx_call_history_meeting_id")
+  @@map("call_history")
 }

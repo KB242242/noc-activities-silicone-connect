@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
         type: a.type,
         category: a.category,
         description: a.description,
-        createdAt: a.createdAt.toISOString()
+        createdAt: (a.createdAt ?? new Date()).toISOString()
       }))
     });
   } catch (error) {
@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
         type: activity.type,
         category: activity.category,
         description: activity.description,
-        createdAt: activity.createdAt.toISOString()
+        createdAt: (activity.createdAt ?? new Date()).toISOString()
       }
     });
   } catch (error) {

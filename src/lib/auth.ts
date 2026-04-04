@@ -136,7 +136,7 @@ export async function checkSession(token: string): Promise<{
       }
     });
 
-    if (!session || session.expiresAt < new Date()) {
+    if (!session || !session.expiresAt || session.expiresAt < new Date()) {
       // Session expired or not found
       if (session) {
         await prisma.session.delete({ where: { id: session.id } });
@@ -201,14 +201,17 @@ export async function recordAuditLog(
   status: 'SUCCESS' | 'FAILURE' | 'WARNING'
 ): Promise<void> {
   try {
+    const data = {
+      userName: userId ?? 'SYSTEM',
+      action,
+      details,
+      ipAddress,
+      status,
+      ...(userId ? { user: { connect: { id: userId } } } : {}),
+    };
+
     await prisma.auditLog.create({
-      data: {
-        userId,
-        action,
-        details,
-        ipAddress,
-        status
-      }
+      data: data as any
     });
   } catch (error) {
     console.error('Audit log error:', error);

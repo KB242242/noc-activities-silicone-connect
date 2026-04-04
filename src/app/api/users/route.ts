@@ -1,6 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { hash } from 'bcryptjs';
+import { hash, compare } from 'bcryptjs';
+import { publishChatEvent } from '@/lib/chatRealtime';
+import { promises as fs } from 'fs';
+import path from 'path';
+import { randomUUID } from 'crypto';
+
+function getImageExtension(mimeType: string) {
+  if (mimeType.includes('png')) return 'png';
+  if (mimeType.includes('webp')) return 'webp';
+  if (mimeType.includes('gif')) return 'gif';
+  return 'jpg';
+}
+
+async function persistAvatarDataUrlIfNeeded(avatar: string, userId: string) {
+  if (!avatar || !avatar.startsWith('data:')) {
+    return avatar;
+  }
+
+  const dataUrlMatch = avatar.match(/^data:([^;,]+);base64,(.+)$/);
+  if (!dataUrlMatch) {
+    return avatar;
+  }
+
+  const mimeType = dataUrlMatch[1] || 'image/jpeg';
+  const payload = dataUrlMatch[2];
+  const buffer = Buffer.from(payload, 'base64');
+  const extension = getImageExtension(mimeType);
+  const fileName = `${Date.now()}-${randomUUID()}.${extension}`;
+
+  const avatarDir = path.join(process.cwd(), 'public', 'profile-avatars', userId);
+  await fs.mkdir(avatarDir, { recursive: true });
+
+  const filePath = path.join(avatarDir, fileName);
+  await fs.writeFile(filePath, buffer);
+
+  return `/profile-avatars/${userId}/${fileName}`;
+}
 
 // GET /api/users - Get all users (with filters)
 export async function GET(request: NextRequest) {
@@ -221,6 +257,7 @@ export async function PUT(request: NextRequest) {
       name, 
       firstName, 
       lastName, 
+      email,
       username, 
       role, 
       shiftId, 
@@ -265,6 +302,17 @@ export async function PUT(request: NextRequest) {
       }
     }
 
+    // Check email uniqueness if changing
+    if (email && email !== user.email) {
+      const existingEmail = await db.user.findUnique({ where: { email } });
+      if (existingEmail) {
+        return NextResponse.json(
+          { success: false, error: 'Un utilisateur avec cet email existe déjà' },
+          { status: 400 }
+        );
+      }
+    }
+
     // Only SUPER_ADMIN can change roles to SUPER_ADMIN
     if (role === 'SUPER_ADMIN' && admin.role !== 'SUPER_ADMIN') {
       return NextResponse.json(
@@ -280,6 +328,7 @@ export async function PUT(request: NextRequest) {
         name: name || user.name,
         firstName: firstName !== undefined ? firstName : user.firstName,
         lastName: lastName !== undefined ? lastName : user.lastName,
+        email: email !== undefined ? email : user.email,
         username: username !== undefined ? username : user.username,
         role: role || user.role,
         shiftId: shiftId !== undefined ? shiftId : user.shiftId,
@@ -326,6 +375,340 @@ export async function PUT(request: NextRequest) {
 
   } catch (error) {
     console.error('Update user error:', error);
+    return NextResponse.json(
+      { success: false, error: 'Erreur serveur' },
+      { status: 500 }
+    );
+  }
+}
+
+// PATCH /api/users - Self profile update (and avatar upload)
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const {
+      userId,
+      actorId,
+      adminId,
+      targetUserId,
+      newPassword,
+      forceResetPassword,
+      changePassword,
+      firstName,
+      lastName,
+      name,
+      email,
+      username,
+      avatar,
+    } = body;
+
+    // Admin password reset path
+    if (adminId && targetUserId && typeof newPassword === 'string' && forceResetPassword === true) {
+      const admin = await db.user.findUnique({ where: { id: adminId } });
+      if (!admin || (admin.role !== 'SUPER_ADMIN' && admin.role !== 'ADMIN')) {
+        return NextResponse.json(
+          { success: false, error: 'Non autorisé' },
+          { status: 403 }
+        );
+      }
+
+      const targetUser = await db.user.findUnique({ where: { id: targetUserId } });
+      if (!targetUser) {
+        return NextResponse.json(
+          { success: false, error: 'Utilisateur non trouvé' },
+          { status: 404 }
+        );
+      }
+
+      if (targetUser.role === 'SUPER_ADMIN' && admin.id !== targetUser.id) {
+        return NextResponse.json(
+          { success: false, error: 'Impossible de réinitialiser le mot de passe d\'un Super Admin' },
+          { status: 403 }
+        );
+      }
+
+      const passwordValidation = validatePassword(newPassword);
+      if (!passwordValidation.isValid) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Le mot de passe ne respecte pas les critères de sécurité',
+            validation: passwordValidation,
+          },
+          { status: 400 }
+        );
+      }
+
+      const hashedPassword = await hash(newPassword, 12);
+      const updatedUser = await db.user.update({
+        where: { id: targetUser.id },
+        data: {
+          passwordHash: hashedPassword,
+          mustChangePassword: true,
+          isBlocked: false,
+          failedLoginAttempts: 0,
+          updatedAt: new Date(),
+        },
+        include: {
+          shift: true,
+        },
+      });
+
+      await db.auditLog.create({
+        data: {
+          userId: admin.id,
+          userName: admin.name,
+          action: 'PASSWORD_RESET',
+          details: `Mot de passe réinitialisé pour: ${updatedUser.name} (${updatedUser.email})`,
+          ipAddress: request.headers.get('x-forwarded-for') || 'unknown',
+          status: 'SUCCESS',
+        },
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: 'Mot de passe réinitialisé avec succès',
+        user: {
+          id: updatedUser.id,
+          email: updatedUser.email,
+          name: updatedUser.name,
+          firstName: updatedUser.firstName,
+          lastName: updatedUser.lastName,
+          username: updatedUser.username,
+          role: updatedUser.role,
+          shiftId: updatedUser.shiftId,
+          shift: updatedUser.shift,
+          responsibility: updatedUser.responsibility,
+          avatar: updatedUser.avatar,
+          isActive: updatedUser.isActive,
+          isBlocked: updatedUser.isBlocked,
+          isFirstLogin: updatedUser.isFirstLogin,
+          mustChangePassword: updatedUser.mustChangePassword,
+        },
+      });
+    }
+
+    // Self password change path
+    if (userId && actorId && typeof newPassword === 'string' && changePassword === true) {
+      const actor = await db.user.findUnique({ where: { id: actorId } });
+      if (!actor || actor.id !== userId) {
+        return NextResponse.json(
+          { success: false, error: 'Non autorisé' },
+          { status: 403 }
+        );
+      }
+
+      const targetUser = await db.user.findUnique({ where: { id: userId } });
+      if (!targetUser) {
+        return NextResponse.json(
+          { success: false, error: 'Utilisateur non trouvé' },
+          { status: 404 }
+        );
+      }
+
+      const passwordValidation = validatePassword(newPassword);
+      if (!passwordValidation.isValid) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Le mot de passe ne respecte pas les critères de sécurité',
+            validation: passwordValidation,
+          },
+          { status: 400 }
+        );
+      }
+
+      // Vérifier que le nouveau mot de passe n'est pas identique au mot de passe actuel
+      if (targetUser.passwordHash) {
+        const isSamePassword = await compare(newPassword, targetUser.passwordHash);
+        if (isSamePassword) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: 'Le nouveau mot de passe ne peut pas être identique au mot de passe actuel',
+            },
+            { status: 400 }
+          );
+        }
+      }
+
+      const hashedPassword = await hash(newPassword, 12);
+      const updatedUser = await db.user.update({
+        where: { id: targetUser.id },
+        data: {
+          passwordHash: hashedPassword,
+          mustChangePassword: false,
+          isFirstLogin: false,
+          failedLoginAttempts: 0,
+          lockedUntil: null,
+          updatedAt: new Date(),
+        },
+        include: {
+          shift: true,
+        },
+      });
+
+      await db.auditLog.create({
+        data: {
+          userId: updatedUser.id,
+          userName: updatedUser.name,
+          action: 'PASSWORD_CHANGED',
+          details: 'Mot de passe modifié avec succès',
+          ipAddress: request.headers.get('x-forwarded-for') || 'unknown',
+          status: 'SUCCESS',
+        },
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: 'Mot de passe modifié avec succès',
+        user: {
+          id: updatedUser.id,
+          email: updatedUser.email,
+          name: updatedUser.name,
+          firstName: updatedUser.firstName,
+          lastName: updatedUser.lastName,
+          username: updatedUser.username,
+          role: updatedUser.role,
+          shiftId: updatedUser.shiftId,
+          shift: updatedUser.shift,
+          responsibility: updatedUser.responsibility,
+          avatar: updatedUser.avatar,
+          isActive: updatedUser.isActive,
+          isBlocked: updatedUser.isBlocked,
+          isFirstLogin: updatedUser.isFirstLogin,
+          mustChangePassword: updatedUser.mustChangePassword,
+        },
+      });
+    }
+
+    if (!userId || !actorId) {
+      return NextResponse.json(
+        { success: false, error: 'userId et actorId requis' },
+        { status: 400 }
+      );
+    }
+
+    const actor = await db.user.findUnique({ where: { id: actorId } });
+    if (!actor) {
+      return NextResponse.json(
+        { success: false, error: 'Acteur non autorisé' },
+        { status: 403 }
+      );
+    }
+
+    const targetUser = await db.user.findUnique({ where: { id: userId } });
+    if (!targetUser) {
+      return NextResponse.json(
+        { success: false, error: 'Utilisateur non trouvé' },
+        { status: 404 }
+      );
+    }
+
+    const isAdmin = actor.role === 'SUPER_ADMIN' || actor.role === 'ADMIN';
+    if (actor.id !== targetUser.id && !isAdmin) {
+      return NextResponse.json(
+        { success: false, error: 'Non autorisé' },
+        { status: 403 }
+      );
+    }
+
+    let avatarToStore: string | null | undefined;
+    if (typeof avatar === 'string' && avatar.trim().length > 0) {
+      avatarToStore = await persistAvatarDataUrlIfNeeded(avatar, targetUser.id);
+    } else if (avatar === null || avatar === '') {
+      avatarToStore = null;
+    }
+
+    if (username !== undefined && username !== targetUser.username) {
+      if (username) {
+        const existingUsername = await db.user.findUnique({ where: { username } });
+        if (existingUsername && existingUsername.id !== targetUser.id) {
+          return NextResponse.json(
+            { success: false, error: 'Ce nom d\'utilisateur est déjà pris' },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
+    const nextName =
+      typeof name === 'string' && name.trim().length > 0
+        ? name.trim()
+        : `${typeof firstName === 'string' ? firstName : targetUser.firstName || ''} ${typeof lastName === 'string' ? lastName : targetUser.lastName || ''}`.trim() ||
+          targetUser.name;
+
+    const updatedUser = await db.user.update({
+      where: { id: targetUser.id },
+      data: {
+        firstName: firstName !== undefined ? firstName : targetUser.firstName,
+        lastName: lastName !== undefined ? lastName : targetUser.lastName,
+        name: nextName,
+        email: email !== undefined ? email : targetUser.email,
+        username: username !== undefined ? username : targetUser.username,
+        avatar: avatarToStore !== undefined ? avatarToStore : targetUser.avatar,
+        updatedAt: new Date(),
+      },
+      include: {
+        shift: true,
+      },
+    });
+
+    await db.auditLog.create({
+      data: {
+        userId: actor.id,
+        userName: actor.name,
+        action: actor.id === targetUser.id ? 'PROFILE_UPDATED' : 'USER_UPDATED',
+        details: `Profil modifié: ${updatedUser.name} (${updatedUser.email})`,
+        ipAddress: request.headers.get('x-forwarded-for') || 'unknown',
+        status: 'SUCCESS',
+      },
+    });
+
+    const recipients = await db.user.findMany({
+      select: { id: true },
+      where: { id: { not: updatedUser.id } },
+    });
+
+    publishChatEvent(
+      recipients.map((entry) => entry.id),
+      {
+        type: 'profile-updated',
+        conversationId: '',
+        user: {
+          id: updatedUser.id,
+          name: updatedUser.name,
+          avatar: updatedUser.avatar,
+        },
+      }
+    );
+
+    return NextResponse.json({
+      success: true,
+      message: 'Profil mis à jour avec succès',
+      user: {
+        id: updatedUser.id,
+        email: updatedUser.email,
+        name: updatedUser.name,
+        firstName: updatedUser.firstName,
+        lastName: updatedUser.lastName,
+        username: updatedUser.username,
+        role: updatedUser.role,
+        shiftId: updatedUser.shiftId,
+        shift: updatedUser.shift,
+        responsibility: updatedUser.responsibility,
+        avatar: updatedUser.avatar,
+        isActive: updatedUser.isActive,
+        isBlocked: updatedUser.isBlocked,
+        isFirstLogin: updatedUser.isFirstLogin,
+        mustChangePassword: updatedUser.mustChangePassword,
+        performanceBadge: updatedUser.performanceBadge,
+        monthlyScore: updatedUser.monthlyScore,
+        reliabilityIndex: updatedUser.reliabilityIndex,
+      },
+    });
+  } catch (error) {
+    console.error('Patch user profile error:', error);
     return NextResponse.json(
       { success: false, error: 'Erreur serveur' },
       { status: 500 }

@@ -29,7 +29,7 @@ import { fr } from 'date-fns/locale';
 import {
   Ticket as TicketType, TicketStatus, TicketPriority, TicketType as TicketTypeEnum,
   TicketChannel, ResolutionType, TicketComment, TicketActivity, TicketHistory,
-  TicketAttachment, TimeEntry, Technician
+  TicketAttachment, TimeEntry, Technician, ServiceType
 } from '@/types';
 import {
   generateId, generateTicketNumber, formatDate, formatDateTime, formatTime,
@@ -59,6 +59,7 @@ export default function TicketsManagement({ user }: TicketsManagementProps) {
   const [technicians, setTechnicians] = useState<Technician[]>(() =>
     loadFromStorage('noc_technicians', DEFAULT_TECHNICIANS.map(t => ({
       ...t,
+      department: 'Technique',
       id: generateId(),
       isActive: true,
       assignedTicketsCount: 0,
@@ -114,14 +115,14 @@ export default function TicketsManagement({ user }: TicketsManagementProps) {
     object: '',
     type: 'incident_minor' as TicketTypeEnum,
     target: '',
-    clients: [] as { id: string; name: string; serviceType: string; ipAddress?: string }[],
+    clients: [] as { id: string; name: string; serviceType: ServiceType; ipAddress?: string }[],
     locality: '',
     site: '',
     link: '',
     technicians: [] as { id: string; name: string; pseudo: string }[],
     source: 'email' as TicketChannel,
     priority: 'medium' as TicketPriority,
-    serviceType: '' as string,
+    serviceType: '' as ServiceType | '',
     dueDate: addDays(new Date(), 1),
     description: ''
   });

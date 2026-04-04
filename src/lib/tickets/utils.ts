@@ -648,7 +648,7 @@ export function calculateDashboardStats(tickets: Ticket[]): TicketDashboardStats
     });
   });
   
-  let technicienDuMois: TechnicianReport | undefined;
+  let technicienDuMois: TicketDashboardStats['technicienDuMois'] | undefined;
   let bestScore = 0;
   
   technicienStats.forEach((stats, id) => {
@@ -656,17 +656,12 @@ export function calculateDashboardStats(tickets: Ticket[]): TicketDashboardStats
     if (score > bestScore) {
       bestScore = score;
       technicienDuMois = {
-        technicianId: id,
-        technicianName: id,
-        period: { start: last30Days, end: now },
-        ticketsProcessed: stats.resolved,
-        ticketsByStatus: {},
-        avgInterventionTime: Math.round(stats.totalTime / stats.resolved),
+        id,
+        name: id,
+        ticketsResolved: stats.resolved,
+        avgResolutionTime: Math.round(stats.totalTime / stats.resolved),
         slaCompliance: Math.round((stats.onTime / stats.resolved) * 100),
-        performance: Math.min(100, Math.round((stats.onTime / stats.resolved) * 100 + stats.resolved)),
-        motivation: stats.resolved > 10 ? 'Excellent travail ce mois-ci!' : 'Continuez comme ça!',
-        activityData: [],
-        categoryBreakdown: []
+        motivation: stats.resolved > 10 ? 'Excellent travail ce mois-ci!' : 'Continuez comme ça!'
       };
     }
   });
