@@ -541,7 +541,7 @@ export async function PATCH(request: NextRequest) {
           isFirstLogin: false,
           failedLoginAttempts: 0,
           lockedUntil: null,
-          updatedAt: new Date(),
+          updatedAt: new Date(), 
         },
         include: {
           shift: true,

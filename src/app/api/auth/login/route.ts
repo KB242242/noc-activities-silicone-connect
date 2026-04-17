@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { compare, hash } from 'bcryptjs';
 import { users_role } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { sign } from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.NEXTAUTH_SECRET || 'noc-activities-secret-key-2026';
@@ -274,6 +275,20 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Login error:', error);
+
+    if (
+      error instanceof Prisma.PrismaClientInitializationError ||
+      (error instanceof Error && error.message.includes('Can\'t reach database server'))
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Base de donnees indisponible. Verifiez que MySQL/MariaDB est demarre sur localhost:3306.',
+        },
+        { status: 503 }
+      );
+    }
+
     return NextResponse.json(
       { success: false, error: 'Erreur serveur' },
       { status: 500 }

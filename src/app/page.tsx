@@ -4280,22 +4280,36 @@ export default function NOCActivityApp() {
     }
   }, [isAuthenticated, user, messages.length]);
 
-  // Session timeout - déconnexion automatique après 10 minutes d'inactivité
+  // Session timeout - déconnexion automatique après 10 minutes d'inactivité RÉELLE
+  // Le timer se réinitialise dès que l'utilisateur interagit avec l'application
   useEffect(() => {
     if (!isAuthenticated) return;
-    
-    const checkTimeout = () => {
-      const now = new Date();
-      const timeSinceLastActivity = now.getTime() - lastActivity.getTime();
-      if (timeSinceLastActivity >= SESSION_TIMEOUT) {
-        handleLogout();
-        toast.warning('Session expirée', { description: 'Vous avez été déconnecté pour inactivité' });
-      }
+
+    // Utiliser un ref pour éviter les re-renders sur chaque mouvement de souris
+    const lastInteractionRef = { current: Date.now() };
+
+    const resetTimer = () => {
+      lastInteractionRef.current = Date.now();
     };
-    
-    const interval = setInterval(checkTimeout, 60000); // Vérifier chaque minute
-    return () => clearInterval(interval);
-  }, [isAuthenticated, lastActivity]);
+
+    // Écouter tous les types d'interactions utilisateur
+    const ACTIVITY_EVENTS = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click', 'focus'] as const;
+    ACTIVITY_EVENTS.forEach((evt) => window.addEventListener(evt, resetTimer, { passive: true }));
+
+    const interval = setInterval(() => {
+      if (Date.now() - lastInteractionRef.current >= SESSION_TIMEOUT) {
+        setUser(null);
+        setIsAuthenticated(false);
+        localStorage.removeItem('noc_user');
+        toast.warning('Session expirée', { description: 'Vous avez été déconnecté après 10 minutes d\'inactivité' });
+      }
+    }, 30000); // Vérifier toutes les 30 secondes
+
+    return () => {
+      ACTIVITY_EVENTS.forEach((evt) => window.removeEventListener(evt, resetTimer));
+      clearInterval(interval);
+    };
+  }, [isAuthenticated]);
 
   // Recording timer - incrémenter le temps d'enregistrement vocal
   useEffect(() => {
@@ -14368,7 +14382,7 @@ export default function NOCActivityApp() {
             </DialogContent>
           </Dialog>
         )}
-
+ 
         {/* Dialog Composition Email - Style Gmail */}
         <Dialog open={composeOpen} onOpenChange={setComposeOpen}>
           <DialogContent className="sm:max-w-[700px] p-0 gap-0">
