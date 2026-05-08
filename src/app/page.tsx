@@ -1,12 +1,13 @@
-'use client';
+﻿'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from 'next-themes';
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isToday, addDays } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { useSearchParams } from 'next/navigation';
 
 // UI Components
 import { Button } from '@/components/ui/button';
@@ -19,7 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogClose, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, FloatingDialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogClose, DialogTrigger } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from '@/components/ui/dropdown-menu';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -28,6 +29,14 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Switch } from '@/components/ui/switch';
 import { Toggle } from '@/components/ui/toggle';
 import { toast as sonnerToast } from 'sonner';
+import { NocMonitoringPanel } from '../components/noc/NocMonitoringPanel';
+import { NocMonitoringDashboard } from '../components/noc/NocMonitoringDashboard';
+import { NocClientsPanel } from '../components/noc/NocClientsPanel';
+import { NocReportingPanel } from '../components/noc/NocReportingPanel';
+import { NocGenericSectionPanel } from '../components/noc/NocGenericSectionPanel';
+import { NocSitesPanel } from '../components/noc/NocSitesPanel';
+import { NocCallCenterPanel } from '../components/noc/NocCallCenterPanel';
+import { CreateTicketDialog } from '../components/tickets/CreateTicketDialog';
 
 // Icons
 import {
@@ -72,11 +81,66 @@ type DayType = 'DAY_SHIFT' | 'NIGHT_SHIFT' | 'REST_DAY';
 type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'on_hold' | 'cancelled' | 'late';
 type ResponsibilityType = 'CALL_CENTER' | 'MONITORING' | 'REPORTING_1' | 'REPORTING_2';
 
-// Types pour le gestionnaire de tâches NOC
+// Types pour le gestionnaire de tÃ¢ches NOC
 type TaskPriority = 'low' | 'medium' | 'high' | 'critical';
 type TaskCategory = 'incident' | 'maintenance' | 'surveillance' | 'administrative' | 'other';
 type AlertType = 'warning' | 'critical' | 'info' | 'success' | 'normal' | 'passive' | 'external' | 'lucrative';
-type AppSectionKey = 'dashboard' | 'planning' | 'tasks' | 'activities' | 'tickets' | 'overtime' | 'links' | 'email' | 'messagerie' | 'ged' | 'supervision' | 'admin' | 'admin_users';
+type NocSectionKey =
+  | 'noc_monitoring'
+  | 'noc_callcenter'
+  | 'noc_reporting'
+  | 'noc_equipement'
+  | 'noc_clients'
+  | 'noc_sites'
+  | 'noc_partenaire'
+  | 'noc_fai';
+
+type AppSectionKey =
+  | 'dashboard'
+  | 'planning'
+  | 'tasks'
+  | 'activities'
+  | 'tickets'
+  | 'overtime'
+  | 'links'
+  | 'email'
+  | 'messagerie'
+  | 'ged'
+  | 'supervision'
+  | 'admin'
+  | 'admin_users'
+  | NocSectionKey;
+
+interface NocSidebarItem {
+  id: NocSectionKey;
+  label: string;
+  icon: typeof Activity;
+  description: string;
+}
+
+const NOC_SIDEBAR_ITEMS: NocSidebarItem[] = [
+  { id: 'noc_monitoring', label: 'Monitoring', icon: Activity, description: 'Vue consolidÃ©e Zabbix + LibreNMS' },
+  { id: 'noc_callcenter', label: 'Call Center', icon: Phone, description: 'Gestion des appels entrants et sortants NOC' },
+  { id: 'noc_reporting', label: 'Reporting', icon: FileSpreadsheet, description: 'Rapports de consommation et disponibilitÃ©' },
+  { id: 'noc_equipement', label: 'Equipement', icon: Wrench, description: 'Etat des Ã©quipements et actions de reprise' },
+  { id: 'noc_clients', label: 'Clients', icon: Users, description: 'CorrÃ©lation client, hÃ´te, SLA et incidents' },
+  { id: 'noc_sites', label: 'Sites', icon: MapPin, description: 'Gestion des sites et infrastructures' },
+  { id: 'noc_partenaire', label: 'Partenaire', icon: Truck, description: 'Interconnexions et dÃ©pendances partenaires' },
+  { id: 'noc_fai', label: 'FAI', icon: Globe, description: 'Transit et peering multi-opÃ©rateurs' },
+
+];
+
+function isNocSection(tab: string): tab is NocSectionKey {
+  return NOC_SIDEBAR_ITEMS.some((item) => item.id === tab);
+}
+
+function isAppSectionKey(tab: string): tab is AppSectionKey {
+  return Object.prototype.hasOwnProperty.call(DEFAULT_SECTION_ACCESS, tab);
+}
+
+function getCurrentTabStorageKey(userId: string) {
+  return `noc_current_tab_${userId}`;
+}
 
 // Password validation result
 interface PasswordValidation {
@@ -100,7 +164,7 @@ interface AuditLogEntry {
   createdAt: Date;
 }
 
-// Commentaire de tâche
+// Commentaire de tÃ¢che
 interface TaskComment {
   id: string;
   taskId: string;
@@ -125,7 +189,7 @@ interface TaskAlert {
   triggeredBy: 'time_limit' | 'overdue' | 'critical_not_started' | 'suspended_too_long' | 'no_task_created' | 'too_many_pending';
 }
 
-// Historique des modifications de tâche
+// Historique des modifications de tÃ¢che
 interface TaskHistoryEntry {
   id: string;
   taskId: string;
@@ -151,12 +215,12 @@ interface AgentPerformance {
   avgCompletionTime: number; // en minutes
   inactivityMinutes: number;
   productivityRate: number; // pourcentage
-  onTimeRate: number; // pourcentage de tâches à l'heure
+  onTimeRate: number; // pourcentage de tÃ¢ches Ã  l'heure
   reliabilityScore: number; // 0-100
   badge?: 'exemplary' | 'reliable' | 'improving' | 'needs_attention';
 }
 
-// Détection d'inactivité
+// DÃ©tection d'inactivitÃ©
 interface InactivityEvent {
   id: string;
   userId: string;
@@ -269,7 +333,7 @@ type MessageFolder = 'inbox' | 'sent' | 'drafts' | 'spam' | 'trash' | 'starred' 
 type MessageStatus = 'unread' | 'read' | 'important' | 'archived';
 type MessagePriority = 'normal' | 'important' | 'urgent';
 
-// Pièce jointe
+// PiÃ¨ce jointe
 interface EmailAttachment {
   id: string;
   messageId: string;
@@ -320,14 +384,14 @@ interface InternalMessage {
   createdAt: Date;
   updatedAt: Date;
   deletedAt?: Date;
-  scheduledAt?: Date; // Envoi planifié
+  scheduledAt?: Date; // Envoi planifiÃ©
   isDraft: boolean;
-  replyTo?: string; // ID du message auquel on répond
-  forwardedFrom?: string; // ID du message transféré
-  selected?: boolean; // Pour la sélection multiple
+  replyTo?: string; // ID du message auquel on rÃ©pond
+  forwardedFrom?: string; // ID du message transfÃ©rÃ©
+  selected?: boolean; // Pour la sÃ©lection multiple
 }
 
-// Libellé personnalisé
+// LibellÃ© personnalisÃ©
 interface EmailLabel {
   id: string;
   name: string;
@@ -346,7 +410,7 @@ interface EmailSignature {
   createdAt: Date;
 }
 
-// Modèle de message
+// ModÃ¨le de message
 interface EmailTemplate {
   id: string;
   userId: string;
@@ -356,7 +420,7 @@ interface EmailTemplate {
   createdAt: Date;
 }
 
-// Accusé de lecture
+// AccusÃ© de lecture
 interface ReadReceipt {
   id: string;
   messageId: string;
@@ -376,14 +440,14 @@ interface MessageTracking {
 }
 
 // ============================================
-// TYPES MESSAGERIE INSTANTANÉE (WHATSAPP-STYLE)
+// TYPES MESSAGERIE INSTANTANÃ‰E (WHATSAPP-STYLE)
 // ============================================
 
 // Statut de message WhatsApp
 type ChatMessageStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
 type ChatMessageType = 'text' | 'image' | 'video' | 'audio' | 'document' | 'voice' | 'location' | 'contact';
 
-// Statut de présence
+// Statut de prÃ©sence
 type PresenceStatus = 'online' | 'offline' | 'away' | 'busy';
 
 // Message de chat
@@ -399,7 +463,7 @@ interface ChatMessage {
   mediaData?: string; // base64
   fileName?: string;
   fileSize?: number;
-  duration?: number; // pour audio/vidéo en secondes
+  duration?: number; // pour audio/vidÃ©o en secondes
   status: ChatMessageStatus;
   readAt?: Date;
   replyTo?: ChatMessage;
@@ -450,7 +514,7 @@ interface Conversation {
   updatedAt: Date;
 }
 
-// Appel audio/vidéo
+// Appel audio/vidÃ©o
 interface CallHistory {
   id: string;
   conversationId: string;
@@ -581,9 +645,9 @@ const SHIFT_CYCLE_START: Record<string, Date> = {
 };
 
 const SHIFTS_DATA: Record<string, { name: string; color: string; colorCode: string; members: string[] }> = {
-  'A': { name: 'Shift A', color: 'blue', colorCode: '#3B82F6', members: ['Alaine', 'Casimir', 'Luca', 'José'] },
-  'B': { name: 'Shift B', color: 'yellow', colorCode: '#EAB308', members: ['Sahra', 'Severin', 'Marly', 'Furys'] },
-  'C': { name: 'Shift C', color: 'green', colorCode: '#22C55E', members: ['Audrey', 'Lapreuve', 'Lotti', 'Kevine'] }
+  'A': { name: 'Shift A', color: 'blue', colorCode: '#3B82F6', members: ['Luca', 'Alaine', 'Casimir', 'JosÃ©'] },
+  'B': { name: 'Shift B', color: 'yellow', colorCode: '#EAB308', members: ['Furys', 'Severin', 'Marly', 'Sahra'] },
+  'C': { name: 'Shift C', color: 'green', colorCode: '#22C55E', members: ['Kevine', 'Audrey', 'Lapreuve', 'Lotti'] }
 };
 
 const CYCLE_TOTAL_DAYS = 9;
@@ -609,9 +673,9 @@ const getShiftLightBg = (shiftName: string): string => {
 };
 
 const EXTERNAL_LINKS = [
-  { id: '1', name: 'Suivi véhicules', url: 'https://za.mixtelematics.com/#/login', category: 'vehicles', icon: Truck, description: 'MixTelematics' },
-  { id: '2', name: 'LibreNMS', url: 'http://192.168.2.25:6672/', category: 'monitoring', icon: Network, description: 'Monitoring réseau' },
-  { id: '3', name: 'Zabbix', url: 'http://192.168.2.2:6672/', category: 'monitoring', icon: Activity, description: 'Suivi incidents' },
+  { id: '1', name: 'Suivi vÃ©hicules', url: 'https://za.mixtelematics.com/#/login', category: 'vehicles', icon: Truck, description: 'MixTelematics' },
+  { id: '2', name: 'LibreNMS', url: 'http://192.168.2.25:2021/', category: 'monitoring', icon: Network, description: 'Monitoring rÃ©seau' },
+  { id: '3', name: 'Zabbix', url: 'http://192.168.2.2:2021/', category: 'monitoring', icon: Activity, description: 'Suivi incidents' },
   { id: '4', name: 'Zoho Desk', url: 'https://desk.zoho.com/', category: 'tickets', icon: Ticket, description: 'Gestion tickets' },
   { id: '5', name: 'Tickets Sheets', url: 'https://docs.google.com/spreadsheets/d/1Z21eIjNuJVRvqTmj7DhQI4emVlqKBpia-eR--DviSj8/edit', category: 'tickets', icon: FileSpreadsheet, description: 'Liste tickets' },
   { id: '6', name: 'WhatsApp', url: 'https://web.whatsapp.com/', category: 'communication', icon: Phone, description: 'Messagerie' },
@@ -619,7 +683,7 @@ const EXTERNAL_LINKS = [
 ];
 
 // ============================================
-// CONFIGURATION TÂCHES NOC
+// CONFIGURATION TÃ‚CHES NOC
 // ============================================
 
 const TASK_PRIORITIES: Record<TaskPriority, { label: string; color: string; bgColor: string; icon: typeof Flag }> = {
@@ -640,9 +704,9 @@ const TASK_CATEGORIES: Record<TaskCategory, { label: string; icon: typeof AlertT
 const TASK_STATUSES: Record<TaskStatus, { label: string; color: string; bgColor: string }> = {
   pending: { label: 'En attente', color: 'text-yellow-600', bgColor: 'bg-yellow-100 dark:bg-yellow-900/30' },
   in_progress: { label: 'En cours', color: 'text-blue-600', bgColor: 'bg-blue-100 dark:bg-blue-900/30' },
-  completed: { label: 'Terminée', color: 'text-green-600', bgColor: 'bg-green-100 dark:bg-green-900/30' },
+  completed: { label: 'TerminÃ©e', color: 'text-green-600', bgColor: 'bg-green-100 dark:bg-green-900/30' },
   on_hold: { label: 'Suspendue', color: 'text-orange-600', bgColor: 'bg-orange-100 dark:bg-orange-900/30' },
-  cancelled: { label: 'Annulée', color: 'text-slate-600', bgColor: 'bg-slate-100 dark:bg-slate-800' },
+  cancelled: { label: 'AnnulÃ©e', color: 'text-slate-600', bgColor: 'bg-slate-100 dark:bg-slate-800' },
   late: { label: 'En retard', color: 'text-red-600', bgColor: 'bg-red-100 dark:bg-red-900/30' }
 };
 
@@ -650,15 +714,15 @@ const BADGE_CONFIG: Record<string, { label: string; icon: typeof Trophy; color: 
   exemplary: { label: 'Agent Exemplaire', icon: Trophy, color: 'text-yellow-500' },
   reliable: { label: 'Agent Fiable', icon: Star, color: 'text-blue-500' },
   improving: { label: 'En Progression', icon: TrendingUp, color: 'text-green-500' },
-  needs_attention: { label: 'À Surveiller', icon: AlertTriangle, color: 'text-orange-500' }
+  needs_attention: { label: 'Ã€ Surveiller', icon: AlertTriangle, color: 'text-orange-500' }
 };
 
 // Seuils d'alerte
 const ALERT_THRESHOLDS = {
   inactivityMinutes: 120, // 2 heures
-  taskApproachingMinutes: 30, // 30 min avant la fin estimée
+  taskApproachingMinutes: 30, // 30 min avant la fin estimÃ©e
   suspendedTooLongMinutes: 60, // 1 heure suspendue
-  noTaskCreatedAfterShiftStart: 60, // 1 heure après début shift
+  noTaskCreatedAfterShiftStart: 60, // 1 heure aprÃ¨s dÃ©but shift
   tooManyPendingEndShift: 60 // 1 heure avant fin shift
 };
 
@@ -666,25 +730,25 @@ const ACTIVITY_TYPES: Record<string, Array<{ value: string; label: string }>> = 
   'Monitoring': [
     { value: 'CLIENT_DOWN', label: 'Client Down' },
     { value: 'INTERFACE_UNSTABLE', label: 'Interface instable' },
-    { value: 'RECURRENT_PROBLEM', label: 'Problème récurrent' },
-    { value: 'EQUIPMENT_ALERT', label: 'Alerte équipement' }
+    { value: 'RECURRENT_PROBLEM', label: 'ProblÃ¨me rÃ©current' },
+    { value: 'EQUIPMENT_ALERT', label: 'Alerte Ã©quipement' }
   ],
   'Call Center': [
-    { value: 'TICKET_CREATED', label: 'Ticket créé' },
+    { value: 'TICKET_CREATED', label: 'Ticket crÃ©Ã©' },
     { value: 'CLIENT_CALL', label: 'Appel client' },
     { value: 'ESCALATION', label: 'Escalade' },
     { value: 'INCIDENT_FOLLOWUP', label: 'Suivi incident' }
   ],
   'Reporting 1': [
-    { value: 'GRAPH_SENT', label: 'Graphe envoyé' },
-    { value: 'ALERT_PUBLISHED', label: 'Alerte publiée' },
-    { value: 'HANDOVER_WRITTEN', label: 'Handover rédigé' }
+    { value: 'GRAPH_SENT', label: 'Graphe envoyÃ©' },
+    { value: 'ALERT_PUBLISHED', label: 'Alerte publiÃ©e' },
+    { value: 'HANDOVER_WRITTEN', label: 'Handover rÃ©digÃ©' }
   ],
   'Reporting 2': [
-    { value: 'REPORT_GENERATED', label: 'Rapport généré' },
-    { value: 'TICKET_UPDATED', label: 'Ticket mis à jour' },
-    { value: 'TICKET_CLOSED', label: 'Ticket clôturé' },
-    { value: 'RFO_CREATED', label: 'RFO créé' }
+    { value: 'REPORT_GENERATED', label: 'Rapport gÃ©nÃ©rÃ©' },
+    { value: 'TICKET_UPDATED', label: 'Ticket mis Ã  jour' },
+    { value: 'TICKET_CLOSED', label: 'Ticket clÃ´turÃ©' },
+    { value: 'RFO_CREATED', label: 'RFO crÃ©Ã©' }
   ]
 };
 
@@ -698,8 +762,8 @@ const TICKET_STATUSES: Record<TicketStatus, { label: string; color: string; bgCo
   open: { label: 'Ouvert', color: 'text-red-700 dark:text-red-400', bgColor: 'bg-red-100 dark:bg-red-900/40', borderColor: 'border-red-300 dark:border-red-700' },
   in_progress: { label: 'En cours', color: 'text-blue-700 dark:text-blue-400', bgColor: 'bg-blue-100 dark:bg-blue-900/40', borderColor: 'border-blue-300 dark:border-blue-700' },
   pending: { label: 'En attente', color: 'text-yellow-700 dark:text-yellow-400', bgColor: 'bg-yellow-100 dark:bg-yellow-900/40', borderColor: 'border-yellow-300 dark:border-yellow-700' },
-  resolved: { label: 'Résolu', color: 'text-green-700 dark:text-green-400', bgColor: 'bg-green-100 dark:bg-green-900/40', borderColor: 'border-green-300 dark:border-green-700' },
-  closed: { label: 'Fermé', color: 'text-slate-700 dark:text-slate-400', bgColor: 'bg-slate-100 dark:bg-slate-800', borderColor: 'border-slate-300 dark:border-slate-600' }
+  resolved: { label: 'RÃ©solu', color: 'text-green-700 dark:text-green-400', bgColor: 'bg-green-100 dark:bg-green-900/40', borderColor: 'border-green-300 dark:border-green-700' },
+  closed: { label: 'FermÃ©', color: 'text-slate-700 dark:text-slate-400', bgColor: 'bg-slate-100 dark:bg-slate-800', borderColor: 'border-slate-300 dark:border-slate-600' }
 };
 
 const TICKET_PRIORITIES: Record<TicketPriority, { label: string; color: string; bgColor: string }> = {
@@ -712,13 +776,234 @@ const TICKET_PRIORITIES: Record<TicketPriority, { label: string; color: string; 
 const TICKET_CATEGORIES: Record<TicketCategory, { label: string; icon: typeof AlertTriangle }> = {
   incident: { label: 'Incident', icon: AlertTriangle },
   request: { label: 'Demande', icon: Inbox },
-  problem: { label: 'Problème', icon: AlertCircle },
+  problem: { label: 'ProblÃ¨me', icon: AlertCircle },
   change: { label: 'Changement', icon: RefreshCw },
   other: { label: 'Autre', icon: Pin }
 };
 
 const SITES_LIST = ['Site A', 'Site B', 'Site C', 'Site D', 'Site E', 'Bureau Central'];
 const LOCALITES_LIST = ['Kinshasa', 'Lubumbashi', 'Goma', 'Mbuji-Mayi', 'Kananga', 'Kisangani'];
+
+interface TicketOptionItem {
+  id: string;
+  name: string;
+  localite?: string | null;
+}
+
+interface TicketCountryOption {
+  code: string;
+  name: string;
+  flag: string;
+}
+
+interface TicketLocalityDraft {
+  countryCode: string;
+  countryName: string;
+  city: string;
+  arrondissement: string;
+  quartier: string;
+  address: string;
+  latitude: string;
+  longitude: string;
+  freeText: string;
+}
+
+type TicketDialogResizeDirection = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
+
+const TICKET_COUNTRIES: TicketCountryOption[] = [
+  { code: 'CD', name: 'RDC', flag: 'ðŸ‡¨ðŸ‡©' },
+  { code: 'CG', name: 'Congo', flag: 'ðŸ‡¨ðŸ‡¬' },
+  { code: 'CM', name: 'Cameroun', flag: 'ðŸ‡¨ðŸ‡²' },
+  { code: 'CI', name: "CÃ´te d'Ivoire", flag: 'ðŸ‡¨ðŸ‡®' },
+  { code: 'SN', name: 'SÃ©nÃ©gal', flag: 'ðŸ‡¸ðŸ‡³' },
+  { code: 'MA', name: 'Maroc', flag: 'ðŸ‡²ðŸ‡¦' },
+  { code: 'DZ', name: 'AlgÃ©rie', flag: 'ðŸ‡©ðŸ‡¿' },
+  { code: 'TN', name: 'Tunisie', flag: 'ðŸ‡¹ðŸ‡³' },
+  { code: 'NG', name: 'Nigeria', flag: 'ðŸ‡³ðŸ‡¬' },
+  { code: 'KE', name: 'Kenya', flag: 'ðŸ‡°ðŸ‡ª' },
+  { code: 'ZA', name: 'Afrique du Sud', flag: 'ðŸ‡¿ðŸ‡¦' },
+  { code: 'FR', name: 'France', flag: 'ðŸ‡«ðŸ‡·' },
+  { code: 'BE', name: 'Belgique', flag: 'ðŸ‡§ðŸ‡ª' },
+  { code: 'CA', name: 'Canada', flag: 'ðŸ‡¨ðŸ‡¦' },
+  { code: 'US', name: 'Ã‰tats-Unis', flag: 'ðŸ‡ºðŸ‡¸' },
+];
+
+const DEFAULT_TICKET_LOCALITY_DRAFT: TicketLocalityDraft = {
+  countryCode: 'CD',
+  countryName: 'RDC',
+  city: '',
+  arrondissement: '',
+  quartier: '',
+  address: '',
+  latitude: '',
+  longitude: '',
+  freeText: '',
+};
+
+function mapApiTicketStatusToLegacy(status?: string): TicketStatus {
+  switch (status) {
+    case 'IN_PROGRESS':
+      return 'in_progress';
+    case 'PENDING':
+    case 'ESCALATED':
+      return 'pending';
+    case 'RESOLVED':
+      return 'resolved';
+    case 'CLOSED':
+      return 'closed';
+    default:
+      return 'open';
+  }
+}
+
+function mapLegacyTicketStatusToApi(status?: TicketStatus): string {
+  switch (status) {
+    case 'in_progress':
+      return 'IN_PROGRESS';
+    case 'pending':
+      return 'PENDING';
+    case 'resolved':
+      return 'RESOLVED';
+    case 'closed':
+      return 'CLOSED';
+    default:
+      return 'OPEN';
+  }
+}
+
+function mapApiTicketPriorityToLegacy(priority?: string): TicketPriority {
+  switch (priority) {
+    case 'LOW':
+      return 'low';
+    case 'HIGH':
+      return 'high';
+    case 'CRITICAL':
+      return 'critical';
+    default:
+      return 'medium';
+  }
+}
+
+function mapLegacyTicketPriorityToApi(priority?: TicketPriority): string {
+  switch (priority) {
+    case 'low':
+      return 'LOW';
+    case 'high':
+      return 'HIGH';
+    case 'critical':
+      return 'CRITICAL';
+    default:
+      return 'MEDIUM';
+  }
+}
+
+function mapApiTicketTypeToLegacyCategory(type?: string): TicketCategory {
+  switch (type) {
+    case 'SU':
+    case 'FD':
+    case 'VS':
+      return 'request';
+    case 'PC':
+    case 'MP':
+      return 'problem';
+    case 'MC':
+      return 'change';
+    case 'INC':
+    case 'FI':
+    default:
+      return 'incident';
+  }
+}
+
+function mapLegacyTicketCategoryToApiType(category?: TicketCategory): string {
+  switch (category) {
+    case 'request':
+      return 'SU';
+    case 'problem':
+      return 'PC';
+    case 'change':
+      return 'MC';
+    case 'other':
+      return 'INC';
+    case 'incident':
+    default:
+      return 'INC';
+  }
+}
+
+function mapApiTicketToLegacy(ticket: any): TicketItem {
+  const technicianNames = Array.isArray(ticket.technicians)
+    ? ticket.technicians.map((technician: { name?: string }) => technician.name).filter(Boolean)
+    : [];
+  const siteNames = Array.isArray(ticket.sites) ? ticket.sites.filter(Boolean) : [];
+  const localities = Array.isArray(ticket.localities) ? ticket.localities.filter(Boolean) : [];
+
+  return {
+    id: String(ticket.id),
+    numero: ticket.numero ?? '',
+    objet: ticket.objet ?? '',
+    description: ticket.description ?? '',
+    status: mapApiTicketStatusToLegacy(ticket.status),
+    priority: mapApiTicketPriorityToLegacy(ticket.priority),
+    category: mapApiTicketTypeToLegacyCategory(ticket.type),
+    site: siteNames.join(', '),
+    localite: localities.join(', '),
+    technicien: technicianNames.join(', '),
+    reporterId: ticket.creatorId ?? '',
+    reporterName: ticket.creatorName ?? '',
+    assigneeId: ticket.technicians?.[0]?.id ?? undefined,
+    assigneeName: ticket.technicians?.[0]?.name ?? undefined,
+    comments: Array.isArray(ticket.comments)
+      ? ticket.comments.map((comment: any) => ({
+          id: String(comment.id),
+          ticketId: String(comment.ticketId ?? ticket.id),
+          userId: String(comment.authorId ?? ''),
+          userName: comment.authorName ?? '',
+          content: comment.content ?? '',
+          isPrivate: Boolean(comment.isPrivate),
+          createdAt: new Date(comment.createdAt),
+          updatedAt: comment.updatedAt ? new Date(comment.updatedAt) : undefined,
+        }))
+      : [],
+    attachments: Array.isArray(ticket.attachments)
+      ? ticket.attachments.map((attachment: any) => ({
+          id: String(attachment.id),
+          ticketId: String(attachment.ticketId ?? ticket.id),
+          fileName: attachment.name ?? '',
+          fileSize: Number(attachment.size ?? 0),
+          fileType: attachment.mimeType ?? '',
+          fileData: attachment.url ?? '',
+          uploadedBy: attachment.uploadedBy ?? '',
+          uploadedAt: new Date(attachment.uploadedAt ?? attachment.createdAt ?? Date.now()),
+        }))
+      : [],
+    history: Array.isArray(ticket.history)
+      ? ticket.history.map((entry: any) => ({
+          id: String(entry.id),
+          ticketId: String(entry.ticketId ?? ticket.id),
+          userId: String(entry.userId ?? ''),
+          userName: entry.userName ?? '',
+          action: entry.action ?? '',
+          field: entry.field,
+          oldValue: entry.oldValue,
+          newValue: entry.newValue,
+          timestamp: new Date(entry.createdAt ?? entry.timestamp ?? Date.now()),
+        }))
+      : [],
+    tags: [],
+    createdAt: new Date(ticket.createdAt),
+    updatedAt: new Date(ticket.updatedAt),
+    resolvedAt: ticket.endDate ? new Date(ticket.endDate) : undefined,
+    closedAt: ticket.closedAt ? new Date(ticket.closedAt) : undefined,
+    dueDate: ticket.dueDate ? new Date(ticket.dueDate) : undefined,
+    etr: ticket.etr ? new Date(ticket.etr) : undefined,
+    sla: ticket.sla ?? undefined,
+    slr: ticket.slr ?? undefined,
+    isDeleted: Boolean(ticket.isDeleted),
+    deletedAt: ticket.deletedAt ? new Date(ticket.deletedAt) : undefined,
+    deletedBy: ticket.deletedBy ?? undefined,
+  };
+}
 
 const DEMO_USERS: Record<string, UserProfile> = {
   'secureadmin@siliconeconnect.com': { 
@@ -858,10 +1143,10 @@ const DEMO_USERS: Record<string, UserProfile> = {
   'jose@siliconeconnect.com': { 
     id: 'agent-a4', 
     email: 'jose@siliconeconnect.com', 
-    name: 'José', 
-    firstName: 'José',
+    name: 'JosÃ©', 
+    firstName: 'JosÃ©',
     lastName: '',
-    username: 'José',
+    username: 'JosÃ©',
     passwordHash: 'J0se!2026_SC',
     role: 'TECHNICIEN_NO', 
     shiftId: 'shift-a', 
@@ -1015,7 +1300,7 @@ const DEMO_USERS: Record<string, UserProfile> = {
 };
 
 // ============================================
-// FONCTIONS DE SÉCURITÉ
+// FONCTIONS DE SÃ‰CURITÃ‰
 // ============================================
 
 // Validation du mot de passe
@@ -1038,7 +1323,7 @@ function validatePassword(password: string): PasswordValidation {
   };
 }
 
-// Hashage simple (pour localStorage - en production utiliser bcrypt côté serveur)
+// Hashage simple (pour localStorage - en production utiliser bcrypt cÃ´tÃ© serveur)
 function hashPassword(password: string): string {
   let hash = 0;
   for (let i = 0; i < password.length; i++) {
@@ -1049,12 +1334,12 @@ function hashPassword(password: string): string {
   return `hash_${Math.abs(hash)}_${password.length}_${btoa(password.slice(0, 3))}`;
 }
 
-// Vérification du mot de passe
+// VÃ©rification du mot de passe
 function verifyPassword(password: string, hash: string): boolean {
   return hashPassword(password) === hash || password === hash; // Support anciens mots de passe en clair
 }
 
-// Génération d'ID unique
+// GÃ©nÃ©ration d'ID unique
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 }
@@ -1078,12 +1363,12 @@ function cleanEmptyDivs(html: string): string {
   return cleaned;
 }
 
-// Vérification si l'utilisateur est Super Admin
+// VÃ©rification si l'utilisateur est Super Admin
 function isSuperAdmin(user: UserProfile | null): boolean {
   return user?.role === 'SUPER_ADMIN';
 }
 
-// Vérification des permissions
+// VÃ©rification des permissions
 function hasPermission(user: UserProfile | null, permission: string): boolean {
   if (!user) return false;
   if (user.role === 'SUPER_ADMIN') return true;
@@ -1100,14 +1385,14 @@ function hasPermission(user: UserProfile | null, permission: string): boolean {
   return permissions[user.role]?.includes(permission) || false;
 }
 
-// Configuration des rôles
+// Configuration des rÃ´les
 const ROLE_CONFIG: Record<UserRole, { label: string; color: string; description: string }> = {
-  'SUPER_ADMIN': { label: 'Super Admin', color: 'bg-red-100 text-red-800', description: 'Accès complet à toutes les fonctionnalités' },
-  'ADMIN': { label: 'Administrateur', color: 'bg-orange-100 text-orange-800', description: 'Gestion des utilisateurs et paramètres' },
+  'SUPER_ADMIN': { label: 'Super Admin', color: 'bg-red-100 text-red-800', description: 'AccÃ¨s complet Ã  toutes les fonctionnalitÃ©s' },
+  'ADMIN': { label: 'Administrateur', color: 'bg-orange-100 text-orange-800', description: 'Gestion des utilisateurs et paramÃ¨tres' },
   'RESPONSABLE': { label: 'Responsable', color: 'bg-purple-100 text-purple-800', description: 'Supervision et rapports' },
-  'TECHNICIEN': { label: 'Technicien', color: 'bg-blue-100 text-blue-800', description: 'Opérations techniques' },
+  'TECHNICIEN': { label: 'Technicien', color: 'bg-blue-100 text-blue-800', description: 'OpÃ©rations techniques' },
   'TECHNICIEN_NO': { label: 'Technicien NOC', color: 'bg-green-100 text-green-800', description: 'Agent NOC - Shifts et monitoring' },
-  'USER': { label: 'Utilisateur', color: 'bg-gray-100 text-gray-800', description: 'Accès standard' }
+  'USER': { label: 'Utilisateur', color: 'bg-gray-100 text-gray-800', description: 'AccÃ¨s standard' }
 };
 
 const DEFAULT_SECTION_ACCESS: Record<AppSectionKey, boolean> = {
@@ -1124,13 +1409,22 @@ const DEFAULT_SECTION_ACCESS: Record<AppSectionKey, boolean> = {
   supervision: true,
   admin: true,
   admin_users: true,
+  noc_monitoring: true,
+  noc_callcenter: true,
+  noc_reporting: true,
+  noc_equipement: true,
+  noc_clients: true,
+  noc_sites: true,
+  noc_partenaire: true,
+  noc_fai: true,
+
 };
 
 const SECTION_LABELS: Record<AppSectionKey, string> = {
   dashboard: 'Tableau de bord',
   planning: 'Planning',
-  tasks: 'Mes Tâches',
-  activities: 'Activités',
+  tasks: 'Mes TÃ¢ches',
+  activities: 'ActivitÃ©s',
   tickets: 'Gestion Tickets',
   overtime: 'Heures Sup.',
   links: 'Liens Externes',
@@ -1140,6 +1434,15 @@ const SECTION_LABELS: Record<AppSectionKey, string> = {
   supervision: 'Supervision',
   admin: 'Administration',
   admin_users: 'Gestion Utilisateurs',
+  noc_monitoring: 'NOC Monitoring',
+  noc_callcenter: 'NOC Call Center',
+  noc_reporting: 'NOC Reporting',
+  noc_equipement: 'NOC Equipement',
+  noc_clients: 'NOC Clients',
+  noc_sites: 'NOC Sites',
+  noc_partenaire: 'NOC Partenaire',
+  noc_fai: 'NOC FAI',
+
 };
 
 const ALERT_TYPE_CONFIG: Record<AlertType, { label: string; colorClass: string }> = {
@@ -1150,7 +1453,7 @@ const ALERT_TYPE_CONFIG: Record<AlertType, { label: string; colorClass: string }
   passive: { label: 'Passive', colorClass: 'text-zinc-600' },
   external: { label: 'Externe', colorClass: 'text-cyan-700' },
   lucrative: { label: 'Lucrative', colorClass: 'text-emerald-700' },
-  success: { label: 'Succès', colorClass: 'text-green-600' },
+  success: { label: 'SuccÃ¨s', colorClass: 'text-green-600' },
 };
 
 function canManageAnnouncements(user: UserProfile | null): boolean {
@@ -1158,7 +1461,7 @@ function canManageAnnouncements(user: UserProfile | null): boolean {
   return user.role === 'SUPER_ADMIN' || user.role === 'ADMIN' || user.role === 'RESPONSABLE';
 }
 
-// Configuration des responsabilités NOC
+// Configuration des responsabilitÃ©s NOC
 const RESPONSIBILITY_CONFIG: Record<ResponsibilityType, { label: string; icon: typeof Phone; color: string }> = {
   'CALL_CENTER': { label: 'Call Center', icon: Phone, color: 'text-blue-600' },
   'MONITORING': { label: 'Monitoring', icon: Activity, color: 'text-green-600' },
@@ -1167,10 +1470,10 @@ const RESPONSIBILITY_CONFIG: Record<ResponsibilityType, { label: string; icon: t
 };
 
 // ============================================
-// FONCTIONS UTILITAIRES TÂCHES NOC
+// FONCTIONS UTILITAIRES TÃ‚CHES NOC
 // ============================================
 
-// Créer une nouvelle tâche
+// CrÃ©er une nouvelle tÃ¢che
 function createNewTask(
   userId: string,
   userName: string,
@@ -1186,7 +1489,7 @@ function createNewTask(
     id: generateId(),
     userId,
     userName,
-    title: taskData.title || 'Nouvelle tâche',
+    title: taskData.title || 'Nouvelle tÃ¢che',
     description: taskData.description || '',
     status: 'pending',
     category: taskData.category || 'other',
@@ -1213,30 +1516,30 @@ function createNewTask(
   };
 }
 
-// Calculer si une tâche est en retard
+// Calculer si une tÃ¢che est en retard
 function isTaskOverdue(task: Task): boolean {
   if (task.status === 'completed' || task.status === 'cancelled') return false;
   return new Date() > task.estimatedEndTime;
 }
 
-// Calculer la durée réelle d'une tâche
+// Calculer la durÃ©e rÃ©elle d'une tÃ¢che
 function calculateActualDuration(task: Task): number | undefined {
   if (!task.completedAt || !task.startTime) return undefined;
   return Math.round((task.completedAt.getTime() - task.startTime.getTime()) / 60000);
 }
 
-// Générer une alerte pour une tâche
+// GÃ©nÃ©rer une alerte pour une tÃ¢che
 function generateTaskAlert(
   task: Task,
   triggerType: TaskAlert['triggeredBy']
 ): TaskAlert {
   const messages: Record<TaskAlert['triggeredBy'], string> = {
-    time_limit: `La tâche "${task.title}" approche de sa limite de temps`,
-    overdue: `La tâche "${task.title}" a dépassé son temps estimé`,
-    critical_not_started: `La tâche critique "${task.title}" n'a pas encore commencé`,
-    suspended_too_long: `La tâche "${task.title}" est suspendue depuis trop longtemps`,
-    no_task_created: `Aucune tâche créée depuis le début du shift`,
-    too_many_pending: `Trop de tâches en attente avant la fin du shift`
+    time_limit: `La tÃ¢che "${task.title}" approche de sa limite de temps`,
+    overdue: `La tÃ¢che "${task.title}" a dÃ©passÃ© son temps estimÃ©`,
+    critical_not_started: `La tÃ¢che critique "${task.title}" n'a pas encore commencÃ©`,
+    suspended_too_long: `La tÃ¢che "${task.title}" est suspendue depuis trop longtemps`,
+    no_task_created: `Aucune tÃ¢che crÃ©Ã©e depuis le dÃ©but du shift`,
+    too_many_pending: `Trop de tÃ¢ches en attente avant la fin du shift`
   };
   
   const types: Record<TaskAlert['triggeredBy'], AlertType> = {
@@ -1286,7 +1589,7 @@ function calculateAgentPerformance(
     ? Math.round(((completed.length - late.length) / completed.length) * 100)
     : 0;
   
-  // Score de fiabilité basé sur plusieurs facteurs
+  // Score de fiabilitÃ© basÃ© sur plusieurs facteurs
   const reliabilityScore = Math.max(0, Math.min(100,
     productivityRate * 0.4 +
     onTimeRate * 0.3 +
@@ -1317,7 +1620,7 @@ function calculateAgentPerformance(
   };
 }
 
-// Vérifier si le temps d'inactivité dépasse le seuil
+// VÃ©rifier si le temps d'inactivitÃ© dÃ©passe le seuil
 function checkInactivity(
   lastActivityTime: Date,
   thresholdMinutes: number = ALERT_THRESHOLDS.inactivityMinutes
@@ -1332,7 +1635,7 @@ function checkInactivity(
   };
 }
 
-// Trier les tâches par priorité
+// Trier les tÃ¢ches par prioritÃ©
 function sortTasksByPriority(taskList: Task[]): Task[] {
   const priorityOrder: Record<TaskPriority, number> = {
     critical: 0,
@@ -1354,12 +1657,12 @@ function sortTasksByPriority(taskList: Task[]): Task[] {
     if (statusOrder[a.status] !== statusOrder[b.status]) {
       return statusOrder[a.status] - statusOrder[b.status];
     }
-    // Ensuite par priorité
+    // Ensuite par prioritÃ©
     return priorityOrder[a.priority] - priorityOrder[b.priority];
   });
 }
 
-// Formater la durée en heures et minutes
+// Formater la durÃ©e en heures et minutes
 function formatDuration(minutes: number): string {
   if (minutes < 60) return `${minutes}min`;
   const hours = Math.floor(minutes / 60);
@@ -1410,7 +1713,7 @@ function getShiftScheduleForDate(shiftName: string, targetDate: Date): {
 }
 
 function getScheduleFromPosition(cyclePosition: number, cycleNumber: number): { 
-  dayType: DayType; 
+  dayType: DayType;   
   dayNumber: number;
   cycleNumber: number;
   isWorking: boolean;
@@ -1429,34 +1732,14 @@ function getIndividualRestAgent(shiftName: string, targetDate: Date): { agentInd
   const schedule = getShiftScheduleForDate(shiftName, targetDate);
   const shiftData = SHIFTS_DATA[shiftName];
   
-  if (!shiftData || schedule.isCollectiveRest || schedule.dayNumber < 3) {
+  if (!shiftData || schedule.isCollectiveRest || schedule.dayNumber < 3 || schedule.dayNumber > 6) {
     return null;
   }
   
   const members = shiftData.members;
-  const msPerDay = 1000 * 60 * 60 * 24;
-  const startDate = SHIFT_CYCLE_START[shiftName];
-  
-  if (!startDate) return null;
-  
-  const daysDiff = Math.floor((targetDate.getTime() - startDate.getTime()) / msPerDay);
-  const cycleNumber = Math.floor(daysDiff / CYCLE_TOTAL_DAYS) + 1;
-  const restPosition = schedule.dayNumber - 3;
-  
-  const rotationMatrix: Record<number, number[]> = {
-    1: [-1, 0, 2, 1],
-    2: [1, 3, 0, 2],
-    3: [2, 1, 3, 0],
-    4: [0, 2, 1, 3],
-    5: [3, 0, 2, 1],
-  };
-  
-  if (cycleNumber === 1 && restPosition === 0) return null;
-  
-  const effectiveCycle = ((cycleNumber - 1) % 5) + 1;
-  const agentIndex = rotationMatrix[effectiveCycle]?.[restPosition] ?? -1;
-  
-  if (agentIndex === -1 || agentIndex >= members.length) return null;
+  const agentIndex = schedule.dayNumber - 3;
+
+  if (agentIndex < 0 || agentIndex >= members.length) return null;
   
   return { agentIndex, agentName: members[agentIndex] };
 }
@@ -1510,10 +1793,11 @@ function getAgentRestInfo(agentName: string, shiftName: string, targetDate: Date
 // ============================================
 
 export default function NOCActivityApp() {
-  // États principaux
+  const searchParams = useSearchParams();
+  // Ã‰tats principaux
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [currentTab, setCurrentTab] = useState('dashboard');
+  const [currentTab, setCurrentTab] = useState<AppSectionKey>('dashboard');
   const [email, setEmail] = useState('');
   const [loginError, setLoginError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -1531,20 +1815,20 @@ export default function NOCActivityApp() {
   const [activityDialogOpen, setActivityDialogOpen] = useState(false);
   const [newActivity, setNewActivity] = useState({ type: '', category: 'Monitoring', description: '' });
   
-  // États pour la gestion des utilisateurs et sécurité
+  // Ã‰tats pour la gestion des utilisateurs et sÃ©curitÃ©
   const [password, setPassword] = useState('');
   const [loginIdentifier, setLoginIdentifier] = useState(''); // Email ou Pseudo
-  const [showPassword, setShowPassword] = useState(false); // Toggle visibilité mot de passe
+  const [showPassword, setShowPassword] = useState(false); // Toggle visibilitÃ© mot de passe
   const [showPasswordField, setShowPasswordField] = useState(false);
   const [selectedUserForLogin, setSelectedUserForLogin] = useState<UserProfile | null>(null);
 
-  // États pour le suivi des tentatives de connexion et verrouillage progressif
+  // Ã‰tats pour le suivi des tentatives de connexion et verrouillage progressif
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [isLocked, setIsLocked] = useState(false);
   const [lockoutSeconds, setLockoutSeconds] = useState(0);
   const [showForgotMessage, setShowForgotMessage] = useState(false);
 
-  // États pour les champs focus (labels flottants)
+  // Ã‰tats pour les champs focus (labels flottants)
   const [pseudoFocused, setPseudoFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
   
@@ -1558,7 +1842,7 @@ export default function NOCActivityApp() {
   const [editUserDialogOpen, setEditUserDialogOpen] = useState(false);
   const [auditLogDialogOpen, setAuditLogDialogOpen] = useState(false);
   
-  // États pour l'édition
+  // Ã‰tats pour l'Ã©dition
   const [editFirstName, setEditFirstName] = useState('');
   const [editLastName, setEditLastName] = useState('');
   const [editEmail, setEditEmail] = useState('');
@@ -1572,7 +1856,7 @@ export default function NOCActivityApp() {
   const [editUserIsBlocked, setEditUserIsBlocked] = useState(false);
   const [userToEdit, setUserToEdit] = useState<UserProfile | null>(null);
   
-  // États pour la gestion des utilisateurs (Super Admin)
+  // Ã‰tats pour la gestion des utilisateurs (Super Admin)
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const usersDirectory: UserProfile[] = allUsers.length > 0 ? allUsers : Object.values(DEMO_USERS);
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
@@ -1586,7 +1870,7 @@ export default function NOCActivityApp() {
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
   const [deleteConfirmationInput, setDeleteConfirmationInput] = useState('');
 
-  // États pour les filtres du Journal d'activité
+  // Ã‰tats pour les filtres du Journal d'activitÃ©
   const [auditLogDateFrom, setAuditLogDateFrom] = useState<string>('');
   const [auditLogDateTo, setAuditLogDateTo] = useState<string>('');
   const [auditLogActionType, setAuditLogActionType] = useState<string>('all');
@@ -1600,10 +1884,10 @@ export default function NOCActivityApp() {
   const canManageUsers = Boolean(user && (user.role === 'SUPER_ADMIN' || user.role === 'ADMIN'));
   
   // ============================================
-  // États pour le module Tâches NOC
+  // Ã‰tats pour le module TÃ¢ches NOC
   // ============================================
   
-  // État des tâches avancées
+  // Ã‰tat des tÃ¢ches avancÃ©es
   const [nocTasks, setNocTasks] = useState<Task[]>([]);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [taskDetailOpen, setTaskDetailOpen] = useState(false);
@@ -1612,7 +1896,7 @@ export default function NOCActivityApp() {
   const [taskDateFilter, setTaskDateFilter] = useState<Date>(new Date());
   const [ganttView, setGanttView] = useState<'day' | 'week'>('day');
   
-  // Nouvelle tâche
+  // Nouvelle tÃ¢che
   const [newTask, setNewTask] = useState({
     title: '',
     description: '',
@@ -1633,7 +1917,7 @@ export default function NOCActivityApp() {
   const [alertSoundEnabled, setAlertSoundEnabled] = useState(true);
   const [dismissedAlerts, setDismissedAlerts] = useState<Set<string>>(new Set());
   
-  // Inactivité
+  // InactivitÃ©
   const [inactivityEvents, setInactivityEvents] = useState<InactivityEvent[]>([]);
   const [lastUserActivity, setLastUserActivity] = useState<Date>(new Date());
   const [isUserInactive, setIsUserInactive] = useState(false);
@@ -1651,7 +1935,7 @@ export default function NOCActivityApp() {
   const [selectedShiftFilter, setSelectedShiftFilter] = useState<string>('all');
   
   // ============================================
-  // États pour la Messagerie Interne (Gmail-like)
+  // Ã‰tats pour la Messagerie Interne (Gmail-like)
   // ============================================
   
   // Messages
@@ -1682,7 +1966,7 @@ export default function NOCActivityApp() {
   const [showBcc, setShowBcc] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState<'to' | 'cc' | 'bcc' | null>(null);
   
-  // Libellés
+  // LibellÃ©s
   const [emailLabels, setEmailLabels] = useState<EmailLabel[]>([]);
   const [labelDialogOpen, setLabelDialogOpen] = useState(false);
   const [newLabelName, setNewLabelName] = useState('');
@@ -1740,17 +2024,23 @@ export default function NOCActivityApp() {
     newEmailSound: true
   });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarGroupOpen, setSidebarGroupOpen] = useState<Record<string, boolean>>({ noc: true });
   const [sidebarPosition, setSidebarPosition] = useState<'left' | 'right'>('left');
   const [sidebarWidth, setSidebarWidth] = useState(240);
   const [isSidebarResizing, setIsSidebarResizing] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [nocOverviewLoading, setNocOverviewLoading] = useState(false);
+  const [nocOverviewData, setNocOverviewData] = useState<Record<string, unknown> | null>(null);
+  const [monitoringScope, setMonitoringScope] = useState<'down' | 'up' | 'all'>('down');
+  const [monitoringDrilldown, setMonitoringDrilldown] = useState<'network' | 'clients' | 'alerts' | 'sla' | null>(null);
+  const [nocReportData, setNocReportData] = useState<Record<string, unknown> | null>(null);
   const sidebarResizeFrameRef = useRef<number | null>(null);
   const [selectMode, setSelectMode] = useState<'none' | 'some' | 'all'>('none');
   const [currentPage, setCurrentPage] = useState(1);
   const emailsPerPage = 25;
 
   // ============================================
-  // États pour la Messagerie Instantanée (WhatsApp-Style)
+  // Ã‰tats pour la Messagerie InstantanÃ©e (WhatsApp-Style)
   // ============================================
   
   // Conversations
@@ -1779,7 +2069,7 @@ export default function NOCActivityApp() {
         },
       });
       if (!response.ok) {
-        console.warn('Échec téléchargement des messages', response.status);
+        console.warn('Ã‰chec tÃ©lÃ©chargement des messages', response.status);
         return;
       }
       const data = await response.json();
@@ -1848,7 +2138,7 @@ export default function NOCActivityApp() {
         },
       });
       if (!response.ok) {
-        console.warn('Échec téléchargement des conversations', response.status);
+        console.warn('Ã‰chec tÃ©lÃ©chargement des conversations', response.status);
         return;
       }
       const data = await response.json();
@@ -1894,8 +2184,8 @@ export default function NOCActivityApp() {
 
   const setCurrentTabSafely = useCallback((nextTab: AppSectionKey) => {
     if (!sectionAccess[nextTab]) {
-      toast.warning('Rubrique désactivée', {
-        description: 'Cette rubrique a été désactivée par un administrateur.',
+      toast.warning('Rubrique dÃ©sactivÃ©e', {
+        description: 'Cette rubrique a Ã©tÃ© dÃ©sactivÃ©e par un administrateur.',
       });
       return;
     }
@@ -1903,13 +2193,102 @@ export default function NOCActivityApp() {
   }, [sectionAccess]);
 
   useEffect(() => {
+    if (!isAuthenticated || !user?.id) return;
+
+    const storedTab = localStorage.getItem(getCurrentTabStorageKey(user.id));
+    if (storedTab && isAppSectionKey(storedTab) && sectionAccess[storedTab]) {
+      restoredCurrentTabRef.current = true;
+      setCurrentTab(storedTab);
+      return;
+    }
+
+    setCurrentTab('dashboard');
+    restoredCurrentTabRef.current = true;
+  }, [isAuthenticated, sectionAccess, user?.id]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !user?.id) return;
+    localStorage.setItem(getCurrentTabStorageKey(user.id), currentTab);
+  }, [currentTab, isAuthenticated, user?.id]);
+
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (!tabParam) return;
+    if (!isAppSectionKey(tabParam)) return;
+    if (restoredCurrentTabRef.current) return;
+    const requestedTab = tabParam as AppSectionKey;
+    if (!sectionAccess[requestedTab]) return;
+    setCurrentTab(requestedTab);
+  }, [searchParams, sectionAccess]);
+
+  const refreshNocOverview = useCallback(async () => {
+    try {
+      setNocOverviewLoading(true);
+      const response = await fetch('/api/noc/overview', {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          Pragma: 'no-cache',
+          Expires: '0',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Echec de synchronisation NOC');
+      }
+
+      const payload = await response.json();
+      setNocOverviewData(payload);
+    } catch (error) {
+      console.error('Erreur sync NOC overview:', error);
+      toast.error('Synchronisation NOC indisponible');
+    } finally {
+      setNocOverviewLoading(false);
+    }
+  }, []);
+
+  const generateConsumptionReport = useCallback(async () => {
+    try {
+      const response = await fetch('/api/noc/reporting/consumption?scope=monthly', {
+        cache: 'no-store',
+      });
+
+      if (!response.ok) {
+        throw new Error('Generation du rapport impossible');
+      }
+
+      const payload = await response.json();
+      setNocReportData(payload.report);
+      toast.success('Rapport de consommation genere');
+    } catch (error) {
+      console.error('Erreur rapport consommation:', error);
+      toast.error('Erreur de generation du rapport');
+    }
+  }, []);
+
+  const handleMonitoringKpiClick = useCallback((kpiKey: 'network' | 'clients' | 'alerts' | 'sla') => {
+    if (kpiKey === 'clients') {
+      setMonitoringScope('down');
+    } else if (kpiKey === 'network' || kpiKey === 'sla') {
+      setMonitoringScope('all');
+    }
+    setMonitoringDrilldown(kpiKey);
+  }, []);
+
+  useEffect(() => {
     if (!sectionAccess[currentTab as AppSectionKey]) {
       setCurrentTab('dashboard');
       toast.warning('Rubrique indisponible', {
-        description: 'Vous avez été redirigé vers le tableau de bord.',
+        description: 'Vous avez Ã©tÃ© redirigÃ© vers le tableau de bord.',
       });
     }
   }, [currentTab, sectionAccess]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    if (!isNocSection(currentTab)) return;
+    void refreshNocOverview();
+  }, [currentTab, isAuthenticated, refreshNocOverview]);
 
   const createConversationInDb = useCallback(
     async ({
@@ -1924,7 +2303,7 @@ export default function NOCActivityApp() {
       participantIds: string[];
     }): Promise<Conversation | null> => {
       if (!user?.id) {
-        toast.error('Utilisateur non authentifié');
+        toast.error('Utilisateur non authentifiÃ©');
         return null;
       }
 
@@ -1948,14 +2327,14 @@ export default function NOCActivityApp() {
         });
 
         if (!response.ok) {
-          let errMsg = `Erreur création conversation (${response.status})`;
+          let errMsg = `Erreur crÃ©ation conversation (${response.status})`;
           try {
             const errJson = await response.json();
             if (errJson?.error) {
-              errMsg = `Erreur création conversation (${response.status}) : ${errJson.error}`;
+              errMsg = `Erreur crÃ©ation conversation (${response.status}) : ${errJson.error}`;
             }
           } catch (_e) {
-            // réponse non JSON
+            // rÃ©ponse non JSON
           }
           toast.error(errMsg);
           return null;
@@ -1963,7 +2342,7 @@ export default function NOCActivityApp() {
 
         const data = await response.json();
         if (!data?.success || !data?.conversation) {
-          toast.error('Erreur création conversation');
+          toast.error('Erreur crÃ©ation conversation');
           return null;
         }
 
@@ -1999,7 +2378,7 @@ export default function NOCActivityApp() {
         return mappedConversation;
       } catch (error) {
         console.error('Erreur createConversationInDb', error);
-        toast.error('Erreur création conversation');
+        toast.error('Erreur crÃ©ation conversation');
         return null;
       }
     },
@@ -2385,7 +2764,7 @@ export default function NOCActivityApp() {
   const [lastReplyTo, setLastReplyTo] = useState<ChatMessage | null>(null);
 
   // ============================================
-  // États pour la Gestion des Tickets
+  // Ã‰tats pour la Gestion des Tickets
   // ============================================
 
   const [tickets, setTickets] = useState<TicketItem[]>([]);
@@ -2401,6 +2780,10 @@ export default function NOCActivityApp() {
   const [ticketSiteFilter, setTicketSiteFilter] = useState<string>('all');
   const [ticketLocaliteFilter, setTicketLocaliteFilter] = useState<string>('all');
   const [ticketTechnicienFilter, setTicketTechnicienFilter] = useState<string>('all');
+  const [ticketSiteOptions, setTicketSiteOptions] = useState<TicketOptionItem[]>(
+    SITES_LIST.map((site, index) => ({ id: `fallback-site-${index + 1}`, name: site }))
+  );
+  const [ticketLocalityOptions, setTicketLocalityOptions] = useState<string[]>(LOCALITES_LIST);
   const [showDeletedTickets, setShowDeletedTickets] = useState(false);
   const [newTicket, setNewTicket] = useState({
     objet: '',
@@ -2419,6 +2802,32 @@ export default function NOCActivityApp() {
   const [isPrivateComment, setIsPrivateComment] = useState(false);
   const [editingTicket, setEditingTicket] = useState<TicketItem | null>(null);
   const [editTicketOpen, setEditTicketOpen] = useState(false);
+  const [isCreatingLocality, setIsCreatingLocality] = useState(false);
+  const [isNewLocalityCreationEnabled, setIsNewLocalityCreationEnabled] = useState(false);
+  const [isEditLocalityCreationEnabled, setIsEditLocalityCreationEnabled] = useState(false);
+  const [newTicketLocalityDraft, setNewTicketLocalityDraft] = useState<TicketLocalityDraft>(DEFAULT_TICKET_LOCALITY_DRAFT);
+  const [editTicketLocalityDraft, setEditTicketLocalityDraft] = useState<TicketLocalityDraft>(DEFAULT_TICKET_LOCALITY_DRAFT);
+  const [createTicketDialogPosition, setCreateTicketDialogPosition] = useState({ x: 48, y: 72 });
+  const [createTicketDialogSize, setCreateTicketDialogSize] = useState({ width: 1100, height: 820 });
+  const [isCreateTicketDialogDragging, setIsCreateTicketDialogDragging] = useState(false);
+  const [createTicketDialogResizeDirection, setCreateTicketDialogResizeDirection] = useState<TicketDialogResizeDirection | null>(null);
+  const createTicketDialogPointerStateRef = useRef({
+    startX: 0,
+    startY: 0,
+    startLeft: 48,
+    startTop: 72,
+    startWidth: 1100,
+    startHeight: 820,
+    dragOffsetX: 0,
+    dragOffsetY: 0,
+  });
+  const ticketTechnicianOptions = useMemo(
+    () => usersDirectory
+      .filter((profile) => profile.isActive && (profile.role === 'TECHNICIEN' || profile.role === 'TECHNICIEN_NO'))
+      .map((profile) => ({ id: profile.id, name: profile.name }))
+      .sort((left, right) => left.name.localeCompare(right.name, 'fr', { sensitivity: 'base' })),
+    [usersDirectory]
+  );
 
   // Typing indicator simulation
   const [simulatedTyping, setSimulatedTyping] = useState<{ userId: string; userName: string; isRecording: boolean } | null>(null);
@@ -2436,6 +2845,7 @@ export default function NOCActivityApp() {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const initializedRef = useRef(false);
+  const restoredCurrentTabRef = useRef(false);
 
   const playCallTone = useCallback(
     (tone: 'ring' | 'connected' | 'missed' | 'busy' | 'ended' | 'incoming') => {
@@ -2810,7 +3220,7 @@ export default function NOCActivityApp() {
       if (!user?.id || !user?.name) return;
 
       if (activeCall && callDialogOpen) {
-        toast.error('Vous avez déjà un appel en cours');
+        toast.error('Vous avez dÃ©jÃ  un appel en cours');
         return;
       }
 
@@ -2819,7 +3229,7 @@ export default function NOCActivityApp() {
       if (busyTargetId) {
         const busyName =
           Object.values(DEMO_USERS).find((u) => u.id === busyTargetId)?.name || target.calleeName;
-        const message = `Désolé, ${busyName} est déjà occupé`;
+        const message = `DÃ©solÃ©, ${busyName} est dÃ©jÃ  occupÃ©`;
         toast.error(message);
         addNotification(message, 'warning', { conversationId: target.conversationId });
         playCallTone('busy');
@@ -2849,7 +3259,7 @@ export default function NOCActivityApp() {
       setCallStartTime(null);
 
       addNotification(
-        `Appel ${target.type === 'video' ? 'vidéo' : 'audio'} vers ${target.calleeName}`,
+        `Appel ${target.type === 'video' ? 'vidÃ©o' : 'audio'} vers ${target.calleeName}`,
         'info',
         { conversationId: target.conversationId }
       );
@@ -2890,7 +3300,7 @@ export default function NOCActivityApp() {
         setCallTimer(0);
         playCallTone('connected');
 
-        const acceptedMsg = `Appel accepté avec ${incomingCall.callerName}`;
+        const acceptedMsg = `Appel acceptÃ© avec ${incomingCall.callerName}`;
         pushCallNotification(acceptedMsg, 'success', incomingCall.conversationId);
         addNotification(acceptedMsg, 'success', { conversationId: incomingCall.conversationId });
         emitCallSignal({
@@ -2909,7 +3319,7 @@ export default function NOCActivityApp() {
       setIncomingCall(null);
 
       if (action === 'reject') {
-        const rejectedMsg = 'Appel rejeté';
+        const rejectedMsg = 'Appel rejetÃ©';
         playCallTone('ended');
         pushCallNotification(rejectedMsg, 'warning', incomingCall.conversationId);
         addNotification(rejectedMsg, 'warning', { conversationId: incomingCall.conversationId });
@@ -2925,7 +3335,7 @@ export default function NOCActivityApp() {
         return;
       }
 
-      const ignoredMsg = "La personne n'est pas apte pour répondre pour l'instant";
+      const ignoredMsg = "La personne n'est pas apte pour rÃ©pondre pour l'instant";
       playCallTone('missed');
       pushCallNotification(ignoredMsg, 'warning', incomingCall.conversationId);
       addNotification(ignoredMsg, 'warning', { conversationId: incomingCall.conversationId });
@@ -2995,14 +3405,14 @@ export default function NOCActivityApp() {
     if (typeof window !== 'undefined' && 'Notification' in window) {
       if (Notification.permission === 'granted') {
         new Notification('Appel entrant', {
-          body: `${incomingCall.callerName} (${incomingCall.type === 'video' ? 'vidéo' : 'audio'})`,
+          body: `${incomingCall.callerName} (${incomingCall.type === 'video' ? 'vidÃ©o' : 'audio'})`,
         });
       } else if (Notification.permission === 'default') {
         Notification.requestPermission().catch(() => {});
       }
     }
     pushCallNotification(
-      `Appel entrant ${incomingCall.type === 'video' ? 'vidéo' : 'audio'} de ${incomingCall.callerName}`,
+      `Appel entrant ${incomingCall.type === 'video' ? 'vidÃ©o' : 'audio'} de ${incomingCall.callerName}`,
       'info',
       incomingCall.conversationId
     );
@@ -3078,7 +3488,7 @@ export default function NOCActivityApp() {
 
         setIncomingCall(incoming);
         addNotification(
-          `Appel entrant ${incoming.type === 'video' ? 'vidéo' : 'audio'} de ${incoming.callerName}`,
+          `Appel entrant ${incoming.type === 'video' ? 'vidÃ©o' : 'audio'} de ${incoming.callerName}`,
           'info',
           { conversationId: incoming.conversationId }
         );
@@ -3097,22 +3507,22 @@ export default function NOCActivityApp() {
           setCallStartTime(new Date());
           setCallTimer(0);
           playCallTone('connected');
-          addNotification('Appel accepté', 'success', { conversationId: activeCall.conversationId });
+          addNotification('Appel acceptÃ©', 'success', { conversationId: activeCall.conversationId });
           return;
         }
 
         if (response === 'rejected') {
-          closeCallSession('declined', 'Appel réjeté', activeCall);
+          closeCallSession('declined', 'Appel rÃ©jetÃ©', activeCall);
           return;
         }
 
         if (response === 'busy') {
-          closeCallSession('declined', `Désolé ${fromName} est déjà occupé`, activeCall);
+          closeCallSession('declined', `DÃ©solÃ© ${fromName} est dÃ©jÃ  occupÃ©`, activeCall);
           playCallTone('busy');
           return;
         }
 
-        closeCallSession('missed', "La personne n'est pas apte pour répondre pour l'instant", activeCall);
+        closeCallSession('missed', "La personne n'est pas apte pour rÃ©pondre pour l'instant", activeCall);
       }
     };
 
@@ -3419,7 +3829,7 @@ export default function NOCActivityApp() {
             id: 't1',
             userId: 'agent-a1',
             userName: 'Alaine',
-            title: 'Vérifier alarmes Zabbix',
+            title: 'VÃ©rifier alarmes Zabbix',
             description: 'Monitoring alerts',
             status: 'in_progress',
             category: 'surveillance',
@@ -3484,14 +3894,14 @@ export default function NOCActivityApp() {
         ]);
         setActivities([
           { id: 'a1', userId: 'agent-c2', userName: 'Lapreuve', type: 'CLIENT_DOWN', category: 'Monitoring', description: 'Client ACME - Connexion perdue', createdAt: new Date(Date.now() - 3600000) },
-          { id: 'a2', userId: 'agent-b1', userName: 'Sahra', type: 'TICKET_CREATED', category: 'Call Center', description: 'Ticket #1234 créé', createdAt: new Date(Date.now() - 7200000) },
-          { id: 'a3', userId: 'agent-c1', userName: 'Audrey', type: 'GRAPH_SENT', category: 'Reporting 1', description: 'Graphes 09h envoyés', createdAt: new Date(Date.now() - 10800000) },
+          { id: 'a2', userId: 'agent-b1', userName: 'Sahra', type: 'TICKET_CREATED', category: 'Call Center', description: 'Ticket #1234 crÃ©Ã©', createdAt: new Date(Date.now() - 7200000) },
+          { id: 'a3', userId: 'agent-c1', userName: 'Audrey', type: 'GRAPH_SENT', category: 'Reporting 1', description: 'Graphes 09h envoyÃ©s', createdAt: new Date(Date.now() - 10800000) },
         ]);
         if (notifications.length === 0) {
           setNotifications([
-            { id: '1', message: 'Incident critique détecté', type: 'warning', read: false, createdAt: new Date() },
-            { id: '2', message: 'Nouveau ticket assigné', type: 'info', read: false, createdAt: new Date() },
-            { id: '3', message: 'Handover validé', type: 'success', read: true, createdAt: new Date() },
+            { id: '1', message: 'Incident critique dÃ©tectÃ©', type: 'warning', read: false, createdAt: new Date() },
+            { id: '2', message: 'Nouveau ticket assignÃ©', type: 'info', read: false, createdAt: new Date() },
+            { id: '3', message: 'Handover validÃ©', type: 'success', read: true, createdAt: new Date() },
           ]);
         }
       }, 0);
@@ -3521,7 +3931,7 @@ export default function NOCActivityApp() {
           }
         } catch { /* ignore */ }
       } else {
-        // Initialiser avec les utilisateurs de démo
+        // Initialiser avec les utilisateurs de dÃ©mo
         const initialUsers = Object.values(DEMO_USERS);
         setAllUsers(initialUsers);
         localStorage.setItem('noc_all_users', JSON.stringify(initialUsers));
@@ -3552,31 +3962,9 @@ export default function NOCActivityApp() {
         setAnnouncementAvatar(storedAnnouncementAvatar);
       }
 
-      // Charger les tickets depuis localStorage
-      const storedTickets = localStorage.getItem('noc_tickets');
-      if (storedTickets) {
-        try {
-          const parsed = JSON.parse(storedTickets);
-          if (parsed.length > 0) {
-            // Convertir les dates
-            const ticketsWithDates = parsed.map((t: any) => ({
-              ...t,
-              createdAt: new Date(t.createdAt),
-              updatedAt: new Date(t.updatedAt),
-              resolvedAt: t.resolvedAt ? new Date(t.resolvedAt) : undefined,
-              closedAt: t.closedAt ? new Date(t.closedAt) : undefined,
-              dueDate: t.dueDate ? new Date(t.dueDate) : undefined,
-              deletedAt: t.deletedAt ? new Date(t.deletedAt) : undefined,
-              comments: t.comments?.map((c: any) => ({...c, createdAt: new Date(c.createdAt), updatedAt: c.updatedAt ? new Date(c.updatedAt) : undefined})) || [],
-              history: t.history?.map((h: any) => ({...h, timestamp: new Date(h.timestamp)})) || [],
-            }));
-            setTickets(ticketsWithDates);
-          }
-        } catch { /* ignore */ }
-      }
     };
     
-    // Utiliser un timeout pour éviter le setState synchrone
+    // Utiliser un timeout pour Ã©viter le setState synchrone
     const timer = setTimeout(loadData, 0);
     return () => clearTimeout(timer);
   }, []);
@@ -3604,14 +3992,364 @@ export default function NOCActivityApp() {
     void syncUsersFromApi();
   }, [syncUsersFromApi]);
 
-  // Sauvegarder les tickets dans localStorage à chaque modification
-  useEffect(() => {
-    if (tickets.length > 0) {
-      localStorage.setItem('noc_tickets', JSON.stringify(tickets));
-    }
-  }, [tickets]);
+  const splitTicketValues = useCallback((value?: string) => {
+    if (!value) return [] as string[];
+    return value.split(',').map((item) => item.trim()).filter(Boolean);
+  }, []);
 
-  // L'effet de récupération des conversations est déjà déclenché plus haut. Cette section reste vide pour éviter les appels doubles.
+  const normalizeTicketLocality = useCallback((value: string) => value.trim().replace(/\s+/g, ' '), []);
+
+  const applyLocalityToTicket = useCallback((name: string, target: 'new' | 'edit') => {
+    if (target === 'new') {
+      setNewTicket((prev) => ({ ...prev, localite: name }));
+      return;
+    }
+
+    setEditingTicket((prev) => prev ? { ...prev, localite: name } : prev);
+  }, []);
+
+  const upsertLocalityOption = useCallback((name: string) => {
+    const normalized = normalizeTicketLocality(name);
+    if (!normalized) return;
+
+    setTicketLocalityOptions((prev) => {
+      if (prev.some((item) => item.toLowerCase() === normalized.toLowerCase())) {
+        return prev;
+      }
+      return [...prev, normalized].sort((left, right) => left.localeCompare(right, 'fr'));
+    });
+  }, [normalizeTicketLocality]);
+
+  const createTicketLocality = useCallback(async (payload: Partial<TicketLocalityDraft>, target: 'new' | 'edit') => {
+    const freeText = normalizeTicketLocality(payload.freeText ?? '');
+
+    if (
+      !freeText
+      && !payload.city?.trim()
+      && !payload.arrondissement?.trim()
+      && !payload.quartier?.trim()
+      && !payload.address?.trim()
+      && !String(payload.latitude ?? '').trim()
+      && !String(payload.longitude ?? '').trim()
+    ) {
+      toast.error('Veuillez renseigner une localitÃ©');
+      return;
+    }
+
+    setIsCreatingLocality(true);
+    try {
+      const response = await fetch('/api/tickets/localities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: freeText,
+          countryCode: payload.countryCode,
+          countryName: payload.countryName,
+          city: payload.city,
+          arrondissement: payload.arrondissement,
+          quartier: payload.quartier,
+          address: payload.address,
+          latitude: payload.latitude,
+          longitude: payload.longitude,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('locality_create_failed');
+      }
+
+      const created = await response.json();
+      const localityName = normalizeTicketLocality(String(created?.name ?? created?.label ?? created?.value ?? freeText));
+      if (!localityName) {
+        throw new Error('locality_name_empty');
+      }
+
+      upsertLocalityOption(localityName);
+      applyLocalityToTicket(localityName, target);
+
+      if (target === 'new') {
+        setNewTicketLocalityDraft((prev) => ({ ...DEFAULT_TICKET_LOCALITY_DRAFT, countryCode: prev.countryCode, countryName: prev.countryName }));
+      } else {
+        setEditTicketLocalityDraft((prev) => ({ ...DEFAULT_TICKET_LOCALITY_DRAFT, countryCode: prev.countryCode, countryName: prev.countryName }));
+      }
+
+      toast.success('LocalitÃ© enregistrÃ©e', { description: localityName });
+    } catch (error) {
+      console.error('[tickets page] create locality', error);
+      toast.error('Impossible d\'enregistrer la localitÃ©');
+    } finally {
+      setIsCreatingLocality(false);
+    }
+  }, [applyLocalityToTicket, normalizeTicketLocality, upsertLocalityOption]);
+
+  const clampTicketDialogValue = useCallback((value: number, min: number, max: number) => {
+    return Math.min(Math.max(value, min), max);
+  }, []);
+
+  const startCreateTicketDialogDrag = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    createTicketDialogPointerStateRef.current.dragOffsetX = event.clientX - createTicketDialogPosition.x;
+    createTicketDialogPointerStateRef.current.dragOffsetY = event.clientY - createTicketDialogPosition.y;
+    setIsCreateTicketDialogDragging(true);
+  }, [createTicketDialogPosition.x, createTicketDialogPosition.y]);
+
+  const startCreateTicketDialogResize = useCallback((direction: TicketDialogResizeDirection, event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    createTicketDialogPointerStateRef.current.startX = event.clientX;
+    createTicketDialogPointerStateRef.current.startY = event.clientY;
+    createTicketDialogPointerStateRef.current.startLeft = createTicketDialogPosition.x;
+    createTicketDialogPointerStateRef.current.startTop = createTicketDialogPosition.y;
+    createTicketDialogPointerStateRef.current.startWidth = createTicketDialogSize.width;
+    createTicketDialogPointerStateRef.current.startHeight = createTicketDialogSize.height;
+    setCreateTicketDialogResizeDirection(direction);
+  }, [createTicketDialogPosition.x, createTicketDialogPosition.y, createTicketDialogSize.height, createTicketDialogSize.width]);
+
+  useEffect(() => {
+    if (!createTicketOpen || typeof window === 'undefined') return;
+
+    const viewportPadding = 16;
+    const maxWidth = Math.max(460, window.innerWidth - viewportPadding * 2);
+    const maxHeight = Math.max(360, window.innerHeight - viewportPadding * 2);
+
+    setCreateTicketDialogSize((prev) => ({
+      width: clampTicketDialogValue(prev.width, 460, maxWidth),
+      height: clampTicketDialogValue(prev.height, 360, maxHeight),
+    }));
+
+    setCreateTicketDialogPosition((prev) => {
+      const centeredX = Math.round((window.innerWidth - Math.min(maxWidth, createTicketDialogSize.width)) / 2);
+      const centeredY = Math.round((window.innerHeight - Math.min(maxHeight, createTicketDialogSize.height)) / 2);
+      if (prev.x === 48 && prev.y === 72) {
+        return {
+          x: Math.max(viewportPadding, centeredX),
+          y: Math.max(viewportPadding, centeredY),
+        };
+      }
+
+      return {
+        x: clampTicketDialogValue(prev.x, viewportPadding, Math.max(viewportPadding, window.innerWidth - viewportPadding - createTicketDialogSize.width)),
+        y: clampTicketDialogValue(prev.y, viewportPadding, Math.max(viewportPadding, window.innerHeight - viewportPadding - createTicketDialogSize.height)),
+      };
+    });
+  }, [clampTicketDialogValue, createTicketDialogSize.height, createTicketDialogSize.width, createTicketOpen]);
+
+  useEffect(() => {
+    if ((!isCreateTicketDialogDragging && !createTicketDialogResizeDirection) || typeof window === 'undefined') return;
+
+    const viewportPadding = 16;
+    const minWidth = 460;
+    const minHeight = 360;
+
+    const handlePointerMove = (event: MouseEvent) => {
+      if (isCreateTicketDialogDragging) {
+        const maxX = Math.max(viewportPadding, window.innerWidth - viewportPadding - createTicketDialogSize.width);
+        const maxY = Math.max(viewportPadding, window.innerHeight - viewportPadding - createTicketDialogSize.height);
+        const nextX = clampTicketDialogValue(event.clientX - createTicketDialogPointerStateRef.current.dragOffsetX, viewportPadding, maxX);
+        const nextY = clampTicketDialogValue(event.clientY - createTicketDialogPointerStateRef.current.dragOffsetY, viewportPadding, maxY);
+        setCreateTicketDialogPosition({ x: nextX, y: nextY });
+        return;
+      }
+
+      if (!createTicketDialogResizeDirection) return;
+
+      const maxWidth = Math.max(minWidth, window.innerWidth - viewportPadding * 2);
+      const maxHeight = Math.max(minHeight, window.innerHeight - viewportPadding * 2);
+      const deltaX = event.clientX - createTicketDialogPointerStateRef.current.startX;
+      const deltaY = event.clientY - createTicketDialogPointerStateRef.current.startY;
+
+      let nextWidth = createTicketDialogPointerStateRef.current.startWidth;
+      let nextHeight = createTicketDialogPointerStateRef.current.startHeight;
+      let nextLeft = createTicketDialogPointerStateRef.current.startLeft;
+      let nextTop = createTicketDialogPointerStateRef.current.startTop;
+
+      if (createTicketDialogResizeDirection.includes('e')) {
+        nextWidth = clampTicketDialogValue(createTicketDialogPointerStateRef.current.startWidth + deltaX, minWidth, maxWidth);
+      }
+
+      if (createTicketDialogResizeDirection.includes('s')) {
+        nextHeight = clampTicketDialogValue(createTicketDialogPointerStateRef.current.startHeight + deltaY, minHeight, maxHeight);
+      }
+
+      if (createTicketDialogResizeDirection.includes('w')) {
+        nextWidth = clampTicketDialogValue(createTicketDialogPointerStateRef.current.startWidth - deltaX, minWidth, maxWidth);
+        nextLeft = createTicketDialogPointerStateRef.current.startLeft + (createTicketDialogPointerStateRef.current.startWidth - nextWidth);
+      }
+
+      if (createTicketDialogResizeDirection.includes('n')) {
+        nextHeight = clampTicketDialogValue(createTicketDialogPointerStateRef.current.startHeight - deltaY, minHeight, maxHeight);
+        nextTop = createTicketDialogPointerStateRef.current.startTop + (createTicketDialogPointerStateRef.current.startHeight - nextHeight);
+      }
+
+      nextLeft = clampTicketDialogValue(nextLeft, viewportPadding, Math.max(viewportPadding, window.innerWidth - viewportPadding - nextWidth));
+      nextTop = clampTicketDialogValue(nextTop, viewportPadding, Math.max(viewportPadding, window.innerHeight - viewportPadding - nextHeight));
+
+      setCreateTicketDialogSize({ width: nextWidth, height: nextHeight });
+      setCreateTicketDialogPosition({ x: nextLeft, y: nextTop });
+    };
+
+    const stopPointerInteraction = () => {
+      setIsCreateTicketDialogDragging(false);
+      setCreateTicketDialogResizeDirection(null);
+    };
+
+    window.addEventListener('mousemove', handlePointerMove);
+    window.addEventListener('mouseup', stopPointerInteraction);
+
+    return () => {
+      window.removeEventListener('mousemove', handlePointerMove);
+      window.removeEventListener('mouseup', stopPointerInteraction);
+    };
+  }, [
+    clampTicketDialogValue,
+    createTicketDialogResizeDirection,
+    createTicketDialogSize.height,
+    createTicketDialogSize.width,
+    isCreateTicketDialogDragging,
+  ]);
+
+  const resolveTicketSiteSelection = useCallback((value?: string) => {
+    const names = splitTicketValues(value);
+    return ticketSiteOptions.filter((site) => names.includes(site.name));
+  }, [splitTicketValues, ticketSiteOptions]);
+
+  const resolveTicketTechnicians = useCallback((value?: string) => {
+    const names = splitTicketValues(value);
+    return ticketTechnicianOptions.filter((technician) => names.includes(technician.name));
+  }, [splitTicketValues, ticketTechnicianOptions]);
+
+  const loadTicketsModuleData = useCallback(async () => {
+    try {
+      const [activeRes, trashRes, sitesRes, localitiesRes] = await Promise.all([
+        fetch('/api/tickets/list?trash=false', { cache: 'no-store' }),
+        fetch('/api/tickets/list?trash=true', { cache: 'no-store' }),
+        fetch('/api/tickets/sites', { cache: 'no-store' }),
+        fetch('/api/tickets/localities', { cache: 'no-store' }),
+      ]);
+
+      if (activeRes.ok && trashRes.ok) {
+        const [activeData, trashData] = await Promise.all([activeRes.json(), trashRes.json()]);
+        const mergedTickets = [...(Array.isArray(activeData) ? activeData : []), ...(Array.isArray(trashData) ? trashData : [])]
+          .map(mapApiTicketToLegacy)
+          .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
+        setTickets(mergedTickets);
+      }
+
+      const mergedLocalities = new Set<string>();
+
+      if (sitesRes.ok) {
+        const sitesData = await sitesRes.json();
+        if (Array.isArray(sitesData) && sitesData.length > 0) {
+          const normalizedSites = sitesData
+            .map((site: { id?: string; name?: string; localite?: string | null; locality?: string | null }) => ({
+              id: String(site.id ?? site.name ?? ''),
+              name: String(site.name ?? '').trim(),
+              localite: site.localite ?? site.locality ?? null,
+            }))
+            .filter((site: TicketOptionItem) => Boolean(site.id) && Boolean(site.name));
+
+          setTicketSiteOptions(normalizedSites);
+
+          normalizedSites.forEach((site) => {
+            const siteLocality = normalizeTicketLocality(site.localite ?? '');
+            if (!siteLocality) return;
+            siteLocality
+              .split(',')
+              .map((part) => normalizeTicketLocality(part))
+              .filter(Boolean)
+              .forEach((locality) => mergedLocalities.add(locality));
+          });
+        }
+      }
+
+      if (localitiesRes.ok) {
+        const localitiesData = await localitiesRes.json();
+        if (Array.isArray(localitiesData)) {
+          localitiesData
+            .map((locality: { name?: string; value?: string; label?: string } | string) => {
+              if (typeof locality === 'string') {
+                return normalizeTicketLocality(locality);
+              }
+              return normalizeTicketLocality(String(locality.name ?? locality.value ?? locality.label ?? ''));
+            })
+            .filter(Boolean)
+            .forEach((locality) => mergedLocalities.add(locality));
+        }
+      }
+
+      if (mergedLocalities.size > 0) {
+        setTicketLocalityOptions(
+          Array.from(mergedLocalities).sort((left, right) => left.localeCompare(right, 'fr'))
+        );
+      }
+    } catch (error) {
+      console.error('[tickets page] loadTicketsModuleData', error);
+    }
+  }, [normalizeTicketLocality]);
+
+  useEffect(() => {
+    void loadTicketsModuleData();
+  }, [loadTicketsModuleData]);
+
+  useEffect(() => {
+    if (!editTicketOpen) return;
+    setEditTicketLocalityDraft((prev) => ({
+      ...prev,
+      freeText: editingTicket?.localite ?? '',
+    }));
+  }, [editTicketOpen, editingTicket?.localite]);
+
+  const handleDeleteTicket = useCallback(async (ticket: TicketItem, permanent = false) => {
+    try {
+      const response = await fetch(`/api/tickets/${ticket.id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ permanent, deletedBy: user?.name }),
+      });
+
+      if (!response.ok) {
+        throw new Error('delete_failed');
+      }
+
+      await loadTicketsModuleData();
+      if (selectedTicket?.id === ticket.id) {
+        setSelectedTicket(null);
+        setTicketDetailOpen(false);
+      }
+      toast.success(permanent ? 'Ticket supprimÃ© dÃ©finitivement' : 'Ticket dÃ©placÃ© dans la corbeille');
+    } catch (error) {
+      console.error('[tickets page] handleDeleteTicket', error);
+      toast.error('Impossible de supprimer le ticket');
+    }
+  }, [loadTicketsModuleData, selectedTicket?.id, user?.name]);
+
+  const handleUpdateTicketStatus = useCallback(async (ticket: TicketItem, status: TicketStatus) => {
+    try {
+      const response = await fetch(`/api/tickets/${ticket.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: mapLegacyTicketStatusToApi(status),
+          updatedBy: user?.name,
+          updatedById: user?.id,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('status_update_failed');
+      }
+
+      const updatedTicket = mapApiTicketToLegacy(await response.json());
+      setTickets((prev) => prev.map((entry) => entry.id === updatedTicket.id ? updatedTicket : entry));
+      setSelectedTicket(updatedTicket);
+      toast.success(status === 'resolved' ? 'Ticket marquÃ© comme rÃ©solu' : 'Ticket fermÃ©');
+    } catch (error) {
+      console.error('[tickets page] handleUpdateTicketStatus', error);
+      toast.error('Impossible de mettre Ã  jour le ticket');
+    }
+  }, [user?.id, user?.name]);
+
+  // L'effet de rÃ©cupÃ©ration des conversations est dÃ©jÃ  dÃ©clenchÃ© plus haut. Cette section reste vide pour Ã©viter les appels doubles.
 
   const isAnnouncementsConversation = useCallback((conversation?: Conversation | null) => {
     if (!conversation || conversation.type !== 'individual') return false;
@@ -3669,15 +4407,15 @@ export default function NOCActivityApp() {
       if (chatAvatarUploadTarget.mode === 'announcement') {
         setAnnouncementAvatar(imageData);
         localStorage.setItem('noc_announcements_avatar', imageData);
-        toast.success('Photo des annonces mise à jour');
+        toast.success('Photo des annonces mise Ã  jour');
       } else if (chatAvatarUploadTarget.mode === 'group' && chatAvatarUploadTarget.conversationId) {
         updateConversationAvatar(chatAvatarUploadTarget.conversationId, imageData);
-        toast.success('Photo du groupe mise à jour');
+        toast.success('Photo du groupe mise Ã  jour');
       }
     };
 
     reader.onerror = () => {
-      toast.error('Erreur', { description: 'Impossible de lire l\'image sélectionnée.' });
+      toast.error('Erreur', { description: 'Impossible de lire l\'image sÃ©lectionnÃ©e.' });
     };
 
     reader.readAsDataURL(file);
@@ -3711,18 +4449,18 @@ export default function NOCActivityApp() {
   const sendChatMessage = useCallback(async (messagePayload: ChatMessageInput) => {
     let conversationId = messagePayload.conversationId || selectedConversation?.id;
     if (!conversationId) {
-      toast.error('Aucune conversation sélectionnée (conversationId manquant)');
+      toast.error('Aucune conversation sÃ©lectionnÃ©e (conversationId manquant)');
       return;
     }
 
     if (!user) {
-      toast.error('Utilisateur non authentifié');
+      toast.error('Utilisateur non authentifiÃ©');
       return;
     }
 
     const targetConversation = conversations.find((conversation) => conversation.id === conversationId) || selectedConversation;
     if (isAnnouncementsConversation(targetConversation) && !canManageAnnouncements(user)) {
-      toast.error('Action non autorisée', {
+      toast.error('Action non autorisÃ©e', {
         description: 'Seuls les Admins, Responsables et Super Admins peuvent publier des annonces.',
       });
       return;
@@ -3791,7 +4529,7 @@ export default function NOCActivityApp() {
             errMsg = `Erreur envoi du message (${response.status}) : ${errJson.error}`;
           }
         } catch (_e) {
-          // peut être non-JSON
+          // peut Ãªtre non-JSON
         }
         console.error('Erreur API send message', response.status, errMsg);
         toast.error(errMsg);
@@ -3800,7 +4538,7 @@ export default function NOCActivityApp() {
 
       const result = await response.json();
       if (result.success && result.message) {
-        // On s'assure que le mapping est bien à plat pour l'affichage
+        // On s'assure que le mapping est bien Ã  plat pour l'affichage
         const createdMessage: ChatMessage = {
           ...result.message,
           createdAt: new Date(result.message.createdAt),
@@ -3879,13 +4617,13 @@ export default function NOCActivityApp() {
 
         if (!response.ok) {
           const err = await response.json().catch(() => ({}));
-          toast.error(err?.error || 'Erreur mise à jour du message');
+          toast.error(err?.error || 'Erreur mise Ã  jour du message');
           return null;
         }
 
         const data = await response.json();
         if (!data?.success || !data?.message) {
-          toast.error('Erreur mise à jour du message');
+          toast.error('Erreur mise Ã  jour du message');
           return null;
         }
 
@@ -3920,19 +4658,19 @@ export default function NOCActivityApp() {
         return mappedMessage;
       } catch (error) {
         console.error('Erreur updateChatMessage', error);
-        toast.error('Erreur mise à jour du message');
+        toast.error('Erreur mise Ã  jour du message');
         return null;
       }
     },
     [user]
   );
 
-  // Mettre à jour l'activité sur les actions utilisateur
+  // Mettre Ã  jour l'activitÃ© sur les actions utilisateur
   const updateActivity = useCallback(() => {
     setLastActivity(new Date());
   }, []);
 
-  // Ajouter une entrée dans le journal d'audit
+  // Ajouter une entrÃ©e dans le journal d'audit
   const addAuditLog = useCallback((action: string, details: string, status: 'SUCCESS' | 'FAILURE' = 'SUCCESS') => {
     const log: AuditLogEntry = {
       id: generateId(),
@@ -3945,7 +4683,7 @@ export default function NOCActivityApp() {
       createdAt: new Date()
     };
     setAuditLogs(prev => {
-      const updated = [log, ...prev].slice(0, 500); // Garder les 500 dernières entrées
+      const updated = [log, ...prev].slice(0, 500); // Garder les 500 derniÃ¨res entrÃ©es
       localStorage.setItem('noc_audit_logs', JSON.stringify(updated));
       return updated;
     });
@@ -3954,19 +4692,19 @@ export default function NOCActivityApp() {
   // Fonction pour calculer le temps de verrouillage progressif
   const calculateLockoutTime = (attempts: number): number => {
     if (attempts < 3) return 0;
-    if (attempts === 3) return 30; // 30 secondes après 3 tentatives
+    if (attempts === 3) return 30; // 30 secondes aprÃ¨s 3 tentatives
     if (attempts === 4) return 30; // Encore 30 secondes
-    if (attempts >= 5) return 60; // 1 minute après 5 tentatives
-    return Math.min(60 + (attempts - 5) * 30, 300); // +30s par tentative supplémentaire, max 5 min
+    if (attempts >= 5) return 60; // 1 minute aprÃ¨s 5 tentatives
+    return Math.min(60 + (attempts - 5) * 30, 300); // +30s par tentative supplÃ©mentaire, max 5 min
   };
 
   // Handler pour la connexion avec suivi des tentatives
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Vérifier si le compte est verrouillé
+    // VÃ©rifier si le compte est verrouillÃ©
     if (isLocked) {
-      toast.error('Compte verrouillé', { description: `Veuillez attendre ${lockoutSeconds} secondes` });
+      toast.error('Compte verrouillÃ©', { description: `Veuillez attendre ${lockoutSeconds} secondes` });
       return;
     }
 
@@ -3975,12 +4713,12 @@ export default function NOCActivityApp() {
 
     await new Promise(resolve => setTimeout(resolve, 500));
 
-    // Fonction pour gérer l'échec de connexion
+    // Fonction pour gÃ©rer l'Ã©chec de connexion
     const handleFailedLogin = (explicitMessage?: string) => {
       const newAttempts = failedAttempts + 1;
       setFailedAttempts(newAttempts);
 
-      // Afficher le message d'oubli après 3 tentatives
+      // Afficher le message d'oubli aprÃ¨s 3 tentatives
       if (newAttempts >= 3) {
         setShowForgotMessage(true);
       }
@@ -3997,7 +4735,7 @@ export default function NOCActivityApp() {
       toast.error(lockoutTime > 0 ? 'Trop de tentatives' : 'Erreur de connexion', {
         id: lockoutTime > 0 ? 'auth-lockout-error' : 'auth-login-error',
         description: lockoutTime > 0
-          ? `Veuillez attendre ${lockoutTime} secondes avant de réessayer`
+          ? `Veuillez attendre ${lockoutTime} secondes avant de rÃ©essayer`
           : explicitMessage || 'Identifiants invalides'
       });
     };
@@ -4043,8 +4781,8 @@ export default function NOCActivityApp() {
       toast.success(`Bienvenue, ${loggedUser.name} !`, {
         id: 'auth-login-success',
         description: loggedUser.mustChangePassword
-          ? 'Connexion réussie. Changement de mot de passe obligatoire avant toute action.'
-          : 'Connexion réussie',
+          ? 'Connexion rÃ©ussie. Changement de mot de passe obligatoire avant toute action.'
+          : 'Connexion rÃ©ussie',
       });
 
       if (loggedUser.mustChangePassword) {
@@ -4060,7 +4798,7 @@ export default function NOCActivityApp() {
     }
   };
 
-  // Effect pour le compte à rebours du verrouillage
+  // Effect pour le compte Ã  rebours du verrouillage
   useEffect(() => {
     if (!isLocked || lockoutSeconds <= 0) return;
 
@@ -4080,8 +4818,10 @@ export default function NOCActivityApp() {
   const handleLogout = () => {
     setUser(null);
     setIsAuthenticated(false);
+    setCurrentTab('dashboard');
+    restoredCurrentTabRef.current = false;
     localStorage.removeItem('noc_user');
-    toast.info('Déconnexion', { description: 'À bientôt !' });
+    toast.info('DÃ©connexion', { description: 'Ã€ bientÃ´t !' });
   };
 
   // Gmail Clone - Helper function to filter messages
@@ -4141,7 +4881,7 @@ export default function NOCActivityApp() {
           cc: [],
           bcc: [],
           subject: 'Bienvenue dans la messagerie interne',
-          body: `Bonjour ${user.name},\n\nBienvenue dans la nouvelle messagerie interne de Silicone Connect ! Cette plateforme vous permet de communiquer efficacement avec vos collègues.\n\nFonctionnalités principales:\n- Envoi et réception de messages\n- Pièces jointes\n- Libellés personnalisés\n- Recherche avancée\n- Mode confidentiel\n\nCordialement,\nL'équipe IT`,
+          body: `Bonjour ${user.name},\n\nBienvenue dans la nouvelle messagerie interne de Silicone Connect ! Cette plateforme vous permet de communiquer efficacement avec vos collÃ¨gues.\n\nFonctionnalitÃ©s principales:\n- Envoi et rÃ©ception de messages\n- PiÃ¨ces jointes\n- LibellÃ©s personnalisÃ©s\n- Recherche avancÃ©e\n- Mode confidentiel\n\nCordialement,\nL'Ã©quipe IT`,
           attachments: [],
           folder: 'inbox',
           status: 'unread',
@@ -4160,15 +4900,15 @@ export default function NOCActivityApp() {
           to: [{ id: user.id, name: user.name, email: user.email }],
           cc: [],
           bcc: [],
-          subject: 'Rappel : Réunion d\'équipe demain à 9h',
-          body: `Bonjour,\n\nJe vous rappelle que nous avons une réunion d'équipe demain matin à 9h00 dans la salle de conférence.\n\nOrdre du jour :\n1. Revue des incidents de la semaine\n2. Planning des vacations\n3. Points divers\n\nMerci de confirmer votre présence.\n\nCordialement,\nTheresia`,
+          subject: 'Rappel : RÃ©union d\'Ã©quipe demain Ã  9h',
+          body: `Bonjour,\n\nJe vous rappelle que nous avons une rÃ©union d'Ã©quipe demain matin Ã  9h00 dans la salle de confÃ©rence.\n\nOrdre du jour :\n1. Revue des incidents de la semaine\n2. Planning des vacations\n3. Points divers\n\nMerci de confirmer votre prÃ©sence.\n\nCordialement,\nTheresia`,
           attachments: [],
           folder: 'inbox',
           status: 'unread',
           priority: 'important',
           isStarred: true,
           isRead: false,
-          labels: ['Réunion'],
+          labels: ['RÃ©union'],
           receivedAt: new Date(Date.now() - 7200000),
           createdAt: new Date(Date.now() - 7200000),
           updatedAt: new Date(Date.now() - 7200000),
@@ -4176,12 +4916,12 @@ export default function NOCActivityApp() {
         },
         {
           id: 'email-3',
-          from: { id: 'monitoring', name: 'Système Monitoring', email: 'monitoring@siliconeconnect.com' },
+          from: { id: 'monitoring', name: 'SystÃ¨me Monitoring', email: 'monitoring@siliconeconnect.com' },
           to: [{ id: user.id, name: user.name, email: user.email }],
           cc: [],
           bcc: [],
           subject: 'Alerte : Client ACME - Interface instable',
-          body: `ALERTE MONITORING\n\nClient: ACME Corporation\nType: Interface Unstable\nSévérité: Moyenne\n\nDescription:\nL'interface vers le client ACME présente des fluctuations de connectivité depuis 2 heures.\n\nStatut: En cours d'investigation\n\nCette alerte a été générée automatiquement par le système de monitoring.`,
+          body: `ALERTE MONITORING\n\nClient: ACME Corporation\nType: Interface Unstable\nSÃ©vÃ©ritÃ©: Moyenne\n\nDescription:\nL'interface vers le client ACME prÃ©sente des fluctuations de connectivitÃ© depuis 2 heures.\n\nStatut: En cours d'investigation\n\nCette alerte a Ã©tÃ© gÃ©nÃ©rÃ©e automatiquement par le systÃ¨me de monitoring.`,
           attachments: [],
           folder: 'inbox',
           status: 'read',
@@ -4198,11 +4938,11 @@ export default function NOCActivityApp() {
         {
           id: 'email-4',
           from: { id: user.id, name: user.name, email: user.email },
-          to: [{ id: 'all', name: 'Équipe NOC', email: 'noc@siliconeconnect.com' }],
+          to: [{ id: 'all', name: 'Ã‰quipe NOC', email: 'noc@siliconeconnect.com' }],
           cc: [],
           bcc: [],
           subject: 'Handover - Fin de shift',
-          body: `Bonjour à tous,\n\nVoici le résumé du shift :\n\nIncidents traités: 3\nTickets créés: 5\nAppels clients: 12\n\nPoints d'attention:\n- Client ACME toujours en surveillance\n- Mise à jour Zabbix prévue ce soir\n\nBonne continuation à la prochaine équipe !`,
+          body: `Bonjour Ã  tous,\n\nVoici le rÃ©sumÃ© du shift :\n\nIncidents traitÃ©s: 3\nTickets crÃ©Ã©s: 5\nAppels clients: 12\n\nPoints d'attention:\n- Client ACME toujours en surveillance\n- Mise Ã  jour Zabbix prÃ©vue ce soir\n\nBonne continuation Ã  la prochaine Ã©quipe !`,
           attachments: [],
           folder: 'sent',
           status: 'read',
@@ -4221,8 +4961,8 @@ export default function NOCActivityApp() {
           to: [{ id: user.id, name: user.name, email: user.email }],
           cc: [{ id: 'audrey', name: 'Audrey', email: 'audrey@siliconeconnect.com' }],
           bcc: [],
-          subject: 'Documentation procédure escalation',
-          body: `Bonjour,\n\nVeuillez trouver ci-joint la documentation mise à jour concernant les procédures d'escalation.\n\nN'hésitez pas à me faire part de vos commentaires.\n\nMerci,\nKevine`,
+          subject: 'Documentation procÃ©dure escalation',
+          body: `Bonjour,\n\nVeuillez trouver ci-joint la documentation mise Ã  jour concernant les procÃ©dures d'escalation.\n\nN'hÃ©sitez pas Ã  me faire part de vos commentaires.\n\nMerci,\nKevine`,
           attachments: [
             {
               id: 'att-1',
@@ -4252,8 +4992,8 @@ export default function NOCActivityApp() {
           to: [{ id: user.id, name: user.name, email: user.email }],
           cc: [],
           bcc: [],
-          subject: 'Demande de congés',
-          body: `Bonjour,\n\nJe souhaite poser des congés du 15 au 20 mars.\n\nMerci de me confirmer si cela est possible.\n\nCordialement,\nLuca`,
+          subject: 'Demande de congÃ©s',
+          body: `Bonjour,\n\nJe souhaite poser des congÃ©s du 15 au 20 mars.\n\nMerci de me confirmer si cela est possible.\n\nCordialement,\nLuca`,
           attachments: [],
           folder: 'inbox',
           status: 'unread',
@@ -4273,26 +5013,26 @@ export default function NOCActivityApp() {
       // Initialize demo labels
       setEmailLabels([
         { id: 'label-1', name: 'Important', color: '#EF4444', userId: user.id, createdAt: new Date() },
-        { id: 'label-2', name: 'Réunion', color: '#3B82F6', userId: user.id, createdAt: new Date() },
+        { id: 'label-2', name: 'RÃ©union', color: '#3B82F6', userId: user.id, createdAt: new Date() },
         { id: 'label-3', name: 'Alerte', color: '#F59E0B', userId: user.id, createdAt: new Date() },
         { id: 'label-4', name: 'Documentation', color: '#22C55E', userId: user.id, createdAt: new Date() }
       ]);
     }
   }, [isAuthenticated, user, messages.length]);
 
-  // Session timeout - déconnexion automatique après 10 minutes d'inactivité RÉELLE
-  // Le timer se réinitialise dès que l'utilisateur interagit avec l'application
+  // Session timeout - dÃ©connexion automatique aprÃ¨s 10 minutes d'inactivitÃ© RÃ‰ELLE
+  // Le timer se rÃ©initialise dÃ¨s que l'utilisateur interagit avec l'application
   useEffect(() => {
     if (!isAuthenticated) return;
 
-    // Utiliser un ref pour éviter les re-renders sur chaque mouvement de souris
+    // Utiliser un ref pour Ã©viter les re-renders sur chaque mouvement de souris
     const lastInteractionRef = { current: Date.now() };
 
     const resetTimer = () => {
       lastInteractionRef.current = Date.now();
     };
 
-    // Écouter tous les types d'interactions utilisateur
+    // Ã‰couter tous les types d'interactions utilisateur
     const ACTIVITY_EVENTS = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click', 'focus'] as const;
     ACTIVITY_EVENTS.forEach((evt) => window.addEventListener(evt, resetTimer, { passive: true }));
 
@@ -4301,9 +5041,9 @@ export default function NOCActivityApp() {
         setUser(null);
         setIsAuthenticated(false);
         localStorage.removeItem('noc_user');
-        toast.warning('Session expirée', { description: 'Vous avez été déconnecté après 10 minutes d\'inactivité' });
+        toast.warning('Session expirÃ©e', { description: 'Vous avez Ã©tÃ© dÃ©connectÃ© aprÃ¨s 10 minutes d\'inactivitÃ©' });
       }
-    }, 30000); // Vérifier toutes les 30 secondes
+    }, 30000); // VÃ©rifier toutes les 30 secondes
 
     return () => {
       ACTIVITY_EVENTS.forEach((evt) => window.removeEventListener(evt, resetTimer));
@@ -4311,7 +5051,7 @@ export default function NOCActivityApp() {
     };
   }, [isAuthenticated]);
 
-  // Recording timer - incrémenter le temps d'enregistrement vocal
+  // Recording timer - incrÃ©menter le temps d'enregistrement vocal
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
     if (isRecording) {
@@ -4324,7 +5064,7 @@ export default function NOCActivityApp() {
     };
   }, [isRecording]);
 
-  // Call timer - incrémenter le temps d'appel (ringing shows countdown, connected shows duration)
+  // Call timer - incrÃ©menter le temps d'appel (ringing shows countdown, connected shows duration)
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
     if (callDialogOpen && activeCall) {
@@ -4359,10 +5099,10 @@ export default function NOCActivityApp() {
     const autoHangupTimeout = setTimeout(() => {
       closeCallSession(
         'missed',
-        "La personne n'est pas apte pour répondre pour l'instant",
+        "La personne n'est pas apte pour rÃ©pondre pour l'instant",
         activeCall
       );
-      toast.info('Pas de réponse', { description: 'L\'appel n\'a pas été répondu après 1 minute' });
+      toast.info('Pas de rÃ©ponse', { description: 'L\'appel n\'a pas Ã©tÃ© rÃ©pondu aprÃ¨s 1 minute' });
     }, 60000);
 
     callTimeoutRef.current = autoHangupTimeout;
@@ -4401,7 +5141,7 @@ export default function NOCActivityApp() {
 
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !result?.success || !result?.user) {
-        throw new Error(result?.error || 'Erreur lors de la mise à jour du profil');
+        throw new Error(result?.error || 'Erreur lors de la mise Ã  jour du profil');
       }
 
       const updatedUser = { ...user, ...result.user };
@@ -4512,7 +5252,7 @@ export default function NOCActivityApp() {
 
     try {
       if (!profileCroppedAreaPixels) {
-        toast.error('Rognage incomplet', { description: 'Veuillez sélectionner une zone de rognage.' });
+        toast.error('Rognage incomplet', { description: 'Veuillez sÃ©lectionner une zone de rognage.' });
         return;
       }
 
@@ -4557,12 +5297,12 @@ export default function NOCActivityApp() {
       setProfilePhotoDialogOpen(false);
       setTempProfilePhoto(null);
       clearTempAvatarObjectUrl();
-      toast.success('Photo mise à jour', {
-        description: 'Votre photo est enregistrée dans la base de données.',
+      toast.success('Photo mise Ã  jour', {
+        description: 'Votre photo est enregistrÃ©e dans la base de donnÃ©es.',
       });
     } catch (error) {
       console.error('Erreur sauvegarde photo profil', error);
-      toast.error('Erreur mise à jour photo', {
+      toast.error('Erreur mise Ã  jour photo', {
         description: 'Impossible d\'enregistrer la photo de profil.',
       });
     }
@@ -4620,7 +5360,7 @@ export default function NOCActivityApp() {
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
 
       if (latestIncoming) {
-        addNotification(`${latestIncoming.senderName}: ${latestIncoming.type === 'text' ? latestIncoming.content || 'Nouveau message' : `a envoyé ${latestIncoming.type}`}`, 'info', {
+        addNotification(`${latestIncoming.senderName}: ${latestIncoming.type === 'text' ? latestIncoming.content || 'Nouveau message' : `a envoyÃ© ${latestIncoming.type}`}`, 'info', {
           conversationId,
           messageId: latestIncoming.id,
         });
@@ -4638,7 +5378,7 @@ export default function NOCActivityApp() {
     } else {
       localStorage.removeItem('noc_chat_background');
     }
-    toast.success('Fond d\'écran mis à jour');
+    toast.success('Fond d\'Ã©cran mis Ã  jour');
   };
 
   const markNotificationRead = (id: string) => {
@@ -4714,16 +5454,16 @@ export default function NOCActivityApp() {
       });
 
       if (updatedUser) {
-        addAuditLog('PROFILE_UPDATE', `Profil modifié: ${updatedUser.name}`);
+        addAuditLog('PROFILE_UPDATE', `Profil modifiÃ©: ${updatedUser.name}`);
       }
 
       setEditProfileDialogOpen(false);
-      toast.success('Profil mis à jour', {
-        description: 'Vos informations ont été enregistrées dans la base de données.',
+      toast.success('Profil mis Ã  jour', {
+        description: 'Vos informations ont Ã©tÃ© enregistrÃ©es dans la base de donnÃ©es.',
       });
     } catch (error) {
       console.error('Erreur save profile', error);
-      toast.error('Erreur', { description: 'Impossible de mettre à jour le profil' });
+      toast.error('Erreur', { description: 'Impossible de mettre Ã  jour le profil' });
     }
   };
 
@@ -4795,7 +5535,7 @@ export default function NOCActivityApp() {
         }
       }
     } catch (error) {
-      console.error('Impossible de charger les préférences de sidebar', error);
+      console.error('Impossible de charger les prÃ©fÃ©rences de sidebar', error);
     }
   }, [clampSidebarWidth]);
 
@@ -4804,7 +5544,7 @@ export default function NOCActivityApp() {
       localStorage.setItem('noc_sidebar_position', sidebarPosition);
       localStorage.setItem('noc_sidebar_width', String(sidebarWidth));
     } catch (error) {
-      console.error('Impossible de sauvegarder les préférences de sidebar', error);
+      console.error('Impossible de sauvegarder les prÃ©fÃ©rences de sidebar', error);
     }
   }, [sidebarPosition, sidebarWidth]);
 
@@ -4833,7 +5573,7 @@ export default function NOCActivityApp() {
     setHideSecurityBanner(false);
   }, [user?.id, user?.mustChangePassword]);
 
-  // Ouvrir le dialog de sécurité
+  // Ouvrir le dialog de sÃ©curitÃ©
   const openSecurityDialog = () => {
     setSelectedUser(null);
     setEditPassword('');
@@ -4873,14 +5613,14 @@ export default function NOCActivityApp() {
     setEditUserDialogOpen(true);
   };
 
-  // Sauvegarder les paramètres de sécurité
+  // Sauvegarder les paramÃ¨tres de sÃ©curitÃ©
   const handleSaveSecurity = async () => {
     if (!user) return;
 
     // Validation du mot de passe
     const validation = validatePassword(editPassword);
     if (!validation.isValid) {
-      toast.error('Mot de passe invalide', { description: 'Le mot de passe doit contenir au moins 8 caractères, une majuscule, un chiffre et un caractère spécial' });
+      toast.error('Mot de passe invalide', { description: 'Le mot de passe doit contenir au moins 8 caractÃ¨res, une majuscule, un chiffre et un caractÃ¨re spÃ©cial' });
       return;
     }
 
@@ -4912,7 +5652,7 @@ export default function NOCActivityApp() {
 
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !result?.success || !result?.user) {
-        throw new Error(result?.error || 'Échec de mise à jour du mot de passe');
+        throw new Error(result?.error || 'Ã‰chec de mise Ã  jour du mot de passe');
       }
 
       const updatedUser = {
@@ -4936,17 +5676,17 @@ export default function NOCActivityApp() {
       return;
     }
 
-    addAuditLog('PASSWORD_CHANGE', 'Mot de passe modifié');
+    addAuditLog('PASSWORD_CHANGE', 'Mot de passe modifiÃ©');
     setSecurityDialogOpen(false);
     setSelectedUser(null);
-    toast.success('Sécurité mise à jour', { description: 'Votre mot de passe a été changé en base de données avec succès' });
+    toast.success('SÃ©curitÃ© mise Ã  jour', { description: 'Votre mot de passe a Ã©tÃ© changÃ© en base de donnÃ©es avec succÃ¨s' });
   };
 
   const handleChangeUserRole = async (targetUser: UserProfile, nextRole: UserRole) => {
     if (!canManageUsers || !user?.id) return;
     if (targetUser.role === nextRole) return;
     if (targetUser.role === 'SUPER_ADMIN' && user?.id !== targetUser.id) {
-      toast.error('Action interdite', { description: 'Impossible de modifier le rôle d\'un Super Admin' });
+      toast.error('Action interdite', { description: 'Impossible de modifier le rÃ´le d\'un Super Admin' });
       return;
     }
 
@@ -4963,7 +5703,7 @@ export default function NOCActivityApp() {
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !result?.success || !result?.user) {
-        throw new Error(result?.error || 'Erreur lors de la mise à jour du rôle');
+        throw new Error(result?.error || 'Erreur lors de la mise Ã  jour du rÃ´le');
       }
 
       const updatedUser = { ...targetUser, ...result.user, updatedAt: new Date() };
@@ -4979,17 +5719,17 @@ export default function NOCActivityApp() {
         localStorage.setItem('noc_user', JSON.stringify(updatedUser));
       }
     } catch (error) {
-      toast.error('Erreur', { description: error instanceof Error ? error.message : 'Mise à jour du rôle impossible' });
+      toast.error('Erreur', { description: error instanceof Error ? error.message : 'Mise Ã  jour du rÃ´le impossible' });
       return;
     } finally {
       setUsersActionInProgress(null);
     }
 
-    addAuditLog('USER_ROLE_CHANGED', `Rôle modifié pour ${targetUser.name}: ${targetUser.role} -> ${nextRole}`);
-    toast.success('Rôle mis à jour', { description: `${targetUser.name} est maintenant ${ROLE_CONFIG[nextRole].label}` });
+    addAuditLog('USER_ROLE_CHANGED', `RÃ´le modifiÃ© pour ${targetUser.name}: ${targetUser.role} -> ${nextRole}`);
+    toast.success('RÃ´le mis Ã  jour', { description: `${targetUser.name} est maintenant ${ROLE_CONFIG[nextRole].label}` });
   };
 
-  // Ouvrir le dialog de définition du shift
+  // Ouvrir le dialog de dÃ©finition du shift
   const openShiftDialog = () => {
     if (user) {
       setEditShift(user.shift?.name || '');
@@ -5025,23 +5765,23 @@ export default function NOCActivityApp() {
       return updated;
     });
     
-    addAuditLog('SHIFT_UPDATE', `Shift modifié: ${editShift || 'Aucun'}, Fonction: ${editResponsibility || 'Aucune'}`);
+    addAuditLog('SHIFT_UPDATE', `Shift modifiÃ©: ${editShift || 'Aucun'}, Fonction: ${editResponsibility || 'Aucune'}`);
     setShiftDialogOpen(false);
-    toast.success('Shift mis à jour', { description: 'Votre shift et fonction ont été enregistrés' });
+    toast.success('Shift mis Ã  jour', { description: 'Votre shift et fonction ont Ã©tÃ© enregistrÃ©s' });
   };
 
-  // Créer un nouvel utilisateur (Super Admin uniquement)
+  // CrÃ©er un nouvel utilisateur (Super Admin uniquement)
   const handleCreateUser = async () => {
     if (!canManageUsers || !user?.id) return;
     
     if (!editEmail.endsWith('@siliconeconnect.com')) {
-      toast.error('Email invalide', { description: 'L\'email doit être @siliconeconnect.com' });
+      toast.error('Email invalide', { description: 'L\'email doit Ãªtre @siliconeconnect.com' });
       return;
     }
     
     const validation = validatePassword(editPassword);
     if (!validation.isValid) {
-      toast.error('Mot de passe invalide', { description: 'Le mot de passe doit respecter les critères de sécurité' });
+      toast.error('Mot de passe invalide', { description: 'Le mot de passe doit respecter les critÃ¨res de sÃ©curitÃ©' });
       return;
     }
     
@@ -5067,7 +5807,7 @@ export default function NOCActivityApp() {
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !result?.success || !result?.user) {
-        throw new Error(result?.error || 'Erreur lors de la création de l\'utilisateur');
+        throw new Error(result?.error || 'Erreur lors de la crÃ©ation de l\'utilisateur');
       }
 
       const createdUser = { ...result.user, updatedAt: new Date(), createdAt: new Date() } as UserProfile;
@@ -5078,17 +5818,17 @@ export default function NOCActivityApp() {
         return updated;
       });
     } catch (error) {
-      toast.error('Erreur', { description: error instanceof Error ? error.message : 'Création impossible' });
+      toast.error('Erreur', { description: error instanceof Error ? error.message : 'CrÃ©ation impossible' });
       return;
     } finally {
       setUsersActionInProgress(null);
     }
     
-    addAuditLog('USER_CREATED', `Utilisateur créé: ${editFirstName} ${editLastName} (${editRole})`);
+    addAuditLog('USER_CREATED', `Utilisateur crÃ©Ã©: ${editFirstName} ${editLastName} (${editRole})`);
     setCreateUserDialogOpen(false);
-    toast.success('Utilisateur créé', { description: `${editFirstName} ${editLastName}`.trim() + ' a été ajouté avec succès' });
+    toast.success('Utilisateur crÃ©Ã©', { description: `${editFirstName} ${editLastName}`.trim() + ' a Ã©tÃ© ajoutÃ© avec succÃ¨s' });
     
-    // Réinitialiser le formulaire
+    // RÃ©initialiser le formulaire
     setEditFirstName('');
     setEditLastName('');
     setEditEmail('');
@@ -5104,13 +5844,13 @@ export default function NOCActivityApp() {
     if (!canManageUsers || !user?.id || !userToEdit) return;
 
     if (!editEmail.endsWith('@siliconeconnect.com')) {
-      toast.error('Email invalide', { description: 'L\'email doit être @siliconeconnect.com' });
+      toast.error('Email invalide', { description: 'L\'email doit Ãªtre @siliconeconnect.com' });
       return;
     }
 
     const fullName = `${editFirstName} ${editLastName}`.trim();
     if (!fullName) {
-      toast.error('Nom requis', { description: 'Le prénom et/ou le nom doivent être renseignés' });
+      toast.error('Nom requis', { description: 'Le prÃ©nom et/ou le nom doivent Ãªtre renseignÃ©s' });
       return;
     }
 
@@ -5138,7 +5878,7 @@ export default function NOCActivityApp() {
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !result?.success || !result?.user) {
-        throw new Error(result?.error || 'Mise à jour impossible');
+        throw new Error(result?.error || 'Mise Ã  jour impossible');
       }
 
       const updatedUser = { ...userToEdit, ...result.user, updatedAt: new Date() } as UserProfile;
@@ -5153,18 +5893,18 @@ export default function NOCActivityApp() {
         localStorage.setItem('noc_user', JSON.stringify(updatedUser));
       }
 
-      addAuditLog('USER_UPDATED', `Utilisateur modifié: ${updatedUser.name} (${updatedUser.role})`);
-      toast.success('Utilisateur modifié', { description: 'Toutes les informations ont été enregistrées en base' });
+      addAuditLog('USER_UPDATED', `Utilisateur modifiÃ©: ${updatedUser.name} (${updatedUser.role})`);
+      toast.success('Utilisateur modifiÃ©', { description: 'Toutes les informations ont Ã©tÃ© enregistrÃ©es en base' });
       setEditUserDialogOpen(false);
       setUserToEdit(null);
     } catch (error) {
-      toast.error('Erreur', { description: error instanceof Error ? error.message : 'Mise à jour impossible' });
+      toast.error('Erreur', { description: error instanceof Error ? error.message : 'Mise Ã  jour impossible' });
     } finally {
       setUsersActionInProgress(null);
     }
   };
 
-  // Bloquer/Débloquer un utilisateur
+  // Bloquer/DÃ©bloquer un utilisateur
   const handleToggleBlockUser = async (targetUser: UserProfile) => {
     if (!canManageUsers || !user?.id) return;
     
@@ -5187,7 +5927,7 @@ export default function NOCActivityApp() {
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !result?.success || !result?.user) {
-        throw new Error(result?.error || 'Erreur lors du blocage/déblocage');
+        throw new Error(result?.error || 'Erreur lors du blocage/dÃ©blocage');
       }
 
       const syncedUser = { ...updatedUser, ...result.user };
@@ -5197,17 +5937,17 @@ export default function NOCActivityApp() {
         return updated;
       });
     } catch (error) {
-      toast.error('Erreur', { description: error instanceof Error ? error.message : 'Blocage/déblocage impossible' });
+      toast.error('Erreur', { description: error instanceof Error ? error.message : 'Blocage/dÃ©blocage impossible' });
       return;
     } finally {
       setUsersActionInProgress(null);
     }
     
-    addAuditLog('USER_BLOCK_TOGGLE', `Utilisateur ${updatedUser.isBlocked ? 'bloqué' : 'débloqué'}: ${targetUser.name}`);
-    toast.success(updatedUser.isBlocked ? 'Utilisateur bloqué' : 'Utilisateur débloqué');
+    addAuditLog('USER_BLOCK_TOGGLE', `Utilisateur ${updatedUser.isBlocked ? 'bloquÃ©' : 'dÃ©bloquÃ©'}: ${targetUser.name}`);
+    toast.success(updatedUser.isBlocked ? 'Utilisateur bloquÃ©' : 'Utilisateur dÃ©bloquÃ©');
   };
 
-  // Réinitialiser le mot de passe d'un utilisateur
+  // RÃ©initialiser le mot de passe d'un utilisateur
   const handleResetUserPassword = async (targetUser: UserProfile, newPassword: string) => {
     if (!canManageUsers || !user?.id) return;
     
@@ -5232,7 +5972,7 @@ export default function NOCActivityApp() {
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !result?.success || !result?.user) {
-        throw new Error(result?.error || 'Erreur lors de la réinitialisation du mot de passe');
+        throw new Error(result?.error || 'Erreur lors de la rÃ©initialisation du mot de passe');
       }
 
       const syncedUser = { ...updatedUser, ...result.user };
@@ -5242,14 +5982,14 @@ export default function NOCActivityApp() {
         return updated;
       });
     } catch (error) {
-      toast.error('Erreur', { description: error instanceof Error ? error.message : 'Réinitialisation impossible' });
+      toast.error('Erreur', { description: error instanceof Error ? error.message : 'RÃ©initialisation impossible' });
       return;
     } finally {
       setUsersActionInProgress(null);
     }
     
-    addAuditLog('PASSWORD_RESET', `Mot de passe réinitialisé pour: ${targetUser.name}`);
-    toast.success('Mot de passe réinitialisé', { description: `Le mot de passe de ${targetUser.name} a été réinitialisé` });
+    addAuditLog('PASSWORD_RESET', `Mot de passe rÃ©initialisÃ© pour: ${targetUser.name}`);
+    toast.success('Mot de passe rÃ©initialisÃ©', { description: `Le mot de passe de ${targetUser.name} a Ã©tÃ© rÃ©initialisÃ©` });
   };
 
   // Supprimer un utilisateur
@@ -5270,10 +6010,10 @@ export default function NOCActivityApp() {
     if (!userToDelete || !user?.id) return;
     if (!isSuperAdmin(user)) return;
 
-    // Récupérer le pseudo ou le nom pour la confirmation
+    // RÃ©cupÃ©rer le pseudo ou le nom pour la confirmation
     const requiredText = userToDelete.username || userToDelete.name;
     
-    // Vérifier que l'utilisateur a bien recopié le pseudo/nom
+    // VÃ©rifier que l'utilisateur a bien recopiÃ© le pseudo/nom
     if (deleteConfirmationInput.trim() !== requiredText) {
       toast.error('Erreur', { description: 'Le pseudo/nom saisi ne correspond pas' });
       return;
@@ -5303,13 +6043,13 @@ export default function NOCActivityApp() {
       return updated;
     });
     
-    addAuditLog('USER_DELETED', `Utilisateur supprimé: ${userToDelete.name}`);
-    toast.success('Utilisateur supprimé');
+    addAuditLog('USER_DELETED', `Utilisateur supprimÃ©: ${userToDelete.name}`);
+    toast.success('Utilisateur supprimÃ©');
     setUserToDelete(null);
     setDeleteConfirmationInput('');
   };
 
-  // Rafraîchir le journal d'activité
+  // RafraÃ®chir le journal d'activitÃ©
   const refreshAuditLog = async () => {
     setAuditLogRefreshing(true);
     try {
@@ -5319,18 +6059,18 @@ export default function NOCActivityApp() {
       if (response.ok) {
         const result = await response.json();
         setAuditLogs(result.logs || []);
-        toast.success('Journal d\'activité rafraîchi');
+        toast.success('Journal d\'activitÃ© rafraÃ®chi');
       }
     } catch (error) {
-      toast.error('Erreur lors du rafraîchissement', {
-        description: 'Impossible de récupérer le journal d\'activité'
+      toast.error('Erreur lors du rafraÃ®chissement', {
+        description: 'Impossible de rÃ©cupÃ©rer le journal d\'activitÃ©'
       });
     } finally {
       setAuditLogRefreshing(false);
     }
   };
 
-  // Filtrer le journal d'activité
+  // Filtrer le journal d'activitÃ©
   const filteredAuditLogs = auditLogs.filter(log => {
     // Filtre par date
     const logDate = new Date(log.createdAt);
@@ -5377,31 +6117,31 @@ export default function NOCActivityApp() {
   // PDF Generation
   const generateOvertimePDF = useCallback(async () => {
     if (!user?.shift) {
-      toast.error('Erreur', { description: 'Aucun shift assigné' });
+      toast.error('Erreur', { description: 'Aucun shift assignÃ©' });
       return;
     }
 
-    // Vérification du nom et prénom complets
+    // VÃ©rification du nom et prÃ©nom complets
     const fullName = `${user.lastName || ''} ${user.firstName || ''}`.trim();
     if (!user.firstName || !user.lastName) {
       toast.error('Information manquante', {
-        description: 'Veuillez d\'abord renseigner votre nom et prénom complet dans "Modifier mes informations"'
+        description: 'Veuillez d\'abord renseigner votre nom et prÃ©nom complet dans "Modifier mes informations"'
       });
       return;
     }
 
     const doc = new jsPDF('p', 'mm', 'a4');
-    const monthNames = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+    const monthNames = ['Janvier', 'FÃ©vrier', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'AoÃ»t', 'Septembre', 'Octobre', 'Novembre', 'DÃ©cembre'];
     const dayNames = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
 
     const pageWidth = 210;
     const margin = 10;
 
     // ============================================
-    // 1. EN-TÊTE - Logo + Titre CENTRÉS
+    // 1. EN-TÃŠTE - Logo + Titre CENTRÃ‰S
     // ============================================
     
-    // Calculer la position centrée pour le logo + titre
+    // Calculer la position centrÃ©e pour le logo + titre
     const logoWidth = 18;
     const titleText = 'SILICONE CONNECT';
     doc.setFontSize(12);
@@ -5410,7 +6150,7 @@ export default function NOCActivityApp() {
     const totalHeaderWidth = logoWidth + 3 + titleWidth; // 3mm d'espace entre logo et titre
     const headerStartX = (pageWidth - totalHeaderWidth) / 2;
     
-    // Logo faicone_sc.png centré
+    // Logo faicone_sc.png centrÃ©
     try {
       const logoImg = new Image();
       logoImg.src = '/faicone_sc.png';
@@ -5420,7 +6160,7 @@ export default function NOCActivityApp() {
       });
       
       if (logoImg.complete && logoImg.naturalWidth > 0) {
-        // Logo centré (18mm x 18mm)
+        // Logo centrÃ© (18mm x 18mm)
         doc.addImage(logoImg, 'PNG', headerStartX, 10, logoWidth, 18);
       }
     } catch (e) {
@@ -5429,7 +6169,7 @@ export default function NOCActivityApp() {
       doc.roundedRect(headerStartX, 10, logoWidth, 18, 2, 2, 'F');
     }
 
-    // Titre SILICONE CONNECT (noir, plus petit, à côté du logo)
+    // Titre SILICONE CONNECT (noir, plus petit, Ã  cÃ´tÃ© du logo)
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
@@ -5459,7 +6199,7 @@ export default function NOCActivityApp() {
     }
 
     // ============================================
-    // 3. MOIS CENTRÉ
+    // 3. MOIS CENTRÃ‰
     // ============================================
     
     doc.setTextColor(0, 0, 0);
@@ -5468,7 +6208,7 @@ export default function NOCActivityApp() {
     doc.text(`MOIS : ${monthNames[overtimeMonth.getMonth()].toUpperCase()} ${overtimeMonth.getFullYear()}`, pageWidth / 2, 52, { align: 'center' });
 
     // ============================================
-    // 4. PRÉPARER LES DONNÉES
+    // 4. PRÃ‰PARER LES DONNÃ‰ES
     // ============================================
     
     const monthStart = startOfMonth(overtimeMonth);
@@ -5515,21 +6255,21 @@ export default function NOCActivityApp() {
     doc.setDrawColor(0, 0, 0);
     doc.setLineWidth(0.3);
     
-    // --- EN-TÊTE DU TABLEAU ---
+    // --- EN-TÃŠTE DU TABLEAU ---
     doc.setFillColor(168, 198, 238);
     doc.rect(margin, tableStartY, pageWidth - (margin * 2), headerHeight, 'F');
     
-    // Bordure de l'en-tête
+    // Bordure de l'en-tÃªte
     doc.rect(margin, tableStartY, pageWidth - (margin * 2), headerHeight);
     
-    // Texte de l'en-tête
+    // Texte de l'en-tÃªte
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(6);
     doc.setFont('helvetica', 'bold');
     
     let x = margin;
     for (let i = 0; i < headers.length; i++) {
-      // Ligne verticale de séparation dans l'en-tête
+      // Ligne verticale de sÃ©paration dans l'en-tÃªte
       if (i > 0) {
         doc.line(x, tableStartY, x, tableStartY + headerHeight);
       }
@@ -5540,11 +6280,11 @@ export default function NOCActivityApp() {
     // --- CORPS DU TABLEAU ---
     const bodyStartY = tableStartY + headerHeight;
     
-    // Fond alterné pour TOUTES les lignes SAUF la colonne NOM (colonne 0)
+    // Fond alternÃ© pour TOUTES les lignes SAUF la colonne NOM (colonne 0)
     for (let rowIndex = 0; rowIndex < records.length; rowIndex++) {
       if (rowIndex % 2 === 0) {
         doc.setFillColor(245, 247, 250);
-        // Fond pour les colonnes 1 à 8 (pas la colonne NOM)
+        // Fond pour les colonnes 1 Ã  8 (pas la colonne NOM)
         doc.rect(margin + colWidths[0], bodyStartY + (rowIndex * rowHeight), pageWidth - (margin * 2) - colWidths[0], rowHeight, 'F');
       }
     }
@@ -5554,17 +6294,17 @@ export default function NOCActivityApp() {
     // Une SEULE grande cellule rectangulaire vide
     // ============================================
     
-    // Fond de la colonne fusionnée
+    // Fond de la colonne fusionnÃ©e
     doc.setFillColor(245, 247, 250);
     doc.rect(margin, bodyStartY, colWidths[0], totalRowsHeight, 'F');
     
-    // Bordure de la grande cellule fusionnée
+    // Bordure de la grande cellule fusionnÃ©e
     doc.rect(margin, bodyStartY, colWidths[0], totalRowsHeight);
     
     // ============================================
     // DESSINER LES BORDURES DES AUTRES COLONNES
-    // IMPORTANT: Lignes horizontales SEULEMENT pour colonnes 1 à 8
-    // PAS de lignes dans la colonne NOM (colonne 0 fusionnée)
+    // IMPORTANT: Lignes horizontales SEULEMENT pour colonnes 1 Ã  8
+    // PAS de lignes dans la colonne NOM (colonne 0 fusionnÃ©e)
     // ============================================
     
     doc.setFont('helvetica', 'normal');
@@ -5577,11 +6317,11 @@ export default function NOCActivityApp() {
       const row = records[rowIndex];
       const currentY = bodyStartY + (rowIndex * rowHeight);
       
-      // Ligne horizontale SEULEMENT pour colonnes 1 à 8 (PAS dans colonne NOM)
-      // La ligne commence APRÈS la colonne NOM
+      // Ligne horizontale SEULEMENT pour colonnes 1 Ã  8 (PAS dans colonne NOM)
+      // La ligne commence APRÃˆS la colonne NOM
       doc.line(col0EndX, currentY + rowHeight, pageWidth - margin, currentY + rowHeight);
       
-      // Lignes verticales et texte pour colonnes 1 à 8
+      // Lignes verticales et texte pour colonnes 1 Ã  8
       x = col0EndX;
       for (let colIndex = 1; colIndex < 9; colIndex++) {
         doc.line(x, currentY, x, currentY + rowHeight);
@@ -5590,18 +6330,18 @@ export default function NOCActivityApp() {
       }
     }
     
-    // Bordure extérieure du corps (sans la colonne NOM qui a déjà sa bordure)
-    doc.line(col0EndX, bodyStartY, col0EndX, bodyStartY + totalRowsHeight); // Ligne verticale après NOM
+    // Bordure extÃ©rieure du corps (sans la colonne NOM qui a dÃ©jÃ  sa bordure)
+    doc.line(col0EndX, bodyStartY, col0EndX, bodyStartY + totalRowsHeight); // Ligne verticale aprÃ¨s NOM
     doc.line(pageWidth - margin, bodyStartY, pageWidth - margin, bodyStartY + totalRowsHeight); // Bordure droite
 
     // ============================================
-    // 6. NOM EN VERTICAL - ROTATION 90° DANS LA CELLULE FUSIONNÉE
-    // Positionnement précis
+    // 6. NOM EN VERTICAL - ROTATION 90Â° DANS LA CELLULE FUSIONNÃ‰E
+    // Positionnement prÃ©cis
     // ============================================
     
     const nomEmploye = fullName.toUpperCase();
     
-    // Dimensions de la zone fusionnée
+    // Dimensions de la zone fusionnÃ©e
     const cellX = margin;
     const cellY = bodyStartY;
     const cellWidth = colWidths[0];
@@ -5612,10 +6352,10 @@ export default function NOCActivityApp() {
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(0, 0, 0);
     
-    // Déplacer de gauche vers la droite dans la cellule
+    // DÃ©placer de gauche vers la droite dans la cellule
     const textX = cellX + (cellWidth / 2) + 13;
     
-    // Position Y centrée verticalement
+    // Position Y centrÃ©e verticalement
     const textY = cellY + (cellHeight / 2);
     
     doc.text(nomEmploye, textX, textY, { 
@@ -5645,10 +6385,10 @@ export default function NOCActivityApp() {
     doc.text(`${totalHours}:00:00`, pageWidth - margin - 45, totalY + 6.5, { align: 'center' });
 
     // ============================================
-    // 8. SIGNATURES - PLUS D'ESPACE (50mm après total)
+    // 8. SIGNATURES - PLUS D'ESPACE (50mm aprÃ¨s total)
     // ============================================
     
-    const signatureY = totalY + 50; // Augmenté de 25 à 50 pour plus d'espace
+    const signatureY = totalY + 50; // AugmentÃ© de 25 Ã  50 pour plus d'espace
     const sigWidth = (pageWidth - (margin * 2)) / 4;
     
     doc.setFontSize(7);
@@ -5669,20 +6409,20 @@ export default function NOCActivityApp() {
 
     // Sauvegarder
     doc.save(`heures_sup_${fullName.replace(/\s+/g, '_')}_${format(overtimeMonth, 'MM_yyyy')}.pdf`);
-    toast.success('PDF généré', { description: 'Le fichier a été téléchargé' });
+    toast.success('PDF gÃ©nÃ©rÃ©', { description: 'Le fichier a Ã©tÃ© tÃ©lÃ©chargÃ©' });
   }, [user, overtimeMonth]);
 
   // Planning PDF Generation
   const generatePlanningPDF = useCallback(async () => {
     const doc = new jsPDF('l', 'mm', 'a4'); // Landscape orientation
-    const monthNames = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+    const monthNames = ['Janvier', 'FÃ©vrier', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'AoÃ»t', 'Septembre', 'Octobre', 'Novembre', 'DÃ©cembre'];
     
     const pageWidth = 297; // A4 landscape width
     const pageHeight = 210; // A4 landscape height
     const margin = 10;
 
     // ============================================
-    // 1. EN-TÊTE - Logo + Titre
+    // 1. EN-TÃŠTE - Logo + Titre
     // ============================================
     
     const logoWidth = 18;
@@ -5729,7 +6469,7 @@ export default function NOCActivityApp() {
     doc.text(`Mois de ${monthNames[currentMonth.getMonth()]} ${currentMonth.getFullYear()}`, pageWidth / 2, 43, { align: 'center' });
 
     // ============================================
-    // 3. PRÉPARER LES DONNÉES DU PLANNING
+    // 3. PRÃ‰PARER LES DONNÃ‰ES DU PLANNING
     // ============================================
     
     const monthStart = startOfMonth(currentMonth);
@@ -5760,7 +6500,7 @@ export default function NOCActivityApp() {
     const dayColWidth = (pageWidth - margin * 2 - 30) / numDays; // 30mm for shift name column
     const shiftColWidth = 30;
 
-    // En-tête du tableau avec les jours
+    // En-tÃªte du tableau avec les jours
     doc.setFillColor(59, 130, 246);
     doc.rect(margin, tableStartY, pageWidth - margin * 2, headerHeight, 'F');
     
@@ -5768,7 +6508,7 @@ export default function NOCActivityApp() {
     doc.setFontSize(7);
     doc.setFont('helvetica', 'bold');
     
-    // Première cellule vide (pour les noms de shifts)
+    // PremiÃ¨re cellule vide (pour les noms de shifts)
     doc.rect(margin, tableStartY, shiftColWidth, headerHeight);
     
     // Jours du mois
@@ -5803,7 +6543,7 @@ export default function NOCActivityApp() {
       doc.setFont('helvetica', 'bold');
       doc.text(`Shift ${shiftName}`, margin + shiftColWidth / 2, rowY + rowHeight / 2 + 2, { align: 'center' });
       
-      // Données pour chaque jour
+      // DonnÃ©es pour chaque jour
       days.forEach((day, dayIdx) => {
         const x = margin + shiftColWidth + dayIdx * dayColWidth;
         const schedule = getShiftScheduleForDate(shiftName, day);
@@ -5845,13 +6585,13 @@ export default function NOCActivityApp() {
         if (restInfo) {
           doc.setFontSize(5);
           doc.setTextColor(234, 88, 12); // Orange
-          doc.text('•', x + dayColWidth / 2, rowY + rowHeight - 2, { align: 'center' });
+          doc.text('â€¢', x + dayColWidth / 2, rowY + rowHeight - 2, { align: 'center' });
         }
       });
     });
 
     // ============================================
-    // 5. LÉGENDE
+    // 5. LÃ‰GENDE
     // ============================================
     
     const legendY = bodyStartY + 3 * rowHeight + 10;
@@ -5859,16 +6599,16 @@ export default function NOCActivityApp() {
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
-    doc.text('LÉGENDE:', margin, legendY);
+    doc.text('LÃ‰GENDE:', margin, legendY);
     
-    // Légende des types de jours - avec meilleur espacement
+    // LÃ©gende des types de jours - avec meilleur espacement
     const legendItems: Array<{ label: string; color: [number, number, number] }> = [
       { label: 'J = Jour (07h00 - 19h00)', color: [219, 234, 254] },
       { label: 'N = Nuit (19h00 - 07h00)', color: [30, 64, 175] },
       { label: 'R = Repos', color: [229, 231, 235] }
     ];
     
-    let legendX = margin + 25; // Espace après "LÉGENDE:"
+    let legendX = margin + 25; // Espace aprÃ¨s "LÃ‰GENDE:"
     doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
     
@@ -5879,7 +6619,7 @@ export default function NOCActivityApp() {
       doc.setLineWidth(0.2);
       doc.rect(legendX, legendY + 3, 10, 6, 'FD');
       
-      // Text - toujours en noir pour lisibilité
+      // Text - toujours en noir pour lisibilitÃ©
       doc.setTextColor(0, 0, 0);
       doc.text(item.label, legendX + 12, legendY + 7.5);
       
@@ -5887,7 +6627,7 @@ export default function NOCActivityApp() {
     });
 
     // ============================================
-    // 6. ÉQUIPES
+    // 6. Ã‰QUIPES
     // ============================================
     
     const teamsY = legendY + 18;
@@ -5897,8 +6637,8 @@ export default function NOCActivityApp() {
     doc.setFont('helvetica', 'bold');
     
     const teams = {
-      'A': ['Alaine ODZONDO', 'Emma-Casimir NDONGO', 'Luca MOUSSOUNDA', 'José NGONKOLI'],
-      'B': ['Sara MADY', 'Séverin NDANDOU', 'Furys DIAMANA', 'Marly POUABOUD'],
+      'A': ['Alaine ODZONDO', 'Emma-Casimir NDONGO', 'Luca MOUSSOUNDA', 'JosÃ© NGONKOLI'],
+      'B': ['Sara MADY', 'SÃ©verin NDANDOU', 'Furys DIAMANA', 'Marly POUABOUD'],
       'C': ['Lapreuve N\'SANA', 'Audrey NDINGA', 'BATA MADINGOU Ange Kevine', 'Lotti SEHOSSOLO']
     };
     
@@ -5912,7 +6652,7 @@ export default function NOCActivityApp() {
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(7);
       doc.setFont('helvetica', 'bold');
-      doc.text(`ÉQUIPE SHIFT ${shiftKey}:`, x + 2, teamsY + 4);
+      doc.text(`Ã‰QUIPE SHIFT ${shiftKey}:`, x + 2, teamsY + 4);
       
       // Team members
       doc.setTextColor(0, 0, 0);
@@ -5931,7 +6671,7 @@ export default function NOCActivityApp() {
     
     // Calculate hours for each shift
     // Jour: 07h-19h = 12h total, Nuit: 19h-07h = 12h total
-    // Déduction: 2h pause + 2h sup = 4h
+    // DÃ©duction: 2h pause + 2h sup = 4h
     // Heures normales: 12h - 2h (pause) - 2h (sup) = 8h par jour
     // Heures sup: 2h par jour
     // Heures totales = Heures normales + Heures sup = 10h par jour
@@ -5952,10 +6692,10 @@ export default function NOCActivityApp() {
       
       const workingDays = jourCount + nuitCount;
       
-      // Heures normales: 8h par jour travaillé (12h - 2h pause - 2h sup)
+      // Heures normales: 8h par jour travaillÃ© (12h - 2h pause - 2h sup)
       const heuresNormales = workingDays * 8;
       
-      // Heures supplémentaires: 2h par jour travaillé
+      // Heures supplÃ©mentaires: 2h par jour travaillÃ©
       const heuresSup = workingDays * 2;
       
       // Heures totales: somme des heures normales et heures sup
@@ -5975,7 +6715,7 @@ export default function NOCActivityApp() {
     doc.setFontSize(8);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(0, 0, 0);
-    doc.text('RÉCAPITULATIF DES HEURES DE TRAVAIL', margin, hoursY);
+    doc.text('RÃ‰CAPITULATIF DES HEURES DE TRAVAIL', margin, hoursY);
     
     const hoursHeaderY = hoursY + 4;
     
@@ -5993,7 +6733,7 @@ export default function NOCActivityApp() {
       doc.setFont('helvetica', 'bold');
       doc.text(`SHIFT ${shiftName}`, x + hoursTableWidth / 2, hoursHeaderY + 3.5, { align: 'center' });
       
-      // Table header row - en-têtes sur 1 ligne
+      // Table header row - en-tÃªtes sur 1 ligne
       const tableBodyY = hoursHeaderY + 5;
       doc.setFillColor(245, 245, 245);
       doc.rect(x, tableBodyY, hoursTableWidth / 3, 5, 'F');
@@ -6055,7 +6795,7 @@ export default function NOCActivityApp() {
     const sigBoxHeight = 15;
     const sigBoxX = pageWidth - margin - sigBoxWidth;
     
-    // Fond léger
+    // Fond lÃ©ger
     doc.setFillColor(252, 252, 252);
     doc.setDrawColor(150, 150, 150);
     doc.setLineWidth(0.2);
@@ -6076,7 +6816,7 @@ export default function NOCActivityApp() {
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(6);
     doc.setFont('helvetica', 'bold');
-    doc.text('Thérésia BABINDAMANA', sigBoxX + sigBoxWidth / 2, signatureY + 13, { align: 'center' });
+    doc.text('ThÃ©rÃ©sia BABINDAMANA', sigBoxX + sigBoxWidth / 2, signatureY + 13, { align: 'center' });
 
     // ============================================
     // 9. PIED DE PAGE
@@ -6089,11 +6829,11 @@ export default function NOCActivityApp() {
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(107, 114, 128);
     
-    doc.text(`Généré le ${format(now, 'dd/MM/yyyy')} à ${format(now, 'HH:mm')}`, margin, footerY);
+    doc.text(`GÃ©nÃ©rÃ© le ${format(now, 'dd/MM/yyyy')} Ã  ${format(now, 'HH:mm')}`, margin, footerY);
 
     // Sauvegarder
     doc.save(`planning_noc_${format(currentMonth, 'MM_yyyy')}.pdf`);
-    toast.success('PDF généré', { description: 'Le planning a été téléchargé' });
+    toast.success('PDF gÃ©nÃ©rÃ©', { description: 'Le planning a Ã©tÃ© tÃ©lÃ©chargÃ©' });
   }, [currentMonth]);
 
   // Planning generation
@@ -6139,7 +6879,7 @@ export default function NOCActivityApp() {
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 relative overflow-hidden">
-        {/* Animated background elements - subtil et élégant */}
+        {/* Animated background elements - subtil et Ã©lÃ©gant */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <motion.div
             animate={{
@@ -6179,9 +6919,9 @@ export default function NOCActivityApp() {
           className="w-full max-w-md mx-4 relative z-10"
         >
           <Card className="border border-slate-200/80 dark:border-slate-700/50 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.15)] dark:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)] bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl overflow-hidden">
-            {/* Header avec nouvelle image animée */}
+            {/* Header avec nouvelle image animÃ©e */}
             <div className="relative pt-10 pb-6 text-center bg-gradient-to-b from-slate-50/50 to-transparent dark:from-slate-800/30 dark:to-transparent">
-              {/* Glow effect derrière le logo */}
+              {/* Glow effect derriÃ¨re le logo */}
               <motion.div
                 animate={{
                   opacity: [0.3, 0.5, 0.3],
@@ -6213,7 +6953,7 @@ export default function NOCActivityApp() {
                 />
               </motion.div>
               
-              {/* Séparateur élégant */}
+              {/* SÃ©parateur Ã©lÃ©gant */}
               <motion.div
                 initial={{ scaleX: 0, opacity: 0 }}
                 animate={{ scaleX: 1, opacity: 1 }}
@@ -6230,7 +6970,7 @@ export default function NOCActivityApp() {
                 onSubmit={handleLogin}
                 className="space-y-5"
               >
-                {/* Champ Pseudo avec icône et label flottant */}
+                {/* Champ Pseudo avec icÃ´ne et label flottant */}
                 <motion.div
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
@@ -6267,7 +7007,7 @@ export default function NOCActivityApp() {
                   </label>
                 </motion.div>
 
-                {/* Champ Mot de passe avec icône et label flottant */}
+                {/* Champ Mot de passe avec icÃ´ne et label flottant */}
                 <motion.div
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
@@ -6336,7 +7076,7 @@ export default function NOCActivityApp() {
                   )}
                 </AnimatePresence>
 
-                {/* Compte à rebours si verrouillé */}
+                {/* Compte Ã  rebours si verrouillÃ© */}
                 <AnimatePresence mode="wait">
                   {isLocked && (
                     <motion.div
@@ -6360,7 +7100,7 @@ export default function NOCActivityApp() {
                   )}
                 </AnimatePresence>
 
-                {/* Bouton de connexion AVEC ICÔNE */}
+                {/* Bouton de connexion AVEC ICÃ”NE */}
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -6408,7 +7148,7 @@ export default function NOCActivityApp() {
                 </motion.div>
               </motion.form>
 
-              {/* Message d'oubli - AFFICHÉ SEULEMENT APRÈS 3 TENTATIVES */}
+              {/* Message d'oubli - AFFICHÃ‰ SEULEMENT APRÃˆS 3 TENTATIVES */}
               <AnimatePresence mode="wait">
                 {showForgotMessage && (
                   <motion.div
@@ -6427,10 +7167,10 @@ export default function NOCActivityApp() {
                       >
                         <Info className="w-5 h-5 text-amber-500 mx-auto mb-2" />
                         <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
-                          Si vous avez oublié votre mot de passe ou votre pseudo,
+                          Si vous avez oubliÃ© votre mot de passe ou votre pseudo,
                           <br />
                           merci de vous rapprocher de la <span className="font-semibold text-blue-600 dark:text-blue-400">Direction</span> ou
-                          contacter le <span className="font-semibold text-blue-600 dark:text-blue-400">Responsable Système</span>.
+                          contacter le <span className="font-semibold text-blue-600 dark:text-blue-400">Responsable SystÃ¨me</span>.
                         </p>
                       </motion.div>
                     </div>
@@ -6440,7 +7180,7 @@ export default function NOCActivityApp() {
             </CardContent>
           </Card>
 
-          {/* Footer élégant */}
+          {/* Footer Ã©lÃ©gant */}
           <motion.p
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -6448,7 +7188,7 @@ export default function NOCActivityApp() {
             className="text-center text-slate-400 dark:text-slate-500 text-xs mt-6 flex items-center justify-center gap-2"
           >
             <span className="w-8 h-[1px] bg-slate-300 dark:bg-slate-700" />
-            <span>© {new Date().getFullYear()} Silicone Connect</span>
+            <span>Â© {new Date().getFullYear()} Silicone Connect</span>
             <span className="w-8 h-[1px] bg-slate-300 dark:bg-slate-700" />
           </motion.p>
         </motion.div>
@@ -6461,13 +7201,13 @@ export default function NOCActivityApp() {
   return (
     <>
       <div className="min-h-screen bg-background">
-        {/* Bannière d'avertissement - Mot de passe à changer */}
+        {/* BanniÃ¨re d'avertissement - Mot de passe Ã  changer */}
         {user?.mustChangePassword && (
           <div className="sticky top-0 z-[60] w-full bg-gradient-to-r from-amber-500 to-orange-500 text-white px-4 py-2">
             <div className="flex items-center justify-center gap-3 max-w-7xl mx-auto">
               <AlertTriangle className="w-5 h-5 flex-shrink-0 animate-pulse" />
               <div className="flex-1 text-center">
-                <span className="font-semibold">⚠️ SÉCURITÉ REQUISE :</span>{' '}
+                <span className="font-semibold">âš ï¸ SÃ‰CURITÃ‰ REQUISE :</span>{' '}
                 <span>Vous devez changer votre mot de passe avant de pouvoir utiliser l'application.</span>
               </div>
               <Button
@@ -6492,11 +7232,11 @@ export default function NOCActivityApp() {
                   Changement de mot de passe obligatoire
                 </CardTitle>
                 <CardDescription>
-                  Votre compte est temporairement restreint. Vous devez définir un nouveau mot de passe pour continuer.
+                  Votre compte est temporairement restreint. Vous devez dÃ©finir un nouveau mot de passe pour continuer.
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col sm:flex-row gap-2 justify-end">
-                <Button variant="outline" onClick={handleLogout}>Se déconnecter</Button>
+                <Button variant="outline" onClick={handleLogout}>Se dÃ©connecter</Button>
                 <Button onClick={openSecurityDialog}>
                   <Lock className="w-4 h-4 mr-2" />
                   Ouvrir le formulaire
@@ -6626,7 +7366,7 @@ export default function NOCActivityApp() {
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={openShiftDialog} className="gap-2">
                   <Calendar className="w-4 h-4" />
-                  Définir mon shift
+                  DÃ©finir mon shift
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setRestDialogOpen(true)} className="gap-2">
                   <Coffee className="w-4 h-4" />
@@ -6635,11 +7375,11 @@ export default function NOCActivityApp() {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={openSecurityDialog} className="gap-2">
                   <Settings className="w-4 h-4" />
-                  Sécuriser mon compte
+                  SÃ©curiser mon compte
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setSettingsDialogOpen(true)} className="gap-2">
                   <Settings className="w-4 h-4" />
-                  Paramètres
+                  ParamÃ¨tres
                 </DropdownMenuItem>
                 {isSuperAdmin(user) && (
                   <>
@@ -6647,14 +7387,14 @@ export default function NOCActivityApp() {
                     <DropdownMenuLabel className="text-xs text-muted-foreground">Administration</DropdownMenuLabel>
                     <DropdownMenuItem onClick={() => setCurrentTabSafely('admin_users')} className="gap-2">
                       <Users className="w-4 h-4" />
-                      Gérer les utilisateurs
+                      GÃ©rer les utilisateurs
                     </DropdownMenuItem>
                   </>
                 )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout} className="gap-2 text-destructive">
                   <LogOut className="w-4 h-4" />
-                  Déconnexion
+                  DÃ©connexion
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -6674,8 +7414,8 @@ export default function NOCActivityApp() {
                 size="sm"
                 className="h-8 w-8 p-0"
                 onClick={() => setSidebarPosition((current) => (current === 'left' ? 'right' : 'left'))}
-                aria-label={sidebarPosition === 'left' ? 'Placer la sidebar à droite' : 'Placer la sidebar à gauche'}
-                title={sidebarPosition === 'left' ? 'Placer la sidebar à droite' : 'Placer la sidebar à gauche'}
+                aria-label={sidebarPosition === 'left' ? 'Placer la sidebar Ã  droite' : 'Placer la sidebar Ã  gauche'}
+                title={sidebarPosition === 'left' ? 'Placer la sidebar Ã  droite' : 'Placer la sidebar Ã  gauche'}
               >
                 {sidebarPosition === 'left' ? <AlignRight className="w-4 h-4" /> : <AlignLeft className="w-4 h-4" />}
               </Button>
@@ -6684,8 +7424,8 @@ export default function NOCActivityApp() {
                 size="sm"
                 className="h-8 w-8 p-0"
                 onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                aria-label={sidebarCollapsed ? 'Étendre la sidebar' : 'Réduire la sidebar'}
-                title={sidebarCollapsed ? 'Étendre la sidebar' : 'Réduire la sidebar'}
+                aria-label={sidebarCollapsed ? 'Ã‰tendre la sidebar' : 'RÃ©duire la sidebar'}
+                title={sidebarCollapsed ? 'Ã‰tendre la sidebar' : 'RÃ©duire la sidebar'}
               >
                 {sidebarCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
               </Button>
@@ -6711,14 +7451,65 @@ export default function NOCActivityApp() {
                   <Calendar className="w-5 h-5" /> {!sidebarCollapsed && 'Planning'}
                 </Button>
                 <Button variant={currentTab === 'tasks' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTabSafely('tasks')}>
-                  <ClipboardList className="w-5 h-5" /> {!sidebarCollapsed && 'Mes Tâches'}
+                  <ClipboardList className="w-5 h-5" /> {!sidebarCollapsed && 'Mes TÃ¢ches'}
                 </Button>
                 <Button variant={currentTab === 'activities' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTabSafely('activities')}>
-                  <Activity className="w-5 h-5" /> {!sidebarCollapsed && 'Activités'}
+                  <Activity className="w-5 h-5" /> {!sidebarCollapsed && 'ActivitÃ©s'}
                 </Button>
                 <Button variant={currentTab === 'tickets' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTabSafely('tickets')}>
                   <Ticket className="w-5 h-5" /> {!sidebarCollapsed && 'Gestion Tickets'}
                 </Button>
+                <Separator className="my-2" />
+                <Button
+                  variant={isNocSection(currentTab) ? 'secondary' : 'ghost'}
+                  className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`}
+                  onClick={() => {
+                    if (sidebarCollapsed) {
+                      setCurrentTabSafely('noc_monitoring');
+                      return;
+                    }
+
+                    setSidebarGroupOpen((prev) => ({
+                      ...prev,
+                      noc: !prev.noc,
+                    }));
+                  }}
+                >
+                  <Network className="w-5 h-5" /> {!sidebarCollapsed && 'NOC'}
+                  {!sidebarCollapsed && (
+                    <ChevronDown
+                      className={`ml-auto w-4 h-4 transition-transform ${sidebarGroupOpen.noc ? 'rotate-180' : ''}`}
+                    />
+                  )}
+                </Button>
+                <AnimatePresence>
+                  {!sidebarCollapsed && sidebarGroupOpen.noc && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="overflow-hidden ml-4 mt-1 space-y-1"
+                    >
+                      {NOC_SIDEBAR_ITEMS.map((nocItem) => {
+                        const NocIcon = nocItem.icon;
+                        return (
+                          <Button
+                            key={nocItem.id}
+                            variant={currentTab === nocItem.id ? 'secondary' : 'ghost'}
+                            size="sm"
+                            className={`w-full justify-start gap-2 h-9 pl-4 ${currentTab === nocItem.id ? 'bg-cyan-50 dark:bg-cyan-900/20 text-cyan-700 dark:text-cyan-300' : ''}`}
+                            onClick={() => setCurrentTabSafely(nocItem.id)}
+                          >
+                            <NocIcon className="w-4 h-4" />
+                            {nocItem.label}
+                          </Button>
+                        );
+                      })}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+                <Separator className="my-2" />
                 <Button variant={currentTab === 'overtime' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => setCurrentTabSafely('overtime')}>
                   <Clock className="w-5 h-5" /> {!sidebarCollapsed && 'Heures Sup.'}
                 </Button>
@@ -6802,10 +7593,10 @@ export default function NOCActivityApp() {
                     <div>
                       <h1 className="text-2xl lg:text-3xl font-bold">Tableau de bord</h1>
                       <p className="text-muted-foreground">
-                        Bienvenue, {user?.firstName && user?.lastName ? `${user.firstName} ${user.lastName}` : user?.name} • {format(new Date(), 'EEEE d MMMM yyyy', { locale: fr })}
+                        Bienvenue, {user?.firstName && user?.lastName ? `${user.firstName} ${user.lastName}` : user?.name} â€¢ {format(new Date(), 'EEEE d MMMM yyyy', { locale: fr })}
                       </p>
                     </div>
-                    <Button variant="outline" onClick={() => toast.success('Données actualisées')}>
+                    <Button variant="outline" onClick={() => toast.success('DonnÃ©es actualisÃ©es')}>
                       <RefreshCw className="w-4 h-4 mr-2" /> Actualiser
                     </Button>
                   </div>
@@ -6823,13 +7614,13 @@ export default function NOCActivityApp() {
                           {userRestInfo.isOnIndividualRest ? (
                             <div className="flex items-center gap-2 text-green-600">
                               <CheckCircle2 className="w-5 h-5" />
-                              <span className="font-medium">Vous êtes en repos aujourd'hui</span>
+                              <span className="font-medium">Vous Ãªtes en repos aujourd'hui</span>
                             </div>
                           ) : (
                             <div>
                               <p className="text-sm text-muted-foreground">Prochain repos individuel :</p>
                               <p className="text-lg font-bold mt-1">
-                                {userRestInfo.nextIndividualRest ? format(userRestInfo.nextIndividualRest, 'EEEE d MMMM yyyy', { locale: fr }) : 'Non planifié'}
+                                {userRestInfo.nextIndividualRest ? format(userRestInfo.nextIndividualRest, 'EEEE d MMMM yyyy', { locale: fr }) : 'Non planifiÃ©'}
                               </p>
                             </div>
                           )}
@@ -6852,7 +7643,7 @@ export default function NOCActivityApp() {
                             <div>
                               <p className="text-sm text-muted-foreground">Prochain repos collectif :</p>
                               <p className="text-lg font-bold mt-1">
-                                {userRestInfo.nextCollectiveRestStart ? format(userRestInfo.nextCollectiveRestStart, 'EEEE d MMMM yyyy', { locale: fr }) : 'Non planifié'}
+                                {userRestInfo.nextCollectiveRestStart ? format(userRestInfo.nextCollectiveRestStart, 'EEEE d MMMM yyyy', { locale: fr }) : 'Non planifiÃ©'}
                               </p>
                             </div>
                           )}
@@ -6865,14 +7656,14 @@ export default function NOCActivityApp() {
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                     <Card className="p-3">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Taux présence</span>
+                        <span className="text-sm text-muted-foreground">Taux prÃ©sence</span>
                         <UserCheck className="w-4 h-4 text-green-500" />
                       </div>
                       <p className="text-2xl font-bold mt-1">98.5%</p>
                     </Card>
                     <Card className="p-3">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Tâches en cours</span>
+                        <span className="text-sm text-muted-foreground">TÃ¢ches en cours</span>
                         <Briefcase className="w-4 h-4 text-orange-500" />
                       </div>
                       <p className="text-2xl font-bold mt-1">{tasks.filter(t => t.status === 'in_progress').length}</p>
@@ -6897,7 +7688,7 @@ export default function NOCActivityApp() {
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     <Card>
                       <CardHeader className="pb-2 pt-4">
-                        <CardTitle className="text-base">Activité hebdomadaire</CardTitle>
+                        <CardTitle className="text-base">ActivitÃ© hebdomadaire</CardTitle>
                       </CardHeader>
                       <CardContent className="pb-4">
                         <ResponsiveContainer width="100%" height={200}>
@@ -6924,7 +7715,7 @@ export default function NOCActivityApp() {
                     
                     <Card>
                       <CardHeader className="pb-2 pt-4">
-                        <CardTitle className="text-base">Répartition par shift</CardTitle>
+                        <CardTitle className="text-base">RÃ©partition par shift</CardTitle>
                       </CardHeader>
                       <CardContent className="pb-4">
                         <ResponsiveContainer width="100%" height={200}>
@@ -6995,7 +7786,7 @@ export default function NOCActivityApp() {
                             </div>
                             <p className="text-xs text-muted-foreground">{shiftData.members.join(', ')}</p>
                             <div className="mt-2 text-xs text-muted-foreground">
-                              Cycle {schedule.cycleNumber} • Jour {schedule.dayNumber || '-'}
+                              Cycle {schedule.cycleNumber} â€¢ Jour {schedule.dayNumber || '-'}
                             </div>
                           </CardContent>
                         </Card>
@@ -7007,7 +7798,7 @@ export default function NOCActivityApp() {
                   <Card>
                     <CardHeader className="pb-2 pt-4">
                       <CardTitle className="text-base flex items-center gap-2">
-                        <ExternalLink className="w-5 h-5" /> Accès Rapide
+                        <ExternalLink className="w-5 h-5" /> AccÃ¨s Rapide
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="pb-4">
@@ -7048,7 +7839,7 @@ export default function NOCActivityApp() {
                         <ChevronRight className="h-4 w-4" />
                       </Button>
                       <Button onClick={generatePlanningPDF} className="gap-2 ml-2">
-                        <FileDown className="w-4 h-4" /> Générer PDF
+                        <FileDown className="w-4 h-4" /> GÃ©nÃ©rer PDF
                       </Button>
                     </div>
                   </div>
@@ -7151,8 +7942,8 @@ export default function NOCActivityApp() {
                 <motion.div key="overtime" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-4">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
-                      <h1 className="text-2xl lg:text-3xl font-bold">Heures supplémentaires</h1>
-                      <p className="text-muted-foreground">2h automatiques par jour travaillé</p>
+                      <h1 className="text-2xl lg:text-3xl font-bold">Heures supplÃ©mentaires</h1>
+                      <p className="text-muted-foreground">2h automatiques par jour travaillÃ©</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <Button variant="outline" size="icon" onClick={() => setOvertimeMonth(subMonths(overtimeMonth, 1))}>
@@ -7190,7 +7981,7 @@ export default function NOCActivityApp() {
                             <p className="text-2xl font-bold mt-1">{totalHours}h</p>
                           </Card>
                           <Card className="p-3">
-                            <div className="flex items-center gap-2"><CalendarDays className="w-4 h-4 text-green-500" /><span className="text-sm text-muted-foreground">Jours travaillés</span></div>
+                            <div className="flex items-center gap-2"><CalendarDays className="w-4 h-4 text-green-500" /><span className="text-sm text-muted-foreground">Jours travaillÃ©s</span></div>
                             <p className="text-2xl font-bold mt-1">{workDays.length}</p>
                           </Card>
                           <Card className="p-3">
@@ -7198,7 +7989,7 @@ export default function NOCActivityApp() {
                             <p className="text-2xl font-bold mt-1">2h/jour</p>
                           </Card>
                           <Card className="p-3">
-                            <div className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-green-500" /><span className="text-sm text-muted-foreground">Approuvé par</span></div>
+                            <div className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-green-500" /><span className="text-sm text-muted-foreground">ApprouvÃ© par</span></div>
                             <p className="text-sm font-bold mt-1">Daddy AZUMY</p>
                           </Card>
                         </div>
@@ -7206,9 +7997,9 @@ export default function NOCActivityApp() {
                         <Card>
                           <CardHeader className="pb-2 pt-4">
                             <div className="flex items-center justify-between">
-                              <CardTitle className="text-base">Détail mensuel</CardTitle>
+                              <CardTitle className="text-base">DÃ©tail mensuel</CardTitle>
                               <Button onClick={generateOvertimePDF} className="gap-2">
-                                <FileDown className="w-4 h-4" /> Générer PDF
+                                <FileDown className="w-4 h-4" /> GÃ©nÃ©rer PDF
                               </Button>
                             </div>
                           </CardHeader>
@@ -7221,7 +8012,7 @@ export default function NOCActivityApp() {
                                     <th className="text-left p-2 font-medium">Date</th>
                                     <th className="text-left p-2 font-medium">Type</th>
                                     <th className="text-left p-2 font-medium">Horaires</th>
-                                    <th className="text-left p-2 font-medium">Durée</th>
+                                    <th className="text-left p-2 font-medium">DurÃ©e</th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -7259,7 +8050,7 @@ export default function NOCActivityApp() {
                 <motion.div key="links" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-4">
                   <div>
                     <h1 className="text-2xl lg:text-3xl font-bold">Liens Externes</h1>
-                    <p className="text-muted-foreground">Accès rapide aux outils NOC</p>
+                    <p className="text-muted-foreground">AccÃ¨s rapide aux outils NOC</p>
                   </div>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -7277,7 +8068,7 @@ export default function NOCActivityApp() {
                           <CardContent className="pb-4">
                             <a href={link.url} target="_blank" rel="noopener noreferrer">
                               <Button className="w-full gap-2" onClick={() => toast.success(`Ouverture de ${link.name}`)}>
-                                <ExternalLink className="w-4 h-4" /> Accéder
+                                <ExternalLink className="w-4 h-4" /> AccÃ©der
                               </Button>
                             </a>
                           </CardContent>
@@ -7288,7 +8079,7 @@ export default function NOCActivityApp() {
                 </motion.div>
               )}
               
-              {/* Messagerie Instantanée - Style WhatsApp */}
+              {/* Messagerie InstantanÃ©e - Style WhatsApp */}
               {currentTab === 'email' && (
                 <motion.div key="email" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="h-[calc(100vh-7rem)]">
                   <div className="flex h-full border rounded-xl overflow-hidden bg-white dark:bg-slate-900 shadow-lg">
@@ -7310,7 +8101,7 @@ export default function NOCActivityApp() {
                           </div>
                           <div className="flex items-center gap-1">
                             <Button variant="ghost" size="icon" className="text-white hover:bg-white/10" onClick={() => setNewConversationOpen(true)} title="Nouvelle discussion"><MessageCircle className="w-5 h-5" /></Button>
-                            <Button variant="ghost" size="icon" className="text-white hover:bg-white/10" onClick={() => setCreateGroupOpen(true)} title="Créer un groupe"><UserPlus className="w-5 h-5" /></Button>
+                            <Button variant="ghost" size="icon" className="text-white hover:bg-white/10" onClick={() => setCreateGroupOpen(true)} title="CrÃ©er un groupe"><UserPlus className="w-5 h-5" /></Button>
                           </div>
                         </div>
                         <div className="relative">
@@ -7414,7 +8205,7 @@ export default function NOCActivityApp() {
                             <p className="text-muted-foreground text-sm mb-4">Commencez une nouvelle conversation</p>
                             <div className="flex gap-2">
                               <Button onClick={() => setNewConversationOpen(true)} className="bg-cyan-500 hover:bg-cyan-600"><MessageCircle className="w-4 h-4 mr-2" />Nouvelle discussion</Button>
-                              <Button onClick={() => setCreateGroupOpen(true)} variant="outline"><Users className="w-4 h-4 mr-2" />Créer un groupe</Button>
+                              <Button onClick={() => setCreateGroupOpen(true)} variant="outline"><Users className="w-4 h-4 mr-2" />CrÃ©er un groupe</Button>
                             </div>
                           </div>
                         ) : (
@@ -7461,7 +8252,7 @@ export default function NOCActivityApp() {
                                       <span className="text-xs text-muted-foreground">{conversation.lastMessage ? format(conversation.lastMessage.createdAt, 'HH:mm') : ''}</span>
                                     </div>
                                     <div className="flex items-center justify-between mt-0.5">
-                                      <p className="text-xs text-muted-foreground truncate max-w-[180px]">{conversation.lastMessage?.deletedForEveryone ? 'Ce message a été supprimé' : conversation.lastMessage?.type === 'voice' ? '🎤 Message vocal' : conversation.lastMessage?.type === 'image' ? '📷 Image' : conversation.lastMessage?.type === 'video' ? '🎬 Vidéo' : conversation.lastMessage?.type === 'document' ? '📄 Document' : conversation.lastMessage?.content || 'Aucun message'}</p>
+                                      <p className="text-xs text-muted-foreground truncate max-w-[180px]">{conversation.lastMessage?.deletedForEveryone ? 'Ce message a Ã©tÃ© supprimÃ©' : conversation.lastMessage?.type === 'voice' ? 'ðŸŽ¤ Message vocal' : conversation.lastMessage?.type === 'image' ? 'ðŸ“· Image' : conversation.lastMessage?.type === 'video' ? 'ðŸŽ¬ VidÃ©o' : conversation.lastMessage?.type === 'document' ? 'ðŸ“„ Document' : conversation.lastMessage?.content || 'Aucun message'}</p>
                                       {conversation.unreadCount > 0 && <Badge className={`${isAnnonces ? 'bg-yellow-500' : 'bg-cyan-500'} text-white text-xs rounded-full px-2`}>{conversation.unreadCount}</Badge>}
                                     </div>
                                   </div>
@@ -7543,7 +8334,7 @@ export default function NOCActivityApp() {
                               <p className="text-xs text-white/70">
                                 {selectedConversation.participants.find(p => p.id !== user?.id)?.id === 'system-annonces' ? 'Canal d\'annonces officiel' :
                                 typingIndicators.find(t => t.conversationId === selectedConversation.id)?.isTyping ?
-                                  `${typingIndicators.find(t => t.conversationId === selectedConversation.id)?.userName || 'Utilisateur'} ${typingIndicators.find(t => t.conversationId === selectedConversation.id)?.isRecording ? 'est en train d\'enregistrer un message' : 'est en train d\'écrire...'}` : 
+                                  `${typingIndicators.find(t => t.conversationId === selectedConversation.id)?.userName || 'Utilisateur'} ${typingIndicators.find(t => t.conversationId === selectedConversation.id)?.isRecording ? 'est en train d\'enregistrer un message' : 'est en train d\'Ã©crire...'}` : 
                                 selectedConversation.type === 'group' ? `${selectedConversation.participants.length} membres` : 
                                 userPresence[selectedConversation.participants.find(p => p.id !== user?.id)?.id || ''] === 'online' ? 'En ligne' : 'Hors ligne'}
                               </p>
@@ -7557,7 +8348,7 @@ export default function NOCActivityApp() {
                               <Search className="w-5 h-5" />
                             </Button>
                             {/* Settings button */}
-                            <Button variant="ghost" size="icon" className="text-white hover:bg-white/10" onClick={() => setBackgroundSettingsOpen(true)} title="Paramètres">
+                            <Button variant="ghost" size="icon" className="text-white hover:bg-white/10" onClick={() => setBackgroundSettingsOpen(true)} title="ParamÃ¨tres">
                               <Settings className="w-5 h-5" />
                             </Button>
                             <Button
@@ -7637,13 +8428,13 @@ export default function NOCActivityApp() {
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="text-white hover:bg-white/10"><MoreVertical className="w-5 h-5" /></Button></DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => { setConversations(prev => prev.map(c => c.id === selectedConversation.id ? {...c, isPinned: !c.isPinned} : c)); toast.success(selectedConversation.isPinned ? 'Discussion désépinglée' : 'Discussion épinglée'); }}><Pin className="w-4 h-4 mr-2" />{selectedConversation.isPinned ? 'Désépingler' : 'Épingler'}</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => { setConversations(prev => prev.map(c => c.id === selectedConversation.id ? {...c, isMuted: !c.isMuted} : c)); toast.success(selectedConversation.isMuted ? 'Notifications réactivées' : 'Notifications désactivées'); }}><BellOff className="w-4 h-4 mr-2" />{selectedConversation.isMuted ? 'Réactiver' : 'Désactiver'}</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => { setConversations(prev => prev.map(c => c.id === selectedConversation.id ? {...c, isPinned: !c.isPinned} : c)); toast.success(selectedConversation.isPinned ? 'Discussion dÃ©sÃ©pinglÃ©e' : 'Discussion Ã©pinglÃ©e'); }}><Pin className="w-4 h-4 mr-2" />{selectedConversation.isPinned ? 'DÃ©sÃ©pingler' : 'Ã‰pingler'}</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => { setConversations(prev => prev.map(c => c.id === selectedConversation.id ? {...c, isMuted: !c.isMuted} : c)); toast.success(selectedConversation.isMuted ? 'Notifications rÃ©activÃ©es' : 'Notifications dÃ©sactivÃ©es'); }}><BellOff className="w-4 h-4 mr-2" />{selectedConversation.isMuted ? 'RÃ©activer' : 'DÃ©sactiver'}</DropdownMenuItem>
                                 {selectedConversation.type === 'group' && (
                                   <DropdownMenuItem
                                     onClick={() => {
                                       if (!canManageAnnouncements(user)) {
-                                        toast.error('Action non autorisée');
+                                        toast.error('Action non autorisÃ©e');
                                         return;
                                       }
                                       openConversationAvatarUploader({ mode: 'group', conversationId: selectedConversation.id });
@@ -7657,7 +8448,7 @@ export default function NOCActivityApp() {
                                   <DropdownMenuItem
                                     onClick={() => {
                                       if (!canManageAnnouncements(user)) {
-                                        toast.error('Action non autorisée', {
+                                        toast.error('Action non autorisÃ©e', {
                                           description: 'Seuls les Admins, Responsables et Super Admins peuvent changer la photo des annonces.',
                                         });
                                         return;
@@ -7669,7 +8460,7 @@ export default function NOCActivityApp() {
                                     Changer photo des annonces
                                   </DropdownMenuItem>
                                 )}
-                                <DropdownMenuItem onClick={() => { setConversations(prev => prev.map(c => c.id === selectedConversation.id ? {...c, isArchived: true} : c)); setSelectedConversation(null); toast.success('Discussion archivée'); }}><Archive className="w-4 h-4 mr-2" />Archiver</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => { setConversations(prev => prev.map(c => c.id === selectedConversation.id ? {...c, isArchived: true} : c)); setSelectedConversation(null); toast.success('Discussion archivÃ©e'); }}><Archive className="w-4 h-4 mr-2" />Archiver</DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </div>
@@ -7742,7 +8533,7 @@ export default function NOCActivityApp() {
                             {pinnedMessages.filter(m => m.conversationId === selectedConversation.id).length > 0 && (
                               <div className="bg-cyan-50 dark:bg-cyan-900/20 border-l-4 border-cyan-500 p-2 rounded mb-4">
                                 <p className="text-xs text-cyan-600 dark:text-cyan-400 font-medium mb-1 flex items-center gap-1">
-                                  <Pin className="w-3 h-3" /> Messages épinglés
+                                  <Pin className="w-3 h-3" /> Messages Ã©pinglÃ©s
                                 </p>
                                 {pinnedMessages.filter(m => m.conversationId === selectedConversation.id).map((msg) => (
                                   <div key={msg.id} className="text-sm text-muted-foreground truncate">
@@ -7758,10 +8549,10 @@ export default function NOCActivityApp() {
                               const isCurrentResult = searchResults[currentSearchIndex]?.id === message.id;
                               const renderMessageContent = () => {
                                 if (message.deletedForEveryone) {
-                                  return <p className="text-sm text-muted-foreground italic">Ce message a été supprimé</p>;
+                                  return <p className="text-sm text-muted-foreground italic">Ce message a Ã©tÃ© supprimÃ©</p>;
                                 }
                                 if (message.isDeleted) {
-                                  return <p className="text-sm text-muted-foreground italic">Message supprimé</p>;
+                                  return <p className="text-sm text-muted-foreground italic">Message supprimÃ©</p>;
                                 }
                                 if (message.type === 'voice' && message.mediaData) {
                                   const isPlaying = playingMessageId === message.id;
@@ -7912,7 +8703,7 @@ export default function NOCActivityApp() {
                                             if (message.mediaData) {
                                               window.open(message.mediaData, '_blank', 'noopener,noreferrer');
                                             } else {
-                                              toast.error('Aperçu indisponible pour ce document');
+                                              toast.error('AperÃ§u indisponible pour ce document');
                                             }
                                           }}
                                         >
@@ -7931,11 +8722,11 @@ export default function NOCActivityApp() {
                                               link.click();
                                               document.body.removeChild(link);
                                             } else {
-                                              toast.error('Téléchargement indisponible pour ce document');
+                                              toast.error('TÃ©lÃ©chargement indisponible pour ce document');
                                             }
                                           }}
                                         >
-                                          <Download className="w-3 h-3 mr-1" /> Télécharger
+                                          <Download className="w-3 h-3 mr-1" /> TÃ©lÃ©charger
                                         </Button>
                                       </div>
                                     </div>
@@ -8072,7 +8863,7 @@ export default function NOCActivityApp() {
                                       
                                       <div className="flex items-center justify-end gap-1 mt-1">
                                         {message.isImportant && <AlertCircle className="w-3 h-3 text-yellow-500" />}
-                                        {message.isEdited && <span className="text-[10px] text-muted-foreground italic mr-1">modifié</span>}
+                                        {message.isEdited && <span className="text-[10px] text-muted-foreground italic mr-1">modifiÃ©</span>}
                                         {message.isArchived && <Archive className="w-3 h-3 text-slate-400 mr-1" />}
                                         <span className="text-[10px] text-muted-foreground">{format(message.createdAt, 'HH:mm')}</span>
                                         {isOwn && !message.deletedForEveryone && !message.isDeleted && <span className="flex">{message.status === 'read' ? <CheckCheck className="w-3 h-3 text-cyan-500" /> : <CheckCheck className="w-3 h-3 text-slate-400" />}</span>}
@@ -8154,11 +8945,11 @@ export default function NOCActivityApp() {
                                 if (contextMenuMessage.isPinned) {
                                   setPinnedMessages(prev => prev.filter(m => m.id !== contextMenuMessage.id));
                                   setChatMessages(prev => prev.map(m => m.id === contextMenuMessage.id ? {...m, isPinned: false} : m));
-                                  toast.success('Message désépinglé');
+                                  toast.success('Message dÃ©sÃ©pinglÃ©');
                                 } else {
                                   setPinnedMessages(prev => [...prev, contextMenuMessage]);
                                   setChatMessages(prev => prev.map(m => m.id === contextMenuMessage.id ? {...m, isPinned: true} : m));
-                                  toast.success('Message épinglé');
+                                  toast.success('Message Ã©pinglÃ©');
                                 }
 
                                 await updateChatMessage(
@@ -8171,7 +8962,7 @@ export default function NOCActivityApp() {
                                 setShowContextMenu(false);
                               }}
                             >
-                              <Pin className="w-4 h-4" /> {contextMenuMessage.isPinned ? 'Désépingler' : 'Épingler'}
+                              <Pin className="w-4 h-4" /> {contextMenuMessage.isPinned ? 'DÃ©sÃ©pingler' : 'Ã‰pingler'}
                             </button>
                             <button 
                               className="w-full px-3 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2"
@@ -8184,7 +8975,7 @@ export default function NOCActivityApp() {
                                   'toggleImportant',
                                   { isImportant: nextImportant }
                                 );
-                                toast.success(nextImportant ? 'Message marqué important' : 'Message retiré des importants');
+                                toast.success(nextImportant ? 'Message marquÃ© important' : 'Message retirÃ© des importants');
                                 setShowContextMenu(false);
                               }}
                             >
@@ -8208,7 +8999,7 @@ export default function NOCActivityApp() {
                               onClick={async () => {
                                 setChatMessages(prev => prev.map(m => m.id === contextMenuMessage.id ? {...m, isDeleted: true} : m));
                                 await updateChatMessage(contextMenuMessage.conversationId, contextMenuMessage.id, 'deleteForMe');
-                                toast.success('Message supprimé pour vous');
+                                toast.success('Message supprimÃ© pour vous');
                                 setShowContextMenu(false);
                               }}
                             >
@@ -8233,7 +9024,7 @@ export default function NOCActivityApp() {
                                       return c;
                                     }));
                                     await updateChatMessage(contextMenuMessage.conversationId, contextMenuMessage.id, 'deleteForEveryone');
-                                    toast.success('Message supprimé pour tous');
+                                    toast.success('Message supprimÃ© pour tous');
                                     setShowContextMenu(false);
                                   }}
                                 >
@@ -8243,9 +9034,9 @@ export default function NOCActivityApp() {
                                 <button 
                                   className="w-full px-3 py-2 text-left text-sm text-muted-foreground flex items-center gap-2 cursor-not-allowed"
                                   disabled
-                                  title="Disponible uniquement dans les 10 minutes après l'envoi"
+                                  title="Disponible uniquement dans les 10 minutes aprÃ¨s l'envoi"
                                 >
-                                  <Trash2 className="w-4 h-4" /> Supprimer pour tous (expiré)
+                                  <Trash2 className="w-4 h-4" /> Supprimer pour tous (expirÃ©)
                                 </button>
                               );
                             })()}
@@ -8256,7 +9047,7 @@ export default function NOCActivityApp() {
                                 setShowContextMenu(false);
                               }}
                             >
-                              <Reply className="w-4 h-4" /> Répondre
+                              <Reply className="w-4 h-4" /> RÃ©pondre
                             </button>
                           </div>
                         )}
@@ -8266,7 +9057,7 @@ export default function NOCActivityApp() {
                             <div className="flex items-center justify-between p-2 bg-cyan-100 dark:bg-cyan-900/30 rounded-lg mb-2">
                               <div className="flex items-center gap-2">
                                 <CheckSquare className="w-4 h-4 text-cyan-500" />
-                                <span className="text-sm font-medium">{selectedChatMessages.size} message(s) sélectionné(s)</span>
+                                <span className="text-sm font-medium">{selectedChatMessages.size} message(s) sÃ©lectionnÃ©(s)</span>
                               </div>
                               <div className="flex items-center gap-2">
                                 <Button
@@ -8277,7 +9068,7 @@ export default function NOCActivityApp() {
                                     setChatMessages(prev => prev.map(m => 
                                       selectedChatMessages.has(m.id) ? {...m, isArchived: true} : m
                                     ));
-                                    toast.success(`${messageIds.length} message(s) archivé(s)`);
+                                    toast.success(`${messageIds.length} message(s) archivÃ©(s)`);
                                     setSelectedChatMessages(new Set());
                                     setIsSelectionMode(false);
                                   }}
@@ -8295,7 +9086,7 @@ export default function NOCActivityApp() {
                                     setChatMessages(prev => prev.map(m => 
                                       selectedChatMessages.has(m.id) ? {...m, isDeleted: true} : m
                                     ));
-                                    toast.success(`${messageIds.length} message(s) supprimé(s)`);
+                                    toast.success(`${messageIds.length} message(s) supprimÃ©(s)`);
                                     setSelectedChatMessages(new Set());
                                     setIsSelectionMode(false);
                                   }}
@@ -8384,7 +9175,7 @@ export default function NOCActivityApp() {
                                   });
                                 }}
                               >
-                                Réinitialiser
+                                RÃ©initialiser
                               </Button>
                             </div>
                           )}
@@ -8394,7 +9185,7 @@ export default function NOCActivityApp() {
                             <div className="flex items-center gap-2 p-2 bg-slate-100 dark:bg-slate-700 rounded-lg mb-2">
                               <Reply className="w-4 h-4 text-cyan-500" />
                               <div className="flex-1 min-w-0">
-                                <p className="text-xs text-cyan-600 font-medium">Répondre à {replyingTo.senderName}</p>
+                                <p className="text-xs text-cyan-600 font-medium">RÃ©pondre Ã  {replyingTo.senderName}</p>
                                 <p className="text-xs text-muted-foreground truncate">{replyingTo.content}</p>
                               </div>
                               <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setReplyingTo(null)}><X className="w-4 h-4" /></Button>
@@ -8432,7 +9223,7 @@ export default function NOCActivityApp() {
                                     setNewMessage((prev) => prev + emoji);
                                     registerRecentEmoji(emoji);
                                   }}
-                                  title="Insérer"
+                                  title="InsÃ©rer"
                                 >
                                   {emoji}
                                 </button>
@@ -8446,7 +9237,7 @@ export default function NOCActivityApp() {
                                   onClick={() => {
                                     broadcastLiveReaction(emoji, 'chat');
                                   }}
-                                  title="Réaction live"
+                                  title="RÃ©action live"
                                 >
                                   {emoji}
                                 </button>
@@ -8456,7 +9247,7 @@ export default function NOCActivityApp() {
                           
                           <div className="flex items-end gap-2 max-w-3xl mx-auto">
                             <Popover open={showEmojiPicker} onOpenChange={setShowEmojiPicker}>
-                              <PopoverTrigger asChild><Button variant="ghost" size="icon" className="rounded-full text-slate-500 hover:text-cyan-500 text-xl">😀</Button></PopoverTrigger>
+                              <PopoverTrigger asChild><Button variant="ghost" size="icon" className="rounded-full text-slate-500 hover:text-cyan-500 text-xl">ðŸ˜€</Button></PopoverTrigger>
                               <PopoverContent className="w-80 p-0 shadow-xl sm:w-96" align="start" sideOffset={8}>
                                 <EmojiPicker
                                   theme={theme === 'dark' ? EmojiPickerTheme.DARK : EmojiPickerTheme.LIGHT}
@@ -8479,7 +9270,7 @@ export default function NOCActivityApp() {
                                   variant="ghost"
                                   size="icon"
                                   className="rounded-full text-slate-500 hover:text-cyan-500"
-                                  title="Réaction live"
+                                  title="RÃ©action live"
                                 >
                                   <Heart className="w-5 h-5" />
                                 </Button>
@@ -8488,7 +9279,7 @@ export default function NOCActivityApp() {
                                 <EmojiPicker
                                   theme={theme === 'dark' ? EmojiPickerTheme.DARK : EmojiPickerTheme.LIGHT}
                                   lazyLoadEmojis
-                                  searchPlaceholder="Envoyer une réaction..."
+                                  searchPlaceholder="Envoyer une rÃ©action..."
                                   previewConfig={{ showPreview: false }}
                                   width="100%"
                                   height={isCompactEmojiLayout ? 300 : 360}
@@ -8510,7 +9301,7 @@ export default function NOCActivityApp() {
                                   setSelectedChatMessages(new Set());
                                 }
                               }}
-                              title="Mode sélection"
+                              title="Mode sÃ©lection"
                             >
                               <CheckSquare className="w-5 h-5" />
                             </Button>
@@ -8528,7 +9319,7 @@ export default function NOCActivityApp() {
                               <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="rounded-full text-slate-500 hover:text-cyan-500" disabled={Boolean(selectedConversation && isAnnouncementsConversation(selectedConversation) && !canManageAnnouncements(user))}><Paperclip className="w-5 h-5" /></Button></DropdownMenuTrigger>
                               <DropdownMenuContent align="start">
                                 <DropdownMenuItem onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*'; input.onchange = (e) => { const file = (e.target as HTMLInputElement).files?.[0]; if (file) { const reader = new FileReader(); reader.onload = (e) => { setAttachmentPreview({ file, preview: e.target?.result as string, type: 'image', fileType: file.type }); }; reader.readAsDataURL(file); } }; input.click(); }}><ImageIcon className="w-4 h-4 mr-2 text-purple-500" />Image</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'video/*'; input.onchange = (e) => { const file = (e.target as HTMLInputElement).files?.[0]; if (file) { const reader = new FileReader(); reader.onload = (e) => { setAttachmentPreview({ file, preview: e.target?.result as string, type: 'video', fileType: file.type }); }; reader.readAsDataURL(file); } }; input.click(); }}><Film className="w-4 h-4 mr-2 text-red-500" />Vidéo</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'video/*'; input.onchange = (e) => { const file = (e.target as HTMLInputElement).files?.[0]; if (file) { const reader = new FileReader(); reader.onload = (e) => { setAttachmentPreview({ file, preview: e.target?.result as string, type: 'video', fileType: file.type }); }; reader.readAsDataURL(file); } }; input.click(); }}><Film className="w-4 h-4 mr-2 text-red-500" />VidÃ©o</DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation'; input.onchange = (e) => { const file = (e.target as HTMLInputElement).files?.[0]; if (file) { const reader = new FileReader(); reader.onload = (e) => { setAttachmentPreview({ file, preview: e.target?.result as string, type: 'document', fileType: file.type }); }; reader.readAsDataURL(file); } }; input.click(); }}><File className="w-4 h-4 mr-2 text-blue-500" />Document</DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'audio/*'; input.onchange = (e) => { const file = (e.target as HTMLInputElement).files?.[0]; if (file) { const reader = new FileReader(); reader.onload = (e) => { setAttachmentPreview({ file, preview: e.target?.result as string, type: 'audio', fileType: file.type }); }; reader.readAsDataURL(file); } }; input.click(); }}><Mic className="w-4 h-4 mr-2 text-green-500" />Audio</DropdownMenuItem>
                               </DropdownMenuContent>
@@ -8559,7 +9350,7 @@ export default function NOCActivityApp() {
                               <Input 
                                 placeholder={selectedConversation && isAnnouncementsConversation(selectedConversation) && !canManageAnnouncements(user)
                                   ? 'Seuls les admins/responsables peuvent publier des annonces'
-                                  : 'Écrire un message...'}
+                                  : 'Ã‰crire un message...'}
                                 value={newMessage} 
                                 disabled={Boolean(selectedConversation && isAnnouncementsConversation(selectedConversation) && !canManageAnnouncements(user))}
                                 onChange={(e) => {
@@ -8787,7 +9578,7 @@ export default function NOCActivityApp() {
                                       audio.play().catch(() => {});
                                     }
                                   } catch (err) {
-                                    toast.error('Erreur microphone', { description: 'Impossible d\'accéder au microphone' });
+                                    toast.error('Erreur microphone', { description: 'Impossible d\'accÃ©der au microphone' });
                                   }
                                 }} 
                                 onMouseUp={() => { 
@@ -8852,7 +9643,7 @@ export default function NOCActivityApp() {
                         <div className="text-center relative z-10">
                           <div className="w-64 h-64 mx-auto mb-6 rounded-full bg-cyan-500/10 flex items-center justify-center"><MessageCircle className="w-32 h-32 text-cyan-500" /></div>
                           <h2 className="text-2xl font-medium text-slate-700 dark:text-slate-200 mb-2">Silicone Connect Chat</h2>
-                          <p className="text-slate-500 dark:text-slate-400 max-w-md">Envoyez et recevez des messages avec vos collègues en temps réel.<br />Communication sécurisée et instantanée.</p>
+                          <p className="text-slate-500 dark:text-slate-400 max-w-md">Envoyez et recevez des messages avec vos collÃ¨gues en temps rÃ©el.<br />Communication sÃ©curisÃ©e et instantanÃ©e.</p>
                         </div>
                       </div>
                     )}
@@ -8895,7 +9686,7 @@ export default function NOCActivityApp() {
                               setEditingMessage(null);
                               setEditMessageContent('');
                               setEditMessageDialogOpen(false);
-                              toast.success('Message modifié');
+                              toast.success('Message modifiÃ©');
                             }
                           }}
                         >
@@ -8918,7 +9709,7 @@ export default function NOCActivityApp() {
                     <DialogContent className="max-w-6xl w-[96vw] p-2 sm:p-4 bg-black/95 border-slate-700">
                       <DialogHeader>
                         <DialogTitle className="text-slate-100 text-sm sm:text-base truncate pr-8">
-                          {chatImagePreview?.fileName || 'Aperçu image'}
+                          {chatImagePreview?.fileName || 'AperÃ§u image'}
                         </DialogTitle>
                       </DialogHeader>
 
@@ -8942,16 +9733,16 @@ export default function NOCActivityApp() {
                                 });
                               } else if (navigator.clipboard?.writeText) {
                                 await navigator.clipboard.writeText(absoluteUrl);
-                                toast.success('Lien copié pour transfert');
+                                toast.success('Lien copiÃ© pour transfert');
                               } else {
                                 window.open(absoluteUrl, '_blank', 'noopener,noreferrer');
                               }
                             } catch {
-                              toast.error('Transfert annulé ou indisponible');
+                              toast.error('Transfert annulÃ© ou indisponible');
                             }
                           }}
                         >
-                          <Forward className="w-4 h-4 mr-1" /> Transférer
+                          <Forward className="w-4 h-4 mr-1" /> TransfÃ©rer
                         </Button>
 
                         <Button
@@ -8969,10 +9760,10 @@ export default function NOCActivityApp() {
                             document.body.appendChild(link);
                             link.click();
                             document.body.removeChild(link);
-                            toast.success('Téléchargement lancé');
+                            toast.success('TÃ©lÃ©chargement lancÃ©');
                           }}
                         >
-                          <Download className="w-4 h-4 mr-1" /> Télécharger
+                          <Download className="w-4 h-4 mr-1" /> TÃ©lÃ©charger
                         </Button>
 
                         <Button
@@ -9023,11 +9814,11 @@ export default function NOCActivityApp() {
                               prev ? { ...prev, message: { ...prev.message, isPinned: nextPinned } } : prev
                             );
 
-                            toast.success(nextPinned ? 'Image épinglée' : 'Image désépinglée');
+                            toast.success(nextPinned ? 'Image Ã©pinglÃ©e' : 'Image dÃ©sÃ©pinglÃ©e');
                           }}
                         >
                           <Pin className="w-4 h-4 mr-1" />
-                          {chatImagePreview?.message?.isPinned ? 'Désépingler' : 'Épingler'}
+                          {chatImagePreview?.message?.isPinned ? 'DÃ©sÃ©pingler' : 'Ã‰pingler'}
                         </Button>
 
                         <Button
@@ -9048,20 +9839,20 @@ export default function NOCActivityApp() {
                                   )
                                 );
                                 await updateChatMessage(message.conversationId, message.id, 'deleteForEveryone');
-                                toast.success('Image supprimée pour tous');
+                                toast.success('Image supprimÃ©e pour tous');
                               } else {
                                 setChatMessages((prev) =>
                                   prev.map((m) => (m.id === message.id ? { ...m, isDeleted: true } : m))
                                 );
                                 await updateChatMessage(message.conversationId, message.id, 'deleteForMe');
-                                toast.success('Image supprimée pour vous');
+                                toast.success('Image supprimÃ©e pour vous');
                               }
                             } else {
                               setChatMessages((prev) =>
                                 prev.map((m) => (m.id === message.id ? { ...m, isDeleted: true } : m))
                               );
                               await updateChatMessage(message.conversationId, message.id, 'deleteForMe');
-                              toast.success('Image supprimée pour vous');
+                              toast.success('Image supprimÃ©e pour vous');
                             }
 
                             setChatImagePreview(null);
@@ -9088,7 +9879,7 @@ export default function NOCActivityApp() {
                         {chatImagePreview?.url ? (
                           <img
                             src={chatImagePreview.url}
-                            alt={chatImagePreview.fileName || 'Aperçu image'}
+                            alt={chatImagePreview.fileName || 'AperÃ§u image'}
                             className="max-w-full max-h-[75vh] object-contain rounded transition-transform duration-200"
                             style={{ transform: `scale(${chatImageZoom})` }}
                           />
@@ -9099,7 +9890,7 @@ export default function NOCActivityApp() {
                   
                   <Dialog open={createGroupOpen} onOpenChange={setCreateGroupOpen}>
                     <DialogContent className="max-w-md">
-                      <DialogHeader><DialogTitle className="flex items-center gap-2"><Users className="w-5 h-5 text-cyan-500" />Créer un groupe</DialogTitle></DialogHeader>
+                      <DialogHeader><DialogTitle className="flex items-center gap-2"><Users className="w-5 h-5 text-cyan-500" />CrÃ©er un groupe</DialogTitle></DialogHeader>
                       <div className="space-y-4 py-4">
                         <div className="grid gap-2"><Label>Nom du groupe *</Label><Input value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)} placeholder="Ex: Shift A Discussion" /></div>
                         <div className="grid gap-2"><Label>Description</Label><Textarea value={newGroupDescription} onChange={(e) => setNewGroupDescription(e.target.value)} placeholder="Description du groupe..." /></div>
@@ -9131,10 +9922,10 @@ export default function NOCActivityApp() {
                             setNewGroupDescription('');
                             setSelectedMembers([]);
                             setCreateGroupOpen(false);
-                            toast.success('Groupe créé');
+                            toast.success('Groupe crÃ©Ã©');
                           }}
                         >
-                          Créer le groupe
+                          CrÃ©er le groupe
                         </Button>
                       </DialogFooter>
                     </DialogContent>
@@ -9153,7 +9944,7 @@ export default function NOCActivityApp() {
                       <div className="text-center py-8 px-6">
                         <div className="flex justify-center mb-4">
                           <Badge variant="outline" className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30">
-                            Appel entrant {incomingCall?.type === 'video' ? 'vidéo' : 'audio'}
+                            Appel entrant {incomingCall?.type === 'video' ? 'vidÃ©o' : 'audio'}
                           </Badge>
                         </div>
 
@@ -9166,8 +9957,8 @@ export default function NOCActivityApp() {
                         <h3 className="text-2xl font-semibold mb-1">{incomingCall?.callerName}</h3>
                         <p className="text-slate-300 mb-6">
                           {activeCall && callState === 'connected'
-                            ? 'Vous avez un deuxième appel'
-                            : 'Souhaitez-vous répondre ?'}
+                            ? 'Vous avez un deuxiÃ¨me appel'
+                            : 'Souhaitez-vous rÃ©pondre ?'}
                         </p>
 
                         {activeCall && callState === 'connected' && (
@@ -9189,7 +9980,7 @@ export default function NOCActivityApp() {
                             className="bg-emerald-500 hover:bg-emerald-600 text-white"
                             onClick={() => handleIncomingCallAction('accept')}
                           >
-                            {activeCall && callState === 'connected' ? 'Mettre en attente et répondre' : 'Accepter'}
+                            {activeCall && callState === 'connected' ? 'Mettre en attente et rÃ©pondre' : 'Accepter'}
                           </Button>
                           <Button
                             type="button"
@@ -9225,12 +10016,12 @@ export default function NOCActivityApp() {
                                 return base;
                               });
                               handleIncomingCallAction('accept');
-                              addNotification('Conférence fusionnée', 'success', {
+                              addNotification('ConfÃ©rence fusionnÃ©e', 'success', {
                                 conversationId: incomingCall.conversationId,
                               });
                             }}
                           >
-                            Mettre en conférence (fusionner)
+                            Mettre en confÃ©rence (fusionner)
                           </Button>
                         )}
                       </div>
@@ -9244,7 +10035,7 @@ export default function NOCActivityApp() {
                         {/* Call type badge */}
                         <div className="flex justify-center mb-4">
                           <Badge variant="outline" className="bg-cyan-500/20 text-cyan-400 border-cyan-500/30">
-                            {activeCall?.type === 'video' ? 'Appel Vidéo' : 'Appel Audio'}
+                            {activeCall?.type === 'video' ? 'Appel VidÃ©o' : 'Appel Audio'}
                           </Badge>
                         </div>
                         
@@ -9278,7 +10069,7 @@ export default function NOCActivityApp() {
                               {Math.floor(callTimer / 60)}:{String(callTimer % 60).padStart(2, '0')}
                             </span>
                           )}
-                          {callState === 'ended' && 'Appel terminé'}
+                          {callState === 'ended' && 'Appel terminÃ©'}
                         </p>
                         <div className="min-h-[56px] mb-3 flex justify-center">
                           <div className="pointer-events-none flex flex-col items-center gap-2">
@@ -9403,7 +10194,7 @@ export default function NOCActivityApp() {
                                   variant="ghost"
                                   size="icon"
                                   className="rounded-full h-14 w-14 bg-slate-700 text-white hover:bg-slate-600"
-                                  title="Réagir pendant l'appel"
+                                  title="RÃ©agir pendant l'appel"
                                 >
                                   <Smile className="w-6 h-6" />
                                 </Button>
@@ -9412,7 +10203,7 @@ export default function NOCActivityApp() {
                                 <EmojiPicker
                                   theme={theme === 'dark' ? EmojiPickerTheme.DARK : EmojiPickerTheme.LIGHT}
                                   lazyLoadEmojis
-                                  searchPlaceholder="Réagir en direct..."
+                                  searchPlaceholder="RÃ©agir en direct..."
                                   previewConfig={{ showPreview: false }}
                                   width="100%"
                                   height={isCompactEmojiLayout ? 290 : 340}
@@ -9439,7 +10230,7 @@ export default function NOCActivityApp() {
                               if (callTimeoutRef.current) {
                                 clearTimeout(callTimeoutRef.current);
                               }
-                              toast.info('Appel terminé'); 
+                              toast.info('Appel terminÃ©'); 
                             }}
                           >
                             <PhoneOff className="w-6 h-6" />
@@ -9458,7 +10249,7 @@ export default function NOCActivityApp() {
                           Ajouter des participants
                         </DialogTitle>
                         <DialogDescription>
-                          Ajoutez jusqu'à 12 participants à l'appel
+                          Ajoutez jusqu'Ã  12 participants Ã  l'appel
                         </DialogDescription>
                       </DialogHeader>
                       <ScrollArea className="h-[300px] py-4">
@@ -9479,7 +10270,7 @@ export default function NOCActivityApp() {
                                       isVideoOn: true,
                                       isSpeaking: false
                                     }]);
-                                    toast.success(`${u.name} ajouté à l'appel`);
+                                    toast.success(`${u.name} ajoutÃ© Ã  l'appel`);
                                   } else {
                                     toast.error('Maximum 12 participants atteint');
                                   }
@@ -9514,7 +10305,7 @@ export default function NOCActivityApp() {
                           Nouvelle discussion
                         </DialogTitle>
                         <DialogDescription>
-                          Sélectionnez un collègue pour démarrer une conversation
+                          SÃ©lectionnez un collÃ¨gue pour dÃ©marrer une conversation
                         </DialogDescription>
                       </DialogHeader>
                       <div className="py-4">
@@ -9593,7 +10384,7 @@ export default function NOCActivityApp() {
                                       </div>
                                       <div className="flex items-center gap-2">
                                         <p className="text-xs text-muted-foreground">{contact.role.replace('_', ' ')}</p>
-                                        {isOnline && <span className="text-xs text-green-600">• En ligne</span>}
+                                        {isOnline && <span className="text-xs text-green-600">â€¢ En ligne</span>}
                                       </div>
                                     </div>
                                     {existingConv && (
@@ -9608,16 +10399,16 @@ export default function NOCActivityApp() {
                     </DialogContent>
                   </Dialog>
                   
-                  {/* Dialog Paramètres Son et Fond */}
+                  {/* Dialog ParamÃ¨tres Son et Fond */}
                   <Dialog open={backgroundSettingsOpen} onOpenChange={setBackgroundSettingsOpen}>
                     <DialogContent className="max-w-md">
                       <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
                           <Settings className="w-5 h-5 text-cyan-500" />
-                          Paramètres du Chat
+                          ParamÃ¨tres du Chat
                         </DialogTitle>
                         <DialogDescription>
-                          Personnalisez votre expérience de messagerie
+                          Personnalisez votre expÃ©rience de messagerie
                         </DialogDescription>
                       </DialogHeader>
                       <div className="space-y-6 py-4">
@@ -9644,7 +10435,7 @@ export default function NOCActivityApp() {
                               />
                             </div>
                             <div className="flex items-center justify-between">
-                              <Label className="text-sm text-muted-foreground ml-4">Son réception message</Label>
+                              <Label className="text-sm text-muted-foreground ml-4">Son rÃ©ception message</Label>
                               <Checkbox 
                                 checked={soundOnReceive} 
                                 onCheckedChange={(checked) => setSoundOnReceive(checked as boolean)}
@@ -9668,7 +10459,7 @@ export default function NOCActivityApp() {
                         <div className="space-y-4">
                           <h4 className="text-sm font-medium flex items-center gap-2">
                             <ImageIcon className="w-4 h-4 text-cyan-500" />
-                            Fond d'écran
+                            Fond d'Ã©cran
                           </h4>
                           <div className="space-y-3">
                             <Button 
@@ -9700,7 +10491,7 @@ export default function NOCActivityApp() {
                               onClick={() => handleSetBackground(null)}
                             >
                               <RotateCcw className="w-4 h-4" />
-                              Réinitialiser (logo par défaut)
+                              RÃ©initialiser (logo par dÃ©faut)
                             </Button>
                             {/* Pattern options */}
                             <div className="grid grid-cols-4 gap-2 mt-2">
@@ -9732,13 +10523,13 @@ export default function NOCActivityApp() {
                       </div>
                       <DialogFooter>
                         <Button onClick={() => setBackgroundSettingsOpen(false)} className="bg-cyan-500 hover:bg-cyan-600">
-                          Terminé
+                          TerminÃ©
                         </Button>
                       </DialogFooter>
                     </DialogContent>
                   </Dialog>
                   
-                  {/* Dialog Recadrage Photo de Profil - AMÉLIORÉ */}
+                  {/* Dialog Recadrage Photo de Profil - AMÃ‰LIORÃ‰ */}
                   <Dialog
                     open={profilePhotoDialogOpen}
                     onOpenChange={(open) => {
@@ -9756,7 +10547,7 @@ export default function NOCActivityApp() {
                           Ajuster votre photo de profil
                         </DialogTitle>
                         <DialogDescription>
-                          Déplacez l'image et ajustez le zoom. La zone circulaire représente votre photo de profil finale.
+                          DÃ©placez l'image et ajustez le zoom. La zone circulaire reprÃ©sente votre photo de profil finale.
                         </DialogDescription>
                       </DialogHeader>
                       <div className="py-4">
@@ -9780,9 +10571,9 @@ export default function NOCActivityApp() {
                               </div>
                             </div>
                             
-                            {/* Aperçu final */}
+                            {/* AperÃ§u final */}
                             <div className="space-y-3">
-                              <Label className="text-sm font-medium">Aperçu final</Label>
+                              <Label className="text-sm font-medium">AperÃ§u final</Label>
                               <div className="flex flex-col items-center gap-4">
                                 <Avatar className="w-32 h-32 ring-4 ring-cyan-500 ring-offset-4">
                                   <AvatarImage 
@@ -9831,7 +10622,7 @@ export default function NOCActivityApp() {
                                 setProfileZoom(1.2);
                               }}
                             >
-                              <RotateCcw className="w-4 h-4 mr-1" /> Réinitialiser
+                              <RotateCcw className="w-4 h-4 mr-1" /> RÃ©initialiser
                             </Button>
                             <Button 
                               variant="outline" 
@@ -9869,16 +10660,16 @@ export default function NOCActivityApp() {
                     </DialogContent>
                   </Dialog>
                   
-                  {/* Create Status Dialog - AMÉLIORÉ */}
+                  {/* Create Status Dialog - AMÃ‰LIORÃ‰ */}
                   <Dialog open={createStatusOpen} onOpenChange={setCreateStatusOpen}>
                     <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
                       <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
                           <Camera className="w-5 h-5 text-cyan-500" />
-                          Créer un status
+                          CrÃ©er un status
                         </DialogTitle>
                         <DialogDescription>
-                          Partagez un moment avec vos collègues (disparaît après 24h)
+                          Partagez un moment avec vos collÃ¨gues (disparaÃ®t aprÃ¨s 24h)
                         </DialogDescription>
                       </DialogHeader>
                       <div className="space-y-4 py-4">
@@ -9928,7 +10719,7 @@ export default function NOCActivityApp() {
                               input.click();
                             }}
                           >
-                            <Film className="w-4 h-4 text-red-500" /> Vidéo
+                            <Film className="w-4 h-4 text-red-500" /> VidÃ©o
                           </Button>
                         </div>
                         
@@ -9956,11 +10747,11 @@ export default function NOCActivityApp() {
                         
                         {/* Caption */}
                         <div className="space-y-2">
-                          <Label>Légende (optionnel)</Label>
+                          <Label>LÃ©gende (optionnel)</Label>
                           <Textarea 
                             value={statusCaption}
                             onChange={(e) => setStatusCaption(e.target.value)}
-                            placeholder="Ajouter une légende..."
+                            placeholder="Ajouter une lÃ©gende..."
                             className="resize-none"
                             rows={2}
                           />
@@ -9969,7 +10760,7 @@ export default function NOCActivityApp() {
                         {/* Privacy settings - Who can see */}
                         <div className="space-y-3">
                           <div className="flex items-center justify-between">
-                            <Label className="text-sm font-medium">Visibilité</Label>
+                            <Label className="text-sm font-medium">VisibilitÃ©</Label>
                             <span className="text-xs text-muted-foreground">
                               {statusBlockedContacts.length === 0 
                                 ? 'Tous les contacts' 
@@ -10036,7 +10827,7 @@ export default function NOCActivityApp() {
                               setStatusCaption('');
                               setStatusBlockedContacts([]);
                               setCreateStatusOpen(false);
-                              toast.success('Status publié', { description: 'Il sera visible pendant 24 heures' });
+                              toast.success('Status publiÃ©', { description: 'Il sera visible pendant 24 heures' });
                             }
                           }}
                         >
@@ -10055,14 +10846,14 @@ export default function NOCActivityApp() {
                           Mes statuts
                         </DialogTitle>
                         <DialogDescription>
-                          Gérez vos statuts publiés (disparaissent après 24h)
+                          GÃ©rez vos statuts publiÃ©s (disparaissent aprÃ¨s 24h)
                         </DialogDescription>
                       </DialogHeader>
                       <div className="py-4">
                         {statusList.filter(s => s.userId === user?.id).length === 0 ? (
                           <div className="text-center py-8">
                             <Camera className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600 mb-3" />
-                            <p className="text-muted-foreground">Aucun statut publié</p>
+                            <p className="text-muted-foreground">Aucun statut publiÃ©</p>
                             <Button 
                               variant="outline" 
                               size="sm" 
@@ -10072,7 +10863,7 @@ export default function NOCActivityApp() {
                                 setCreateStatusOpen(true);
                               }}
                             >
-                              <Plus className="w-4 h-4 mr-1" /> Créer un statut
+                              <Plus className="w-4 h-4 mr-1" /> CrÃ©er un statut
                             </Button>
                           </div>
                         ) : (
@@ -10093,7 +10884,7 @@ export default function NOCActivityApp() {
                                     </div>
                                     <div className="flex-1 min-w-0">
                                       <p className="text-xs text-muted-foreground">
-                                        {format(new Date(status.createdAt), "dd MMM yyyy 'à' HH:mm", { locale: fr })}
+                                        {format(new Date(status.createdAt), "dd MMM yyyy 'Ã ' HH:mm", { locale: fr })}
                                       </p>
                                       <p className="text-xs text-orange-600 dark:text-orange-400 mt-0.5">
                                         Expire dans {timeLeft}h
@@ -10131,7 +10922,7 @@ export default function NOCActivityApp() {
                                         className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
                                         onClick={() => {
                                           setStatusList(prev => prev.filter(s => s.id !== status.id));
-                                          toast.success('Statut supprimé');
+                                          toast.success('Statut supprimÃ©');
                                         }}
                                       >
                                         <Trash2 className="w-4 h-4" />
@@ -10160,7 +10951,7 @@ export default function NOCActivityApp() {
                     </DialogContent>
                   </Dialog>
                   
-                  {/* View Status Dialog - AMÉLIORÉ */}
+                  {/* View Status Dialog - AMÃ‰LIORÃ‰ */}
                   <Dialog open={statusViewOpen} onOpenChange={setStatusViewOpen}>
                     <DialogContent className="max-w-lg p-0 bg-black border-0 h-[85vh] max-h-[85vh]">
                       {viewingStatus && (
@@ -10202,7 +10993,7 @@ export default function NOCActivityApp() {
                                 size="icon"
                                 className="text-white hover:bg-black/50"
                                 onClick={() => setShowStatusDetails(!showStatusDetails)}
-                                title="Voir les détails"
+                                title="Voir les dÃ©tails"
                               >
                                 <Users className="w-5 h-5" />
                               </Button>
@@ -10393,25 +11184,25 @@ export default function NOCActivityApp() {
                     <div>
                       <h1 className="text-2xl lg:text-3xl font-bold flex items-center gap-2">
                         <ClipboardList className="w-7 h-7 text-blue-600" />
-                        Mes Tâches Journalières
+                        Mes TÃ¢ches JournaliÃ¨res
                       </h1>
-                      <p className="text-muted-foreground">Gestion intelligente et supervisée des tâches NOC</p>
+                      <p className="text-muted-foreground">Gestion intelligente et supervisÃ©e des tÃ¢ches NOC</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <Dialog open={taskDialogOpen} onOpenChange={setTaskDialogOpen}>
                         <DialogTrigger asChild>
                           <Button className="gap-2 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700">
-                            <Plus className="w-4 h-4" /> Nouvelle tâche
+                            <Plus className="w-4 h-4" /> Nouvelle tÃ¢che
                           </Button>
                         </DialogTrigger>
                         <DialogContent className="max-w-lg">
                           <DialogHeader>
                             <DialogTitle className="flex items-center gap-2">
                               <ClipboardList className="w-5 h-5 text-blue-600" />
-                              Créer une nouvelle tâche
+                              CrÃ©er une nouvelle tÃ¢che
                             </DialogTitle>
                             <DialogDescription>
-                              Remplissez les détails de votre tâche
+                              Remplissez les dÃ©tails de votre tÃ¢che
                             </DialogDescription>
                           </DialogHeader>
                           <div className="grid gap-4 py-4">
@@ -10419,7 +11210,7 @@ export default function NOCActivityApp() {
                               <Label htmlFor="task-title">Titre *</Label>
                               <Input 
                                 id="task-title" 
-                                placeholder="Titre de la tâche"
+                                placeholder="Titre de la tÃ¢che"
                                 value={newTask.title}
                                 onChange={(e) => setNewTask({...newTask, title: e.target.value})}
                               />
@@ -10428,14 +11219,14 @@ export default function NOCActivityApp() {
                               <Label htmlFor="task-desc">Description</Label>
                               <Textarea 
                                 id="task-desc" 
-                                placeholder="Description détaillée..."
+                                placeholder="Description dÃ©taillÃ©e..."
                                 value={newTask.description}
                                 onChange={(e) => setNewTask({...newTask, description: e.target.value})}
                               />
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                               <div className="grid gap-2">
-                                <Label>Priorité</Label>
+                                <Label>PrioritÃ©</Label>
                                 <Select value={newTask.priority} onValueChange={(v) => setNewTask({...newTask, priority: v as TaskPriority})}>
                                   <SelectTrigger><SelectValue /></SelectTrigger>
                                   <SelectContent>
@@ -10454,7 +11245,7 @@ export default function NOCActivityApp() {
                                 </Select>
                               </div>
                               <div className="grid gap-2">
-                                <Label>Catégorie</Label>
+                                <Label>CatÃ©gorie</Label>
                                 <Select value={newTask.category} onValueChange={(v) => setNewTask({...newTask, category: v as TaskCategory})}>
                                   <SelectTrigger><SelectValue /></SelectTrigger>
                                   <SelectContent>
@@ -10475,7 +11266,7 @@ export default function NOCActivityApp() {
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                               <div className="grid gap-2">
-                                <Label>Durée estimée (minutes)</Label>
+                                <Label>DurÃ©e estimÃ©e (minutes)</Label>
                                 <Select value={newTask.estimatedDuration.toString()} onValueChange={(v) => setNewTask({...newTask, estimatedDuration: parseInt(v)})}>
                                   <SelectTrigger><SelectValue /></SelectTrigger>
                                   <SelectContent>
@@ -10490,7 +11281,7 @@ export default function NOCActivityApp() {
                                 </Select>
                               </div>
                               <div className="grid gap-2">
-                                <Label>Heure de début</Label>
+                                <Label>Heure de dÃ©but</Label>
                                 <Input 
                                   type="time"
                                   value={format(newTask.startTime, 'HH:mm')}
@@ -10504,9 +11295,9 @@ export default function NOCActivityApp() {
                               </div>
                             </div>
                             <div className="grid gap-2">
-                              <Label>Tags (séparés par des virgules)</Label>
+                              <Label>Tags (sÃ©parÃ©s par des virgules)</Label>
                               <Input 
-                                placeholder="urgent, client, réseau..."
+                                placeholder="urgent, client, rÃ©seau..."
                                 value={newTask.tags}
                                 onChange={(e) => setNewTask({...newTask, tags: e.target.value})}
                               />
@@ -10544,9 +11335,9 @@ export default function NOCActivityApp() {
                                 tags: ''
                               });
                               setTaskDialogOpen(false);
-                              toast.success('Tâche créée', { description: 'La tâche a été ajoutée à votre liste' });
+                              toast.success('TÃ¢che crÃ©Ã©e', { description: 'La tÃ¢che a Ã©tÃ© ajoutÃ©e Ã  votre liste' });
                             }}>
-                              Créer la tâche
+                              CrÃ©er la tÃ¢che
                             </Button>
                           </DialogFooter>
                         </DialogContent>
@@ -10587,7 +11378,7 @@ export default function NOCActivityApp() {
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <CheckCircle2 className="w-4 h-4 text-green-500" />
-                            <span className="text-sm text-muted-foreground">Terminées</span>
+                            <span className="text-sm text-muted-foreground">TerminÃ©es</span>
                           </div>
                           <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
                             {nocTasks.filter(t => t.status === 'completed' && t.userId === user?.id).length}
@@ -10629,7 +11420,7 @@ export default function NOCActivityApp() {
                       <div className="flex-1 relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                         <Input 
-                          placeholder="Rechercher une tâche..." 
+                          placeholder="Rechercher une tÃ¢che..." 
                           className="pl-9"
                           value={searchQuery}
                           onChange={(e) => setSearchQuery(e.target.value)}
@@ -10641,7 +11432,7 @@ export default function NOCActivityApp() {
                             <SelectValue placeholder="Filtrer" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="my"><div className="flex items-center gap-2"><ClipboardList className="w-4 h-4" /> Mes tâches</div></SelectItem>
+                            <SelectItem value="my"><div className="flex items-center gap-2"><ClipboardList className="w-4 h-4" /> Mes tÃ¢ches</div></SelectItem>
                             <SelectItem value="all"><div className="flex items-center gap-2"><Users className="w-4 h-4" /> Toutes</div></SelectItem>
                             <SelectItem value="pending"><div className="flex items-center gap-2"><Clock3 className="w-4 h-4" /> En attente</div></SelectItem>
                             <SelectItem value="late"><div className="flex items-center gap-2"><AlertTriangle className="w-4 h-4 text-red-500" /> En retard</div></SelectItem>
@@ -10657,7 +11448,7 @@ export default function NOCActivityApp() {
                     <CardHeader className="pb-2 pt-4">
                       <CardTitle className="text-base flex items-center gap-2">
                         <ClipboardList className="w-5 h-5" />
-                        Liste des tâches
+                        Liste des tÃ¢ches
                         {nocTasks.length > 0 && (
                           <Badge variant="outline" className="ml-2">{nocTasks.length}</Badge>
                         )}
@@ -10668,12 +11459,12 @@ export default function NOCActivityApp() {
                         {nocTasks.length === 0 ? (
                           <div className="flex flex-col items-center justify-center py-12 text-center">
                             <ClipboardList className="w-16 h-16 text-muted-foreground/30 mb-4" />
-                            <h3 className="font-medium text-lg mb-2">Aucune tâche</h3>
+                            <h3 className="font-medium text-lg mb-2">Aucune tÃ¢che</h3>
                             <p className="text-muted-foreground text-sm mb-4">
-                              Commencez par créer votre première tâche
+                              Commencez par crÃ©er votre premiÃ¨re tÃ¢che
                             </p>
                             <Button onClick={() => setTaskDialogOpen(true)}>
-                              <Plus className="w-4 h-4 mr-2" /> Créer une tâche
+                              <Plus className="w-4 h-4 mr-2" /> CrÃ©er une tÃ¢che
                             </Button>
                           </div>
                         ) : (
@@ -10710,7 +11501,7 @@ export default function NOCActivityApp() {
                                       completedAt: checked ? new Date() : undefined,
                                       actualDuration: checked ? calculateActualDuration(t) : undefined
                                     } : t));
-                                    toast.success(checked ? 'Tâche terminée ✓' : 'Tâche réactivée');
+                                    toast.success(checked ? 'TÃ¢che terminÃ©e âœ“' : 'TÃ¢che rÃ©activÃ©e');
                                   }} 
                                   className="mt-1" 
                                 />
@@ -10738,7 +11529,7 @@ export default function NOCActivityApp() {
                                       {format(task.startTime, 'HH:mm')} - {format(task.estimatedEndTime, 'HH:mm')}
                                     </span>
                                     <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                      ⏱ {formatDuration(task.estimatedDuration)}
+                                      â± {formatDuration(task.estimatedDuration)}
                                     </span>
                                     {task.tags.length > 0 && (
                                       <div className="flex gap-1">
@@ -10758,7 +11549,7 @@ export default function NOCActivityApp() {
                                           size="sm"
                                           onClick={() => {
                                             setNocTasks(prev => prev.map(t => t.id === task.id ? {...t, status: 'in_progress'} : t));
-                                            toast.info('Tâche démarrée');
+                                            toast.info('TÃ¢che dÃ©marrÃ©e');
                                           }}
                                         >
                                           <Play className="w-4 h-4 text-blue-600" />
@@ -10770,7 +11561,7 @@ export default function NOCActivityApp() {
                                           size="sm"
                                           onClick={() => {
                                             setNocTasks(prev => prev.map(t => t.id === task.id ? {...t, status: 'on_hold'} : t));
-                                            toast.warning('Tâche suspendue');
+                                            toast.warning('TÃ¢che suspendue');
                                           }}
                                         >
                                           <Pause className="w-4 h-4 text-orange-600" />
@@ -10782,7 +11573,7 @@ export default function NOCActivityApp() {
                                           size="sm"
                                           onClick={() => {
                                             setNocTasks(prev => prev.map(t => t.id === task.id ? {...t, status: 'in_progress'} : t));
-                                            toast.info('Tâche reprise');
+                                            toast.info('TÃ¢che reprise');
                                           }}
                                         >
                                           <Play className="w-4 h-4 text-green-600" />
@@ -10804,9 +11595,9 @@ export default function NOCActivityApp() {
                                     variant="ghost" 
                                     size="sm"
                                     onClick={() => {
-                                      if (confirm('Supprimer cette tâche ?')) {
+                                      if (confirm('Supprimer cette tÃ¢che ?')) {
                                         setNocTasks(prev => prev.filter(t => t.id !== task.id));
-                                        toast.success('Tâche supprimée');
+                                        toast.success('TÃ¢che supprimÃ©e');
                                       }
                                     }}
                                   >
@@ -10837,15 +11628,15 @@ export default function NOCActivityApp() {
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                               <div className="text-center">
                                 <p className="text-2xl font-bold text-blue-600">{perf.productivityRate}%</p>
-                                <p className="text-sm text-muted-foreground">Productivité</p>
+                                <p className="text-sm text-muted-foreground">ProductivitÃ©</p>
                               </div>
                               <div className="text-center">
                                 <p className="text-2xl font-bold text-green-600">{perf.onTimeRate}%</p>
-                                <p className="text-sm text-muted-foreground">À l'heure</p>
+                                <p className="text-sm text-muted-foreground">Ã€ l'heure</p>
                               </div>
                               <div className="text-center">
                                 <p className="text-2xl font-bold text-cyan-600">{perf.tasksCompleted}/{perf.tasksCreated}</p>
-                                <p className="text-sm text-muted-foreground">Tâches</p>
+                                <p className="text-sm text-muted-foreground">TÃ¢ches</p>
                               </div>
                               <div className="text-center">
                                 <div className="flex items-center justify-center gap-1">
@@ -10867,22 +11658,22 @@ export default function NOCActivityApp() {
                 <motion.div key="activities" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h1 className="text-2xl lg:text-3xl font-bold">Suivi des Activités</h1>
+                      <h1 className="text-2xl lg:text-3xl font-bold">Suivi des ActivitÃ©s</h1>
                       <p className="text-muted-foreground">Enregistrez vos actions NOC</p>
                     </div>
                     <Dialog open={activityDialogOpen} onOpenChange={setActivityDialogOpen}>
                       <DialogTrigger asChild>
                         <Button>
-                          <Plus className="w-4 h-4 mr-2" /> Nouvelle activité
+                          <Plus className="w-4 h-4 mr-2" /> Nouvelle activitÃ©
                         </Button>
                       </DialogTrigger>
                       <DialogContent>
                         <DialogHeader>
-                          <DialogTitle>Enregistrer une activité</DialogTitle>
+                          <DialogTitle>Enregistrer une activitÃ©</DialogTitle>
                         </DialogHeader>
                         <div className="grid gap-4 py-4">
                           <div className="grid gap-2">
-                            <Label>Catégorie</Label>
+                            <Label>CatÃ©gorie</Label>
                             <Select value={newActivity.category} onValueChange={(v) => setNewActivity({ ...newActivity, category: v, type: '' })}>
                               <SelectTrigger><SelectValue /></SelectTrigger>
                               <SelectContent>
@@ -10896,7 +11687,7 @@ export default function NOCActivityApp() {
                           <div className="grid gap-2">
                             <Label>Type</Label>
                             <Select value={newActivity.type} onValueChange={(v) => setNewActivity({ ...newActivity, type: v })}>
-                              <SelectTrigger><SelectValue placeholder="Sélectionner" /></SelectTrigger>
+                              <SelectTrigger><SelectValue placeholder="SÃ©lectionner" /></SelectTrigger>
                               <SelectContent>
                                 {ACTIVITY_TYPES[newActivity.category]?.map(type => (
                                   <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
@@ -10925,7 +11716,7 @@ export default function NOCActivityApp() {
                               setActivities(prev => [activity, ...prev]);
                               setNewActivity({ type: '', category: 'Monitoring', description: '' });
                               setActivityDialogOpen(false);
-                              toast.success('Activité enregistrée');
+                              toast.success('ActivitÃ© enregistrÃ©e');
                             }
                           }}>Enregistrer</Button>
                         </DialogFooter>
@@ -10970,11 +11761,11 @@ export default function NOCActivityApp() {
               {/* Gestion Tickets */}
               {currentTab === 'tickets' && (
                 <motion.div key="tickets" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-4">
-                  {/* Header avec bouton créer bien visible */}
+                  {/* Header avec bouton crÃ©er bien visible */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
                       <h1 className="text-2xl lg:text-3xl font-bold text-foreground">Gestion des Tickets</h1>
-                      <p className="text-muted-foreground">Suivi et création de tickets</p>
+                      <p className="text-muted-foreground">Suivi et crÃ©ation de tickets</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <Button
@@ -10988,216 +11779,24 @@ export default function NOCActivityApp() {
                       </Button>
                       <Button
                         variant="outline"
-                        onClick={() => setShowDeletedTickets(!showDeletedTickets)}
-                        className={`border-2 ${showDeletedTickets ? 'border-red-500 text-red-600 dark:text-red-400' : 'border-slate-300 dark:border-slate-600'}`}
+                        onClick={() => setShowDeletedTickets((prev) => !prev)}
+                        className={`ticket-create-button ticket-trash-button h-9 rounded-lg px-3 text-sm font-semibold sm:h-10 sm:px-4 ${showDeletedTickets ? 'ticket-trash-button--active' : ''}`}
                       >
                         <Trash2 className="w-4 h-4 mr-2" />
                         {showDeletedTickets ? 'Masquer corbeille' : 'Corbeille'}
                       </Button>
-                      <Dialog open={createTicketOpen} onOpenChange={setCreateTicketOpen}>
-                        <DialogTrigger asChild>
-                          <Button className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-semibold shadow-lg px-6 py-2 text-base">
-                            <Plus className="w-5 h-5 mr-2" /> Créer un ticket
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-white dark:bg-slate-900 border-2 dark:border-slate-700">
-                          <DialogHeader>
-                            <DialogTitle className="text-xl text-foreground">Créer un nouveau ticket</DialogTitle>
-                            <DialogDescription>Remplissez les informations du ticket</DialogDescription>
-                          </DialogHeader>
-                          <div className="grid gap-4 py-4">
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="grid gap-2">
-                                <Label className="text-foreground font-medium">Objet *</Label>
-                                <Input
-                                  value={newTicket.objet}
-                                  onChange={(e) => setNewTicket({ ...newTicket, objet: e.target.value })}
-                                  placeholder="Objet du ticket"
-                                  className="border-2 dark:border-slate-600 dark:bg-slate-800"
-                                />
-                              </div>
-                              <div className="grid gap-2">
-                                <Label className="text-foreground font-medium">Catégorie</Label>
-                                <Select value={newTicket.category} onValueChange={(v: TicketCategory) => setNewTicket({ ...newTicket, category: v })}>
-                                  <SelectTrigger className="border-2 dark:border-slate-600 dark:bg-slate-800">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent className="bg-white dark:bg-slate-800">
-                                    {Object.entries(TICKET_CATEGORIES).map(([key, val]) => {
-                                      const CategoryIcon = val.icon;
-                                      return (
-                                        <SelectItem key={key} value={key}>
-                                          <CategoryIcon className="w-4 h-4 mr-2" />
-                                          {val.label}
-                                        </SelectItem>
-                                      );
-                                    })}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            </div>
-                            <div className="grid gap-2">
-                              <Label className="text-foreground font-medium">Description</Label>
-                              <Textarea
-                                value={newTicket.description}
-                                onChange={(e) => setNewTicket({ ...newTicket, description: e.target.value })}
-                                placeholder="Décrivez le problème ou la demande..."
-                                rows={3}
-                                className="border-2 dark:border-slate-600 dark:bg-slate-800"
-                              />
-                            </div>
-                            <div className="grid grid-cols-3 gap-4">
-                              <div className="grid gap-2">
-                                <Label className="text-foreground font-medium">Priorité</Label>
-                                <Select value={newTicket.priority} onValueChange={(v: TicketPriority) => setNewTicket({ ...newTicket, priority: v })}>
-                                  <SelectTrigger className="border-2 dark:border-slate-600 dark:bg-slate-800">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent className="bg-white dark:bg-slate-800">
-                                    {Object.entries(TICKET_PRIORITIES).map(([key, val]) => (
-                                      <SelectItem key={key} value={key}>{val.label}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <div className="grid gap-2">
-                                <Label className="text-foreground font-medium">Site</Label>
-                                <Select value={newTicket.site} onValueChange={(v) => setNewTicket({ ...newTicket, site: v })}>
-                                  <SelectTrigger className="border-2 dark:border-slate-600 dark:bg-slate-800">
-                                    <SelectValue placeholder="Sélectionner" />
-                                  </SelectTrigger>
-                                  <SelectContent className="bg-white dark:bg-slate-800">
-                                    {SITES_LIST.map(site => (
-                                      <SelectItem key={site} value={site}>{site}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <div className="grid gap-2">
-                                <Label className="text-foreground font-medium">Localité</Label>
-                                <Select value={newTicket.localite} onValueChange={(v) => setNewTicket({ ...newTicket, localite: v })}>
-                                  <SelectTrigger className="border-2 dark:border-slate-600 dark:bg-slate-800">
-                                    <SelectValue placeholder="Sélectionner" />
-                                  </SelectTrigger>
-                                  <SelectContent className="bg-white dark:bg-slate-800">
-                                    {LOCALITES_LIST.map(loc => (
-                                      <SelectItem key={loc} value={loc}>{loc}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            </div>
-                            <div className="grid gap-2">
-                              <Label className="text-foreground font-medium">Technicien assigné</Label>
-                              <Input
-                                value={newTicket.technicien}
-                                onChange={(e) => setNewTicket({ ...newTicket, technicien: e.target.value })}
-                                placeholder="Nom du technicien"
-                                className="border-2 dark:border-slate-600 dark:bg-slate-800"
-                              />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="grid gap-2">
-                                <Label className="text-foreground font-medium">Date d'échéance (Due Date)</Label>
-                                <Input
-                                  type="datetime-local"
-                                  value={newTicket.dueDate ? format(newTicket.dueDate, "yyyy-MM-dd'T'HH:mm") : ''}
-                                  onChange={(e) => setNewTicket({ ...newTicket, dueDate: e.target.value ? new Date(e.target.value) : null })}
-                                  className="border-2 dark:border-slate-600 dark:bg-slate-800"
-                                />
-                              </div>
-                              <div className="grid gap-2">
-                                <Label className="text-foreground font-medium">ETR (Est. Time Resolution)</Label>
-                                <Input
-                                  type="datetime-local"
-                                  value={newTicket.etr ? format(newTicket.etr, "yyyy-MM-dd'T'HH:mm") : ''}
-                                  onChange={(e) => setNewTicket({ ...newTicket, etr: e.target.value ? new Date(e.target.value) : null })}
-                                  className="border-2 dark:border-slate-600 dark:bg-slate-800"
-                                />
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="grid gap-2">
-                                <Label className="text-foreground font-medium">SLA (Service Level Agreement)</Label>
-                                <Select value={newTicket.sla} onValueChange={(v) => setNewTicket({ ...newTicket, sla: v })}>
-                                  <SelectTrigger className="border-2 dark:border-slate-600 dark:bg-slate-800">
-                                    <SelectValue placeholder="Sélectionner" />
-                                  </SelectTrigger>
-                                  <SelectContent className="bg-white dark:bg-slate-800">
-                                    <SelectItem value="1h">1 heure</SelectItem>
-                                    <SelectItem value="4h">4 heures</SelectItem>
-                                    <SelectItem value="8h">8 heures</SelectItem>
-                                    <SelectItem value="24h">24 heures</SelectItem>
-                                    <SelectItem value="48h">48 heures</SelectItem>
-                                    <SelectItem value="72h">72 heures</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <div className="grid gap-2">
-                                <Label className="text-foreground font-medium">SLR (Service Level Resolution)</Label>
-                                <Input
-                                  value={newTicket.slr}
-                                  onChange={(e) => setNewTicket({ ...newTicket, slr: e.target.value })}
-                                  placeholder="Ex: 95%, 99%"
-                                  className="border-2 dark:border-slate-600 dark:bg-slate-800"
-                                />
-                              </div>
-                            </div>
-                          </div>
-                          <DialogFooter>
-                            <DialogClose asChild>
-                              <Button variant="outline" className="border-2">Annuler</Button>
-                            </DialogClose>
-                            <Button
-                              className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-semibold"
-                              onClick={() => {
-                                if (!newTicket.objet.trim()) {
-                                  toast.error('Erreur', { description: 'L\'objet du ticket est requis' });
-                                  return;
-                                }
-                                const ticket: TicketItem = {
-                                  id: generateId(),
-                                  numero: `TKT-${String(tickets.length + 1).padStart(4, '0')}`,
-                                  objet: newTicket.objet,
-                                  description: newTicket.description,
-                                  status: 'open',
-                                  priority: newTicket.priority,
-                                  category: newTicket.category,
-                                  site: newTicket.site,
-                                  localite: newTicket.localite,
-                                  technicien: newTicket.technicien,
-                                  reporterId: user?.id || '',
-                                  reporterName: user?.name || '',
-                                  comments: [],
-                                  attachments: [],
-                                  history: [{
-                                    id: generateId(),
-                                    ticketId: '',
-                                    userId: user?.id || '',
-                                    userName: user?.name || '',
-                                    action: 'Ticket créé',
-                                    timestamp: new Date()
-                                  }],
-                                  tags: [],
-                                  createdAt: new Date(),
-                                  updatedAt: new Date(),
-                                  dueDate: newTicket.dueDate || undefined,
-                                  etr: newTicket.etr || undefined,
-                                  sla: newTicket.sla || undefined,
-                                  slr: newTicket.slr || undefined,
-                                  isDeleted: false
-                                };
-                                setTickets(prev => [ticket, ...prev]);
-                                setNewTicket({ objet: '', description: '', priority: 'medium', category: 'incident', site: '', localite: '', technicien: '', dueDate: null, etr: null, sla: '', slr: '' });
-                                setCreateTicketOpen(false);
-                                toast.success('Ticket créé', { description: `Le ticket ${ticket.numero} a été créé` });
-                              }}
-                            >
-                              <Plus className="w-4 h-4 mr-2" /> Créer le ticket
-                            </Button>
-                          </DialogFooter>
-                        </DialogContent>
-                      </Dialog>
+                      <CreateTicketDialog
+                        siteOptions={ticketSiteOptions}
+                        localityOptions={ticketLocalityOptions}
+                        technicianOptions={ticketTechnicianOptions}
+                        user={user}
+                        onLocalityCreated={(name) => upsertLocalityOption(name)}
+                        onTicketCreated={(raw) => {
+                          const ticket = mapApiTicketToLegacy(raw);
+                          setTickets((prev) => [ticket, ...prev.filter((e) => e.id !== ticket.id)]);
+                        }}
+                        onRefreshTickets={loadTicketsModuleData}
+                      />
                     </div>
                   </div>
 
@@ -11232,10 +11831,10 @@ export default function NOCActivityApp() {
                         </Select>
                         <Select value={ticketPriorityFilter} onValueChange={(v) => setTicketPriorityFilter(v as TicketPriority | 'all')}>
                           <SelectTrigger className="w-[140px] border-2 dark:border-slate-600 dark:bg-slate-800">
-                            <SelectValue placeholder="Priorité" />
+                            <SelectValue placeholder="PrioritÃ©" />
                           </SelectTrigger>
                           <SelectContent className="bg-white dark:bg-slate-800">
-                            <SelectItem value="all">Toutes priorités</SelectItem>
+                            <SelectItem value="all">Toutes prioritÃ©s</SelectItem>
                             {Object.entries(TICKET_PRIORITIES).map(([key, val]) => (
                               <SelectItem key={key} value={key}>{val.label}</SelectItem>
                             ))}
@@ -11247,19 +11846,30 @@ export default function NOCActivityApp() {
                           </SelectTrigger>
                           <SelectContent className="bg-white dark:bg-slate-800">
                             <SelectItem value="all">Tous sites</SelectItem>
-                            {SITES_LIST.map(site => (
-                              <SelectItem key={site} value={site}>{site}</SelectItem>
+                            {ticketSiteOptions.map((site) => (
+                              <SelectItem key={site.id} value={site.name}>{site.name}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                         <Select value={ticketLocaliteFilter} onValueChange={setTicketLocaliteFilter}>
                           <SelectTrigger className="w-[140px] border-2 dark:border-slate-600 dark:bg-slate-800">
-                            <SelectValue placeholder="Localité" />
+                            <SelectValue placeholder="LocalitÃ©" />
                           </SelectTrigger>
                           <SelectContent className="bg-white dark:bg-slate-800">
-                            <SelectItem value="all">Toutes localités</SelectItem>
-                            {LOCALITES_LIST.map(loc => (
+                            <SelectItem value="all">Toutes localitÃ©s</SelectItem>
+                            {ticketLocalityOptions.map((loc) => (
                               <SelectItem key={loc} value={loc}>{loc}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Select value={ticketTechnicienFilter} onValueChange={setTicketTechnicienFilter}>
+                          <SelectTrigger className="w-[180px] border-2 dark:border-slate-600 dark:bg-slate-800">
+                            <SelectValue placeholder="Technicien" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-white dark:bg-slate-800">
+                            <SelectItem value="all">Tous techniciens</SelectItem>
+                            {ticketTechnicianOptions.map((technician) => (
+                              <SelectItem key={technician.id} value={technician.name}>{technician.name}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -11275,10 +11885,10 @@ export default function NOCActivityApp() {
                           <table className="w-full">
                             <thead>
                               <tr className="border-b-2 dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
-                                <th className="text-left p-3 font-semibold text-foreground">N°</th>
+                                <th className="text-left p-3 font-semibold text-foreground">NÂ°</th>
                                 <th className="text-left p-3 font-semibold text-foreground">Objet</th>
                                 <th className="text-left p-3 font-semibold text-foreground">Statut</th>
-                                <th className="text-left p-3 font-semibold text-foreground">Priorité</th>
+                                <th className="text-left p-3 font-semibold text-foreground">PrioritÃ©</th>
                                 <th className="text-left p-3 font-semibold text-foreground">Site</th>
                                 <th className="text-left p-3 font-semibold text-foreground">Technicien</th>
                                 <th className="text-left p-3 font-semibold text-foreground">Date</th>
@@ -11294,6 +11904,7 @@ export default function NOCActivityApp() {
                                   if (ticketPriorityFilter !== 'all' && t.priority !== ticketPriorityFilter) return false;
                                   if (ticketSiteFilter !== 'all' && t.site !== ticketSiteFilter) return false;
                                   if (ticketLocaliteFilter !== 'all' && t.localite !== ticketLocaliteFilter) return false;
+                                  if (ticketTechnicienFilter !== 'all' && t.technicien !== ticketTechnicienFilter) return false;
                                   return true;
                                 })
                                 .map(ticket => (
@@ -11322,13 +11933,7 @@ export default function NOCActivityApp() {
                                           <Edit className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />
                                         </Button>
                                         <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-red-100 dark:hover:bg-red-900/40" onClick={() => {
-                                          if (ticket.isDeleted) {
-                                            setTickets(prev => prev.filter(t => t.id !== ticket.id));
-                                            toast.success('Ticket supprimé définitivement');
-                                          } else {
-                                            setTickets(prev => prev.map(t => t.id === ticket.id ? { ...t, isDeleted: true, deletedAt: new Date(), deletedBy: user?.name } : t));
-                                            toast.success('Ticket déplacé dans la corbeille');
-                                          }
+                                          void handleDeleteTicket(ticket, ticket.isDeleted);
                                         }}>
                                           <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400" />
                                         </Button>
@@ -11339,7 +11944,7 @@ export default function NOCActivityApp() {
                               {tickets.filter(t => showDeletedTickets === t.isDeleted).length === 0 && (
                                 <tr>
                                   <td colSpan={8} className="p-8 text-center text-muted-foreground">
-                                    {showDeletedTickets ? 'La corbeille est vide' : 'Aucun ticket. Cliquez sur "Créer un ticket" pour commencer.'}
+                                    {showDeletedTickets ? 'La corbeille est vide' : 'Aucun ticket. Cliquez sur "CrÃ©er un ticket" pour commencer.'}
                                   </td>
                                 </tr>
                               )}
@@ -11357,6 +11962,8 @@ export default function NOCActivityApp() {
                           if (ticketStatusFilter !== 'all' && t.status !== ticketStatusFilter) return false;
                           if (ticketPriorityFilter !== 'all' && t.priority !== ticketPriorityFilter) return false;
                           if (ticketSiteFilter !== 'all' && t.site !== ticketSiteFilter) return false;
+                          if (ticketLocaliteFilter !== 'all' && t.localite !== ticketLocaliteFilter) return false;
+                          if (ticketTechnicienFilter !== 'all' && t.technicien !== ticketTechnicienFilter) return false;
                           return true;
                         })
                         .map(ticket => (
@@ -11401,7 +12008,7 @@ export default function NOCActivityApp() {
                 </motion.div>
               )}
 
-              {/* Dialog Détail Ticket */}
+              {/* Dialog DÃ©tail Ticket */}
               <Dialog open={ticketDetailOpen} onOpenChange={setTicketDetailOpen}>
                 <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-white dark:bg-slate-900 border-2 dark:border-slate-700">
                   {selectedTicket && (
@@ -11422,9 +12029,7 @@ export default function NOCActivityApp() {
                               <Edit className="w-4 h-4 mr-1" /> Modifier
                             </Button>
                             <Button variant="outline" size="sm" className="border-2 border-red-300 dark:border-red-700 text-red-600 dark:text-red-400" onClick={() => {
-                              setTickets(prev => prev.map(t => t.id === selectedTicket.id ? { ...t, isDeleted: true, deletedAt: new Date(), deletedBy: user?.name } : t));
-                              setTicketDetailOpen(false);
-                              toast.success('Ticket déplacé dans la corbeille');
+                              void handleDeleteTicket(selectedTicket);
                             }}>
                               <Trash2 className="w-4 h-4 mr-1" /> Supprimer
                             </Button>
@@ -11434,36 +12039,36 @@ export default function NOCActivityApp() {
 
                       <Tabs defaultValue="details" className="w-full">
                         <TabsList className="grid w-full grid-cols-5 bg-slate-100 dark:bg-slate-800">
-                          <TabsTrigger value="details" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700">Détails</TabsTrigger>
+                          <TabsTrigger value="details" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700">DÃ©tails</TabsTrigger>
                           <TabsTrigger value="comments" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700">Commentaires ({selectedTicket.comments.length})</TabsTrigger>
-                          <TabsTrigger value="attachments" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700">Pièces ({selectedTicket.attachments.length})</TabsTrigger>
+                          <TabsTrigger value="attachments" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700">PiÃ¨ces ({selectedTicket.attachments.length})</TabsTrigger>
                           <TabsTrigger value="history" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700">Historique</TabsTrigger>
-                          <TabsTrigger value="resolution" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700">Résolution</TabsTrigger>
+                          <TabsTrigger value="resolution" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700">RÃ©solution</TabsTrigger>
                         </TabsList>
 
                         <TabsContent value="details" className="space-y-4 mt-4">
                           <div className="grid grid-cols-2 gap-4">
                             <Card className="border dark:border-slate-700">
-                              <CardHeader className="pb-2"><CardTitle className="text-sm">Informations générales</CardTitle></CardHeader>
+                              <CardHeader className="pb-2"><CardTitle className="text-sm">Informations gÃ©nÃ©rales</CardTitle></CardHeader>
                               <CardContent className="space-y-2 text-sm">
-                                <p><span className="font-medium text-muted-foreground">Priorité:</span> <Badge className={`${TICKET_PRIORITIES[selectedTicket.priority].bgColor} ${TICKET_PRIORITIES[selectedTicket.priority].color}`}>{TICKET_PRIORITIES[selectedTicket.priority].label}</Badge></p>
-                                <p><span className="font-medium text-muted-foreground">Catégorie:</span> <span className="inline-flex items-center gap-1">{(() => { const CatIcon = TICKET_CATEGORIES[selectedTicket.category].icon; return <CatIcon className="w-4 h-4" />; })()} {TICKET_CATEGORIES[selectedTicket.category].label}</span></p>
+                                <p><span className="font-medium text-muted-foreground">PrioritÃ©:</span> <Badge className={`${TICKET_PRIORITIES[selectedTicket.priority].bgColor} ${TICKET_PRIORITIES[selectedTicket.priority].color}`}>{TICKET_PRIORITIES[selectedTicket.priority].label}</Badge></p>
+                                <p><span className="font-medium text-muted-foreground">CatÃ©gorie:</span> <span className="inline-flex items-center gap-1">{(() => { const CatIcon = TICKET_CATEGORIES[selectedTicket.category].icon; return <CatIcon className="w-4 h-4" />; })()} {TICKET_CATEGORIES[selectedTicket.category].label}</span></p>
                                 <p><span className="font-medium text-muted-foreground">Site:</span> {selectedTicket.site || '-'}</p>
-                                <p><span className="font-medium text-muted-foreground">Localité:</span> {selectedTicket.localite || '-'}</p>
+                                <p><span className="font-medium text-muted-foreground">LocalitÃ©:</span> {selectedTicket.localite || '-'}</p>
                                 <p><span className="font-medium text-muted-foreground">Technicien:</span> {selectedTicket.technicien || '-'}</p>
                               </CardContent>
                             </Card>
                             <Card className="border dark:border-slate-700">
                               <CardHeader className="pb-2"><CardTitle className="text-sm">Dates et SLA</CardTitle></CardHeader>
                               <CardContent className="space-y-2 text-sm">
-                                <p><span className="font-medium text-muted-foreground">Créé le:</span> {format(selectedTicket.createdAt, 'dd/MM/yyyy à HH:mm')}</p>
+                                <p><span className="font-medium text-muted-foreground">CrÃ©Ã© le:</span> {format(selectedTicket.createdAt, 'dd/MM/yyyy Ã  HH:mm')}</p>
                                 <p><span className="font-medium text-muted-foreground">Par:</span> {selectedTicket.reporterName}</p>
-                                <p><span className="font-medium text-muted-foreground">Mis à jour:</span> {format(selectedTicket.updatedAt, 'dd/MM/yyyy à HH:mm')}</p>
-                                {selectedTicket.dueDate && <p><span className="font-medium text-muted-foreground">Date d'échéance:</span> {format(selectedTicket.dueDate, 'dd/MM/yyyy à HH:mm')}</p>}
-                                {selectedTicket.etr && <p><span className="font-medium text-muted-foreground">ETR:</span> {format(selectedTicket.etr, 'dd/MM/yyyy à HH:mm')}</p>}
+                                <p><span className="font-medium text-muted-foreground">Mis Ã  jour:</span> {format(selectedTicket.updatedAt, 'dd/MM/yyyy Ã  HH:mm')}</p>
+                                {selectedTicket.dueDate && <p><span className="font-medium text-muted-foreground">Date d'Ã©chÃ©ance:</span> {format(selectedTicket.dueDate, 'dd/MM/yyyy Ã  HH:mm')}</p>}
+                                {selectedTicket.etr && <p><span className="font-medium text-muted-foreground">ETR:</span> {format(selectedTicket.etr, 'dd/MM/yyyy Ã  HH:mm')}</p>}
                                 {selectedTicket.sla && <p><span className="font-medium text-muted-foreground">SLA:</span> <Badge variant="outline">{selectedTicket.sla}</Badge></p>}
                                 {selectedTicket.slr && <p><span className="font-medium text-muted-foreground">SLR:</span> {selectedTicket.slr}</p>}
-                                {selectedTicket.resolvedAt && <p><span className="font-medium text-muted-foreground">Résolu le:</span> {format(selectedTicket.resolvedAt, 'dd/MM/yyyy à HH:mm')}</p>}
+                                {selectedTicket.resolvedAt && <p><span className="font-medium text-muted-foreground">RÃ©solu le:</span> {format(selectedTicket.resolvedAt, 'dd/MM/yyyy Ã  HH:mm')}</p>}
                               </CardContent>
                             </Card>
                           </div>
@@ -11478,7 +12083,7 @@ export default function NOCActivityApp() {
                         <TabsContent value="comments" className="space-y-4 mt-4">
                           <div className="flex items-center gap-2 mb-4">
                             <Switch checked={isPrivateComment} onCheckedChange={setIsPrivateComment} />
-                            <Label className="text-sm flex items-center gap-1">{isPrivateComment ? <><Lock className="w-4 h-4" /> Commentaire privé</> : <><Eye className="w-4 h-4" /> Commentaire public</>}</Label>
+                            <Label className="text-sm flex items-center gap-1">{isPrivateComment ? <><Lock className="w-4 h-4" /> Commentaire privÃ©</> : <><Eye className="w-4 h-4" /> Commentaire public</>}</Label>
                           </div>
                           <div className="flex gap-2">
                             <Textarea
@@ -11501,7 +12106,7 @@ export default function NOCActivityApp() {
                               setTickets(prev => prev.map(t => t.id === selectedTicket.id ? { ...t, comments: [...t.comments, comment] } : t));
                               setSelectedTicket(prev => prev ? { ...prev, comments: [...prev.comments, comment] } : null);
                               setNewTicketComment('');
-                              toast.success('Commentaire ajouté');
+                              toast.success('Commentaire ajoutÃ©');
                             }}>
                               <Send className="w-4 h-4" />
                             </Button>
@@ -11516,7 +12121,7 @@ export default function NOCActivityApp() {
                                   <div className="flex items-center justify-between mb-2">
                                     <div className="flex items-center gap-2">
                                       <span className="font-medium text-foreground">{comment.userName}</span>
-                                      {comment.isPrivate && <Badge variant="outline" className="text-xs border-yellow-400 text-yellow-600 dark:text-yellow-400">Privé</Badge>}
+                                      {comment.isPrivate && <Badge variant="outline" className="text-xs border-yellow-400 text-yellow-600 dark:text-yellow-400">PrivÃ©</Badge>}
                                     </div>
                                     <span className="text-xs text-muted-foreground">{format(comment.createdAt, 'dd/MM/yyyy HH:mm')}</span>
                                   </div>
@@ -11530,12 +12135,12 @@ export default function NOCActivityApp() {
                         <TabsContent value="attachments" className="space-y-4 mt-4">
                           <div className="border-2 border-dashed dark:border-slate-600 rounded-lg p-8 text-center hover:border-cyan-500 transition-colors cursor-pointer">
                             <Upload className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
-                            <p className="text-muted-foreground">Glissez-déposez vos fichiers ici ou cliquez pour parcourir</p>
+                            <p className="text-muted-foreground">Glissez-dÃ©posez vos fichiers ici ou cliquez pour parcourir</p>
                             <p className="text-xs text-muted-foreground mt-1">PDF, Images, Documents (max 10MB)</p>
                           </div>
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                             {selectedTicket.attachments.length === 0 && (
-                              <p className="col-span-full text-center text-muted-foreground py-4">Aucune pièce jointe</p>
+                              <p className="col-span-full text-center text-muted-foreground py-4">Aucune piÃ¨ce jointe</p>
                             )}
                             {selectedTicket.attachments.map(att => (
                               <div key={att.id} className="p-3 border rounded-lg dark:border-slate-700 flex items-center gap-2 bg-slate-50 dark:bg-slate-800">
@@ -11566,7 +12171,7 @@ export default function NOCActivityApp() {
                                       {entry.field && (
                                         <p className="text-sm text-muted-foreground mt-1">
                                           {entry.oldValue && <span className="line-through">{entry.oldValue}</span>}
-                                          {entry.oldValue && entry.newValue && ' → '}
+                                          {entry.oldValue && entry.newValue && ' â†’ '}
                                           {entry.newValue && <span className="font-medium">{entry.newValue}</span>}
                                         </p>
                                       )}
@@ -11580,21 +12185,17 @@ export default function NOCActivityApp() {
 
                         <TabsContent value="resolution" className="space-y-4 mt-4">
                           <Card className="border dark:border-slate-700">
-                            <CardHeader className="pb-2"><CardTitle className="text-sm">Résolution du ticket</CardTitle></CardHeader>
+                            <CardHeader className="pb-2"><CardTitle className="text-sm">RÃ©solution du ticket</CardTitle></CardHeader>
                             <CardContent className="space-y-4">
-                              <Textarea placeholder="Décrivez la résolution du problème..." rows={4} className="border-2 dark:border-slate-600 dark:bg-slate-800" />
+                              <Textarea placeholder="DÃ©crivez la rÃ©solution du problÃ¨me..." rows={4} className="border-2 dark:border-slate-600 dark:bg-slate-800" />
                               <div className="flex gap-2">
                                 <Button className="bg-green-500 hover:bg-green-600 text-white" onClick={() => {
-                                  setTickets(prev => prev.map(t => t.id === selectedTicket.id ? { ...t, status: 'resolved' as TicketStatus, resolvedAt: new Date() } : t));
-                                  setSelectedTicket(prev => prev ? { ...prev, status: 'resolved', resolvedAt: new Date() } : null);
-                                  toast.success('Ticket marqué comme résolu');
+                                  void handleUpdateTicketStatus(selectedTicket, 'resolved');
                                 }}>
-                                  <CheckCircle2 className="w-4 h-4 mr-2" /> Marquer résolu
+                                  <CheckCircle2 className="w-4 h-4 mr-2" /> Marquer rÃ©solu
                                 </Button>
                                 <Button variant="outline" className="border-2" onClick={() => {
-                                  setTickets(prev => prev.map(t => t.id === selectedTicket.id ? { ...t, status: 'closed' as TicketStatus, closedAt: new Date() } : t));
-                                  setSelectedTicket(prev => prev ? { ...prev, status: 'closed', closedAt: new Date() } : null);
-                                  toast.success('Ticket fermé');
+                                  void handleUpdateTicketStatus(selectedTicket, 'closed');
                                 }}>
                                   Fermer le ticket
                                 </Button>
@@ -11609,7 +12210,12 @@ export default function NOCActivityApp() {
               </Dialog>
 
               {/* Dialog Modifier Ticket */}
-              <Dialog open={editTicketOpen} onOpenChange={setEditTicketOpen}>
+              <Dialog open={editTicketOpen} onOpenChange={(open) => {
+                setEditTicketOpen(open);
+                if (!open) {
+                  setIsEditLocalityCreationEnabled(false);
+                }
+              }}>
                 <DialogContent className="max-w-2xl bg-white dark:bg-slate-900 border-2 dark:border-slate-700">
                   <DialogHeader>
                     <DialogTitle className="text-foreground">Modifier le ticket</DialogTitle>
@@ -11639,9 +12245,9 @@ export default function NOCActivityApp() {
                           </Select>
                         </div>
                       </div>
-                      <div className="grid grid-cols-3 gap-4">
+                      <div className="grid grid-cols-4 gap-4">
                         <div className="grid gap-2">
-                          <Label className="text-foreground font-medium">Priorité</Label>
+                          <Label className="text-foreground font-medium">PrioritÃ©</Label>
                           <Select value={editingTicket.priority} onValueChange={(v: TicketPriority) => setEditingTicket({ ...editingTicket, priority: v })}>
                             <SelectTrigger className="border-2 dark:border-slate-600 dark:bg-slate-800">
                               <SelectValue />
@@ -11657,22 +12263,59 @@ export default function NOCActivityApp() {
                           <Label className="text-foreground font-medium">Site</Label>
                           <Select value={editingTicket.site} onValueChange={(v) => setEditingTicket({ ...editingTicket, site: v })}>
                             <SelectTrigger className="border-2 dark:border-slate-600 dark:bg-slate-800">
-                              <SelectValue placeholder="Sélectionner" />
+                              <SelectValue placeholder="SÃ©lectionner" />
                             </SelectTrigger>
                             <SelectContent className="bg-white dark:bg-slate-800">
-                              {SITES_LIST.map(site => (
-                                <SelectItem key={site} value={site}>{site}</SelectItem>
+                              {ticketSiteOptions.map((site) => (
+                                <SelectItem key={site.id} value={site.name}>{site.name}</SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
                         </div>
                         <div className="grid gap-2">
-                          <Label className="text-foreground font-medium">Technicien</Label>
+                          <Label className="text-foreground font-medium">LocalitÃ©</Label>
+                          <Select value={editingTicket.localite} onValueChange={(v) => {
+                            setEditingTicket({ ...editingTicket, localite: v });
+                            setEditTicketLocalityDraft((prev) => ({ ...prev, freeText: v }));
+                          }}>
+                            <SelectTrigger className="border-2 dark:border-slate-600 dark:bg-slate-800">
+                              <SelectValue placeholder="SÃ©lectionner ou saisir" />
+                            </SelectTrigger>
+                            <SelectContent className="bg-white dark:bg-slate-800">
+                              {ticketLocalityOptions.map((locality) => (
+                                <SelectItem key={locality} value={locality}>{locality}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                           <Input
-                            value={editingTicket.technicien}
-                            onChange={(e) => setEditingTicket({ ...editingTicket, technicien: e.target.value })}
+                            value={editTicketLocalityDraft.freeText}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              setEditTicketLocalityDraft((prev) => ({ ...prev, freeText: value }));
+                              setEditingTicket((prev) => prev ? { ...prev, localite: value } : prev);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key !== 'Enter') return;
+                              if (!isEditLocalityCreationEnabled) return;
+                              e.preventDefault();
+                              void createTicketLocality(editTicketLocalityDraft, 'edit');
+                            }}
+                            placeholder={isEditLocalityCreationEnabled ? 'Ou tapez directement la localitÃ© puis EntrÃ©e' : 'Saisie libre (activez le switch pour enregistrer en base)'}
                             className="border-2 dark:border-slate-600 dark:bg-slate-800"
                           />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label className="text-foreground font-medium">Technicien</Label>
+                          <Select value={editingTicket.technicien} onValueChange={(v) => setEditingTicket({ ...editingTicket, technicien: v })}>
+                            <SelectTrigger className="border-2 dark:border-slate-600 dark:bg-slate-800">
+                              <SelectValue placeholder="SÃ©lectionner un technicien" />
+                            </SelectTrigger>
+                            <SelectContent className="bg-white dark:bg-slate-800">
+                              {ticketTechnicianOptions.map((technician) => (
+                                <SelectItem key={technician.id} value={technician.name}>{technician.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </div>
                       </div>
                       <div className="grid gap-2">
@@ -11684,15 +12327,163 @@ export default function NOCActivityApp() {
                           className="border-2 dark:border-slate-600 dark:bg-slate-800"
                         />
                       </div>
+                      <div className="flex items-center justify-between rounded-lg border border-slate-300/70 bg-slate-50/70 px-3 py-2 dark:border-slate-700 dark:bg-slate-800/60">
+                        <div>
+                          <p className="text-sm font-medium text-foreground">CrÃ©er une localitÃ© dans la base</p>
+                          <p className="text-xs text-muted-foreground">Activez pour afficher le formulaire structurÃ©</p>
+                        </div>
+                        <Switch checked={isEditLocalityCreationEnabled} onCheckedChange={setIsEditLocalityCreationEnabled} />
+                      </div>
+                      {isEditLocalityCreationEnabled && (
+                      <Card className="border border-dashed border-cyan-300/70 bg-cyan-50/40 dark:border-cyan-700/70 dark:bg-slate-800/40">
+                        <CardHeader className="pb-3">
+                          <CardTitle className="text-sm text-foreground">CrÃ©er une nouvelle localitÃ©</CardTitle>
+                          <CardDescription>Ajout rapide avec pays, ville et coordonnÃ©es</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div className="grid gap-2">
+                              <Label className="text-foreground text-xs">Pays</Label>
+                              <Select
+                                value={editTicketLocalityDraft.countryCode}
+                                onValueChange={(code) => {
+                                  const country = TICKET_COUNTRIES.find((item) => item.code === code);
+                                  setEditTicketLocalityDraft((prev) => ({
+                                    ...prev,
+                                    countryCode: code,
+                                    countryName: country?.name ?? prev.countryName,
+                                  }));
+                                }}
+                              >
+                                <SelectTrigger className="border dark:border-slate-600 dark:bg-slate-800">
+                                  {(() => {
+                                    const selectedCountry = TICKET_COUNTRIES.find((item) => item.code === editTicketLocalityDraft.countryCode);
+                                    if (!selectedCountry) {
+                                      return <span className="text-muted-foreground">Choisir un pays</span>;
+                                    }
+                                    return <span>{selectedCountry.flag} {selectedCountry.name}</span>;
+                                  })()}
+                                </SelectTrigger>
+                                <SelectContent className="bg-white dark:bg-slate-800">
+                                  {TICKET_COUNTRIES.map((country) => (
+                                    <SelectItem key={country.code} value={country.code}>{country.flag} {country.name}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="grid gap-2">
+                              <Label className="text-foreground text-xs">Ville</Label>
+                              <Input
+                                value={editTicketLocalityDraft.city}
+                                onChange={(e) => setEditTicketLocalityDraft((prev) => ({ ...prev, city: e.target.value }))}
+                                placeholder="Ex: Kinshasa"
+                                className="border dark:border-slate-600 dark:bg-slate-800"
+                              />
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div className="grid gap-2">
+                              <Label className="text-foreground text-xs">Arrondissement</Label>
+                              <Input
+                                value={editTicketLocalityDraft.arrondissement}
+                                onChange={(e) => setEditTicketLocalityDraft((prev) => ({ ...prev, arrondissement: e.target.value }))}
+                                placeholder="Ex: Gombe"
+                                className="border dark:border-slate-600 dark:bg-slate-800"
+                              />
+                            </div>
+                            <div className="grid gap-2">
+                              <Label className="text-foreground text-xs">Quartier</Label>
+                              <Input
+                                value={editTicketLocalityDraft.quartier}
+                                onChange={(e) => setEditTicketLocalityDraft((prev) => ({ ...prev, quartier: e.target.value }))}
+                                placeholder="Ex: Basoko"
+                                className="border dark:border-slate-600 dark:bg-slate-800"
+                              />
+                            </div>
+                          </div>
+                          <div className="grid gap-2">
+                            <Label className="text-foreground text-xs">Adresse</Label>
+                            <Input
+                              value={editTicketLocalityDraft.address}
+                              onChange={(e) => setEditTicketLocalityDraft((prev) => ({ ...prev, address: e.target.value }))}
+                              placeholder="Ex: Avenue Colonel Mondjiba, nÂ°12"
+                              className="border dark:border-slate-600 dark:bg-slate-800"
+                            />
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div className="grid gap-2">
+                              <Label className="text-foreground text-xs">Latitude</Label>
+                              <Input
+                                value={editTicketLocalityDraft.latitude}
+                                onChange={(e) => setEditTicketLocalityDraft((prev) => ({ ...prev, latitude: e.target.value }))}
+                                placeholder="Ex: -4.325"
+                                className="border dark:border-slate-600 dark:bg-slate-800"
+                              />
+                            </div>
+                            <div className="grid gap-2">
+                              <Label className="text-foreground text-xs">Longitude</Label>
+                              <Input
+                                value={editTicketLocalityDraft.longitude}
+                                onChange={(e) => setEditTicketLocalityDraft((prev) => ({ ...prev, longitude: e.target.value }))}
+                                placeholder="Ex: 15.322"
+                                className="border dark:border-slate-600 dark:bg-slate-800"
+                              />
+                            </div>
+                          </div>
+                          <div className="flex justify-end">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              disabled={isCreatingLocality}
+                              onClick={() => void createTicketLocality(editTicketLocalityDraft, 'edit')}
+                              className="border-cyan-300 text-cyan-700 hover:bg-cyan-100 dark:border-cyan-700 dark:text-cyan-300 dark:hover:bg-cyan-900/40"
+                            >
+                              {isCreatingLocality ? 'Enregistrement...' : 'Ajouter cette localitÃ©'}
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                      )}
                     </div>
                   )}
                   <DialogFooter>
                     <Button variant="outline" className="border-2" onClick={() => setEditTicketOpen(false)}>Annuler</Button>
-                    <Button className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white" onClick={() => {
+                    <Button className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white" onClick={async () => {
                       if (editingTicket) {
-                        setTickets(prev => prev.map(t => t.id === editingTicket.id ? { ...editingTicket, updatedAt: new Date() } : t));
-                        setEditTicketOpen(false);
-                        toast.success('Ticket modifié');
+                        try {
+                          const selectedSites = resolveTicketSiteSelection(editingTicket.site);
+                          const selectedTechnicians = resolveTicketTechnicians(editingTicket.technicien);
+                          const response = await fetch(`/api/tickets/${editingTicket.id}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              objet: editingTicket.objet,
+                              description: editingTicket.description,
+                              status: mapLegacyTicketStatusToApi(editingTicket.status),
+                              priority: mapLegacyTicketPriorityToApi(editingTicket.priority),
+                              siteIds: selectedSites.map((site) => site.id),
+                              siteNames: selectedSites.map((site) => site.name),
+                              localities: splitTicketValues(editingTicket.localite),
+                              technicianIds: selectedTechnicians.map((technician) => technician.id),
+                              technicianNames: selectedTechnicians.map((technician) => ({ id: technician.id, name: technician.name })),
+                              updatedBy: user?.name,
+                              updatedById: user?.id,
+                            }),
+                          });
+
+                          if (!response.ok) {
+                            throw new Error('ticket_update_failed');
+                          }
+
+                          const updatedTicket = mapApiTicketToLegacy(await response.json());
+                          setTickets((prev) => prev.map((ticket) => ticket.id === updatedTicket.id ? updatedTicket : ticket));
+                          setSelectedTicket((prev) => prev?.id === updatedTicket.id ? updatedTicket : prev);
+                          setEditTicketOpen(false);
+                          toast.success('Ticket modifiÃ©');
+                        } catch (error) {
+                          console.error('[tickets page] update ticket', error);
+                          toast.error('Impossible de modifier le ticket');
+                        }
                       }
                     }}>
                       Sauvegarder
@@ -11749,7 +12540,7 @@ export default function NOCActivityApp() {
                         <nav className="px-2 py-1 space-y-0.5">
                           {/* Primary Folders */}
                           {[
-                            { folder: 'inbox' as MessageFolder, icon: Inbox, label: 'Boîte de réception', count: messages.filter(m => m.folder === 'inbox' && !m.isRead).length },
+                            { folder: 'inbox' as MessageFolder, icon: Inbox, label: 'BoÃ®te de rÃ©ception', count: messages.filter(m => m.folder === 'inbox' && !m.isRead).length },
                             { folder: 'starred' as MessageFolder, icon: Star, label: 'Suivis', count: messages.filter(m => m.isStarred).length },
                           ].map((item) => (
                             <button
@@ -11800,7 +12591,7 @@ export default function NOCActivityApp() {
                           
                           {/* Other Folders */}
                           {[
-                            { folder: 'sent' as MessageFolder, icon: Send, label: 'Envoyés', count: messages.filter(m => m.folder === 'sent').length },
+                            { folder: 'sent' as MessageFolder, icon: Send, label: 'EnvoyÃ©s', count: messages.filter(m => m.folder === 'sent').length },
                             { folder: 'drafts' as MessageFolder, icon: FileText, label: 'Brouillons', count: messages.filter(m => m.folder === 'drafts').length },
                             { folder: 'spam' as MessageFolder, icon: AlertTriangle, label: 'Spam', count: messages.filter(m => m.folder === 'spam').length },
                             { folder: 'trash' as MessageFolder, icon: Trash2, label: 'Corbeille', count: messages.filter(m => m.folder === 'trash').length },
@@ -11835,7 +12626,7 @@ export default function NOCActivityApp() {
                         {!sidebarCollapsed && (
                           <div className="px-3 py-2 border-t mt-2">
                             <div className="flex items-center justify-between mb-2">
-                              <p className="text-xs font-medium text-muted-foreground">Libellés</p>
+                              <p className="text-xs font-medium text-muted-foreground">LibellÃ©s</p>
                               <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={() => setLabelDialogOpen(true)}>
                                 <Plus className="w-3 h-3" />
                               </Button>
@@ -11854,7 +12645,7 @@ export default function NOCActivityApp() {
                               </button>
                             ))}
                             {emailLabels.length === 0 && (
-                              <p className="text-xs text-muted-foreground px-2">Aucun libellé</p>
+                              <p className="text-xs text-muted-foreground px-2">Aucun libellÃ©</p>
                             )}
                           </div>
                         )}
@@ -11865,7 +12656,7 @@ export default function NOCActivityApp() {
                         <div className="p-3 border-t">
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <span>{messages.filter(m => m.folder === 'inbox').length} messages</span>
-                            <span>•</span>
+                            <span>â€¢</span>
                             <span>{messages.filter(m => m.folder === 'inbox' && !m.isRead).length} non lus</span>
                           </div>
                         </div>
@@ -11905,10 +12696,10 @@ export default function NOCActivityApp() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="start">
                             <DropdownMenuItem onClick={() => setSelectedMessages(new Set(getFilteredMessages().map(m => m.id)))}>
-                              Tout sélectionner
+                              Tout sÃ©lectionner
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => setSelectedMessages(new Set())}>
-                              Tout désélectionner
+                              Tout dÃ©sÃ©lectionner
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={() => setSelectedMessages(new Set(getFilteredMessages().filter(m => !m.isRead).map(m => m.id)))}>
@@ -11927,7 +12718,7 @@ export default function NOCActivityApp() {
                         </DropdownMenu>
                         
                         {/* Refresh */}
-                        <Button variant="ghost" size="sm" onClick={() => toast.success('Messages actualisés')}>
+                        <Button variant="ghost" size="sm" onClick={() => toast.success('Messages actualisÃ©s')}>
                           <RefreshCw className="w-4 h-4" />
                         </Button>
                         
@@ -11937,21 +12728,21 @@ export default function NOCActivityApp() {
                             <Button variant="ghost" size="sm" onClick={() => {
                               setMessages(prev => prev.map(m => selectedMessages.has(m.id) ? {...m, folder: 'trash'} : m));
                               setSelectedMessages(new Set());
-                              toast.success(`${selectedMessages.size} message(s) supprimé(s)`);
+                              toast.success(`${selectedMessages.size} message(s) supprimÃ©(s)`);
                             }}>
                               <Trash2 className="w-4 h-4" />
                             </Button>
                             <Button variant="ghost" size="sm" onClick={() => {
                               setMessages(prev => prev.map(m => selectedMessages.has(m.id) ? {...m, isRead: true} : m));
                               setSelectedMessages(new Set());
-                              toast.success('Messages marqués comme lus');
+                              toast.success('Messages marquÃ©s comme lus');
                             }}>
                               <Mail className="w-4 h-4" />
                             </Button>
                             <Button variant="ghost" size="sm" onClick={() => {
                               setMessages(prev => prev.map(m => selectedMessages.has(m.id) ? {...m, folder: 'spam'} : m));
                               setSelectedMessages(new Set());
-                              toast.success('Messages signalés comme spam');
+                              toast.success('Messages signalÃ©s comme spam');
                             }}>
                               <AlertTriangle className="w-4 h-4" />
                             </Button>
@@ -11986,14 +12777,14 @@ export default function NOCActivityApp() {
                                   <div className="grid gap-2">
                                     <Label className="text-xs">De</Label>
                                     <Input 
-                                      placeholder="Expéditeur..." 
+                                      placeholder="ExpÃ©diteur..." 
                                       value={advancedSearchFilters.from}
                                       onChange={(e) => setAdvancedSearchFilters(prev => ({...prev, from: e.target.value}))}
                                       className="h-8"
                                     />
                                   </div>
                                   <div className="grid gap-2">
-                                    <Label className="text-xs">À</Label>
+                                    <Label className="text-xs">Ã€</Label>
                                     <Input 
                                       placeholder="Destinataire..." 
                                       value={advancedSearchFilters.to}
@@ -12015,7 +12806,7 @@ export default function NOCActivityApp() {
                                       checked={advancedSearchFilters.hasAttachment}
                                       onCheckedChange={(checked) => setAdvancedSearchFilters(prev => ({...prev, hasAttachment: !!checked}))}
                                     />
-                                    <Label className="text-xs">Avec pièce jointe</Label>
+                                    <Label className="text-xs">Avec piÃ¨ce jointe</Label>
                                   </div>
                                   <div className="flex gap-2">
                                     <Button size="sm" onClick={() => setAdvancedSearchOpen(false)} className="flex-1">
@@ -12054,7 +12845,7 @@ export default function NOCActivityApp() {
                               <DropdownMenuItem onClick={() => setDisplayDensity('default')}>
                                 <div className="flex items-center gap-2">
                                   {displayDensity === 'default' && <Check className="w-4 h-4" />}
-                                  <span className={displayDensity === 'default' ? '' : 'ml-6'}>Par défaut</span>
+                                  <span className={displayDensity === 'default' ? '' : 'ml-6'}>Par dÃ©faut</span>
                                 </div>
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => setDisplayDensity('comfortable')}>
@@ -12066,7 +12857,7 @@ export default function NOCActivityApp() {
                               <DropdownMenuSeparator />
                               <DropdownMenuItem onClick={() => setGmailSettingsOpen(true)}>
                                 <Settings className="w-4 h-4 mr-2" />
-                                Paramètres
+                                ParamÃ¨tres
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -12131,7 +12922,7 @@ export default function NOCActivityApp() {
                               <DropdownMenuSeparator />
                               <DropdownMenuItem onClick={() => setGmailSettingsOpen(true)}>
                                 <Settings className="w-4 h-4 mr-2" />
-                                Paramètres
+                                ParamÃ¨tres
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => setProfileDialogOpen(true)}>
                                 <User className="w-4 h-4 mr-2" />
@@ -12140,7 +12931,7 @@ export default function NOCActivityApp() {
                               <DropdownMenuSeparator />
                               <DropdownMenuItem onClick={handleLogout}>
                                 <LogOut className="w-4 h-4 mr-2" />
-                                Déconnexion
+                                DÃ©connexion
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -12161,7 +12952,7 @@ export default function NOCActivityApp() {
                               <Button variant="ghost" size="sm" onClick={() => {
                                 const isArchived = selectedMessage.folder === 'archived';
                                 setMessages(prev => prev.map(m => m.id === selectedMessage.id ? {...m, folder: isArchived ? 'inbox' : 'archived'} : m));
-                                toast.success(isArchived ? 'Message désarchivé' : 'Message archivé');
+                                toast.success(isArchived ? 'Message dÃ©sarchivÃ©' : 'Message archivÃ©');
                               }}>
                                 <Archive className="w-4 h-4" />
                               </Button>
@@ -12180,7 +12971,7 @@ export default function NOCActivityApp() {
                                   newImportant.add(selectedMessage.id);
                                 }
                                 setImportantEmails(newImportant);
-                                toast.success(isImportant ? 'Marqué comme non important' : 'Marqué comme important');
+                                toast.success(isImportant ? 'MarquÃ© comme non important' : 'MarquÃ© comme important');
                               }}>
                                 <AlertCircle className={`w-4 h-4 ${importantEmails.has(selectedMessage.id) ? 'text-yellow-500 fill-yellow-500' : ''}`} />
                               </Button>
@@ -12207,30 +12998,30 @@ export default function NOCActivityApp() {
                                     setReplyToMessage(selectedMessage);
                                     setComposeOpen(true);
                                   }}>
-                                    <Reply className="w-4 h-4 mr-2" /> Répondre
+                                    <Reply className="w-4 h-4 mr-2" /> RÃ©pondre
                                   </DropdownMenuItem>
                                   <DropdownMenuItem onClick={() => {
                                     setForwardMessage(selectedMessage);
                                     setComposeOpen(true);
                                   }}>
-                                    <Forward className="w-4 h-4 mr-2" /> Transférer
+                                    <Forward className="w-4 h-4 mr-2" /> TransfÃ©rer
                                   </DropdownMenuItem>
                                   <DropdownMenuSeparator />
                                   <DropdownMenuItem onClick={() => {
                                     const snoozeDate = new Date(Date.now() + 3600000);
                                     setSnoozedEmails(prev => new Map(prev).set(selectedMessage.id, snoozeDate));
-                                    toast.success('Message reporté à ' + format(snoozeDate, 'HH:mm'));
+                                    toast.success('Message reportÃ© Ã  ' + format(snoozeDate, 'HH:mm'));
                                   }}>
                                     <Clock className="w-4 h-4 mr-2" /> Reporter
                                   </DropdownMenuItem>
                                   <DropdownMenuItem onClick={() => setLabelDialogOpen(true)}>
-                                    <Tag className="w-4 h-4 mr-2" /> Ajouter un libellé
+                                    <Tag className="w-4 h-4 mr-2" /> Ajouter un libellÃ©
                                   </DropdownMenuItem>
                                   <DropdownMenuSeparator />
                                   <DropdownMenuItem onClick={() => {
                                     setMessages(prev => prev.map(m => m.id === selectedMessage.id ? {...m, folder: 'trash'} : m));
                                     setSelectedMessage(null);
-                                    toast.success('Message supprimé');
+                                    toast.success('Message supprimÃ©');
                                   }} className="text-red-600">
                                     <Trash2 className="w-4 h-4 mr-2" /> Supprimer
                                   </DropdownMenuItem>
@@ -12254,7 +13045,7 @@ export default function NOCActivityApp() {
                                       <span className="text-sm text-muted-foreground">&lt;{selectedMessage.from.email}&gt;</span>
                                     </div>
                                     <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
-                                      <span>À: {selectedMessage.to.map(t => t.name).join(', ')}</span>
+                                      <span>Ã€: {selectedMessage.to.map(t => t.name).join(', ')}</span>
                                       {selectedMessage.cc.length > 0 && (
                                         <span>Cc: {selectedMessage.cc.map(c => c.name).join(', ')}</span>
                                       )}
@@ -12274,7 +13065,7 @@ export default function NOCActivityApp() {
                                   <div className="mt-6 pt-4 border-t">
                                     <p className="text-sm font-medium text-muted-foreground mb-3">
                                       <Paperclip className="w-4 h-4 inline mr-2" />
-                                      Pièces jointes ({selectedMessage.attachments.length})
+                                      PiÃ¨ces jointes ({selectedMessage.attachments.length})
                                     </p>
                                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                                       {selectedMessage.attachments.map((att) => (
@@ -12303,7 +13094,7 @@ export default function NOCActivityApp() {
                                     setComposeOpen(true);
                                   }}
                                 >
-                                  <Reply className="w-4 h-4" /> Répondre
+                                  <Reply className="w-4 h-4" /> RÃ©pondre
                                 </Button>
                                 <Button 
                                   variant="outline" 
@@ -12313,7 +13104,7 @@ export default function NOCActivityApp() {
                                     setComposeOpen(true);
                                   }}
                                 >
-                                  <Users className="w-4 h-4" /> Répondre à tous
+                                  <Users className="w-4 h-4" /> RÃ©pondre Ã  tous
                                 </Button>
                                 <Button 
                                   variant="outline" 
@@ -12323,7 +13114,7 @@ export default function NOCActivityApp() {
                                     setComposeOpen(true);
                                   }}
                                 >
-                                  <Forward className="w-4 h-4" /> Transférer
+                                  <Forward className="w-4 h-4" /> TransfÃ©rer
                                 </Button>
                               </div>
                             </div>
@@ -12508,7 +13299,7 @@ export default function NOCActivityApp() {
                         <div className="flex items-center justify-between">
                           <DialogTitle className="flex items-center gap-2">
                             <Mail className="w-5 h-5 text-cyan-500" />
-                            {replyToMessage ? 'Répondre' : forwardMessage ? 'Transférer' : 'Nouveau message'}
+                            {replyToMessage ? 'RÃ©pondre' : forwardMessage ? 'TransfÃ©rer' : 'Nouveau message'}
                           </DialogTitle>
                           <div className="flex items-center gap-1">
                             <Button variant="ghost" size="sm" onClick={() => setComposeMinimized(!composeMinimized)}>
@@ -12526,7 +13317,7 @@ export default function NOCActivityApp() {
                           <div className="flex-1 overflow-y-auto space-y-2 py-2">
                             {/* To field with autocomplete */}
                             <div className="flex items-center gap-2 border-b pb-2">
-                              <div className="w-16 text-sm text-muted-foreground flex-shrink-0">À</div>
+                              <div className="w-16 text-sm text-muted-foreground flex-shrink-0">Ã€</div>
                               <div className="flex-1 flex flex-wrap gap-1 items-center">
                                 {newEmail.to.map((recipient, i) => (
                                   <Badge key={i} variant="secondary" className="gap-1">
@@ -12760,7 +13551,7 @@ export default function NOCActivityApp() {
                             <Textarea
                               value={newEmail.body}
                               onChange={(e) => setNewEmail(prev => ({...prev, body: e.target.value}))}
-                              placeholder="Écrivez votre message..."
+                              placeholder="Ã‰crivez votre message..."
                               className={`min-h-[200px] flex-1 border-0 focus-visible:ring-0 resize-none ${richTextStyle.bold ? 'font-bold' : ''} ${richTextStyle.italic ? 'italic' : ''} ${richTextStyle.underline ? 'underline' : ''}`}
                               style={{ 
                                 fontFamily: richTextStyle.fontFamily, 
@@ -12817,7 +13608,7 @@ export default function NOCActivityApp() {
                                           tomorrow.setDate(tomorrow.getDate() + 1);
                                           tomorrow.setHours(8, 0, 0, 0);
                                           setNewEmail(prev => ({...prev, scheduledAt: tomorrow}));
-                                          toast.success('Envoi planifié pour demain 8h');
+                                          toast.success('Envoi planifiÃ© pour demain 8h');
                                         }}>
                                           Demain 8h
                                         </Button>
@@ -12826,7 +13617,7 @@ export default function NOCActivityApp() {
                                           monday.setDate(monday.getDate() + (1 + 7 - monday.getDay()) % 7);
                                           monday.setHours(9, 0, 0, 0);
                                           setNewEmail(prev => ({...prev, scheduledAt: monday}));
-                                          toast.success('Envoi planifié pour lundi 9h');
+                                          toast.success('Envoi planifiÃ© pour lundi 9h');
                                         }}>
                                           Lundi 9h
                                         </Button>
@@ -12852,7 +13643,7 @@ export default function NOCActivityApp() {
                                       <CheckCheck className="w-4 h-4" />
                                     </Button>
                                   </TooltipTrigger>
-                                  <TooltipContent>Accusé de réception</TooltipContent>
+                                  <TooltipContent>AccusÃ© de rÃ©ception</TooltipContent>
                                 </Tooltip>
                               </div>
                               
@@ -12880,7 +13671,7 @@ export default function NOCActivityApp() {
                                   };
                                   setMessages(prev => [draft, ...prev]);
                                   setComposeOpen(false);
-                                  toast.success('Brouillon enregistré');
+                                  toast.success('Brouillon enregistrÃ©');
                                 }}>
                                   Enregistrer
                                 </Button>
@@ -12947,7 +13738,7 @@ export default function NOCActivityApp() {
                                     });
                                     setReplyToMessage(null);
                                     setForwardMessage(null);
-                                    toast.success('Message envoyé');
+                                    toast.success('Message envoyÃ©');
                                   }}
                                 >
                                   <Send className="w-4 h-4 mr-2" /> Envoyer
@@ -12964,11 +13755,11 @@ export default function NOCActivityApp() {
                   <Dialog open={labelDialogOpen} onOpenChange={setLabelDialogOpen}>
                     <DialogContent className="max-w-sm">
                       <DialogHeader>
-                        <DialogTitle>Nouveau libellé</DialogTitle>
+                        <DialogTitle>Nouveau libellÃ©</DialogTitle>
                       </DialogHeader>
                       <div className="space-y-3 py-2">
                         <div className="grid gap-2">
-                          <Label>Nom du libellé</Label>
+                          <Label>Nom du libellÃ©</Label>
                           <Input value={newLabelName} onChange={(e) => setNewLabelName(e.target.value)} placeholder="Ex: Important" />
                         </div>
                         <div className="grid gap-2">
@@ -13002,10 +13793,10 @@ export default function NOCActivityApp() {
                             setNewLabelName('');
                             setNewLabelColor('#3B82F6');
                             setLabelDialogOpen(false);
-                            toast.success('Libellé créé');
+                            toast.success('LibellÃ© crÃ©Ã©');
                           }}
                         >
-                          Créer
+                          CrÃ©er
                         </Button>
                       </DialogFooter>
                     </DialogContent>
@@ -13015,7 +13806,7 @@ export default function NOCActivityApp() {
                   <Dialog open={gmailSettingsOpen} onOpenChange={setGmailSettingsOpen}>
                     <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
                       <DialogHeader>
-                        <DialogTitle>Paramètres de messagerie</DialogTitle>
+                        <DialogTitle>ParamÃ¨tres de messagerie</DialogTitle>
                       </DialogHeader>
                       <ScrollArea className="flex-1">
                         <div className="space-y-6 py-4">
@@ -13030,7 +13821,7 @@ export default function NOCActivityApp() {
                                 <Moon className="w-4 h-4 mr-2" /> Sombre
                               </Button>
                               <Button variant={theme === 'system' ? 'default' : 'outline'} size="sm" onClick={() => setTheme('system')}>
-                                <Monitor className="w-4 h-4 mr-2" /> Système
+                                <Monitor className="w-4 h-4 mr-2" /> SystÃ¨me
                               </Button>
                             </div>
                           </div>
@@ -13039,14 +13830,14 @@ export default function NOCActivityApp() {
                           
                           {/* Display Density */}
                           <div className="space-y-2">
-                            <h4 className="font-medium">Densité d'affichage</h4>
+                            <h4 className="font-medium">DensitÃ© d'affichage</h4>
                             <Select value={displayDensity} onValueChange={(v) => setDisplayDensity(v as 'compact' | 'default' | 'comfortable')}>
                               <SelectTrigger className="w-48">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="compact">Compact</SelectItem>
-                                <SelectItem value="default">Par défaut</SelectItem>
+                                <SelectItem value="default">Par dÃ©faut</SelectItem>
                                 <SelectItem value="comfortable">Confortable</SelectItem>
                               </SelectContent>
                             </Select>
@@ -13070,7 +13861,7 @@ export default function NOCActivityApp() {
                           {/* Vacation Responder */}
                           <div className="space-y-2">
                             <div className="flex items-center justify-between">
-                              <h4 className="font-medium">Répondeur d'absence</h4>
+                              <h4 className="font-medium">RÃ©pondeur d'absence</h4>
                               <Switch 
                                 checked={vacationResponder.enabled}
                                 onCheckedChange={(checked) => setVacationResponder(prev => ({...prev, enabled: checked}))}
@@ -13122,8 +13913,8 @@ export default function NOCActivityApp() {
                             <h4 className="font-medium">Raccourcis clavier</h4>
                             <div className="grid grid-cols-2 gap-2 text-sm">
                               <div className="flex justify-between"><span>Nouveau message</span><kbd className="bg-muted px-2 py-0.5 rounded text-xs">C</kbd></div>
-                              <div className="flex justify-between"><span>Répondre</span><kbd className="bg-muted px-2 py-0.5 rounded text-xs">R</kbd></div>
-                              <div className="flex justify-between"><span>Transférer</span><kbd className="bg-muted px-2 py-0.5 rounded text-xs">F</kbd></div>
+                              <div className="flex justify-between"><span>RÃ©pondre</span><kbd className="bg-muted px-2 py-0.5 rounded text-xs">R</kbd></div>
+                              <div className="flex justify-between"><span>TransfÃ©rer</span><kbd className="bg-muted px-2 py-0.5 rounded text-xs">F</kbd></div>
                               <div className="flex justify-between"><span>Supprimer</span><kbd className="bg-muted px-2 py-0.5 rounded text-xs">#</kbd></div>
                               <div className="flex justify-between"><span>Archiver</span><kbd className="bg-muted px-2 py-0.5 rounded text-xs">E</kbd></div>
                               <div className="flex justify-between"><span>Marquer comme lu</span><kbd className="bg-muted px-2 py-0.5 rounded text-xs">Shift+I</kbd></div>
@@ -13135,7 +13926,7 @@ export default function NOCActivityApp() {
                         <Button variant="outline" onClick={() => setGmailSettingsOpen(false)}>Annuler</Button>
                         <Button onClick={() => {
                           setGmailSettingsOpen(false);
-                          toast.success('Paramètres enregistrés');
+                          toast.success('ParamÃ¨tres enregistrÃ©s');
                         }}>
                           Enregistrer
                         </Button>
@@ -13145,12 +13936,108 @@ export default function NOCActivityApp() {
                 </motion.div>
               )}
               
+              {/* NOC */}
+              {isNocSection(currentTab) && (
+                <motion.div key={currentTab} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-4">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                    <div>
+                      <h1 className="text-2xl lg:text-3xl font-bold">{NOC_SIDEBAR_ITEMS.find((item) => item.id === currentTab)?.label ?? 'NOC'}</h1>
+                      <p className="text-muted-foreground">
+                        {NOC_SIDEBAR_ITEMS.find((item) => item.id === currentTab)?.description ?? 'Plateforme de supervision temps reel'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {currentTab === 'noc_monitoring' && (
+                    <div className="space-y-4">
+                      <NocMonitoringPanel
+                        data={nocOverviewData as {
+                          generatedAt?: string;
+                          networkHealth?: { upPercent?: number; upHosts?: number; downHosts?: number };
+                          clients?: { activeClients?: number; downClients?: number; saturatedClients?: number };
+                          alerts?: { critical?: number; warning?: number; info?: number };
+                          sla?: { monthlyPercent?: number; downtimeMinutes?: number };
+                          recentEvents?: Array<{ eventid?: string; title?: string; severity?: string; timestamp?: number }>;
+                        } | null}
+                        loading={nocOverviewLoading}
+                        onRefresh={refreshNocOverview}
+                        onKpiClick={handleMonitoringKpiClick}
+                      />
+                      <NocMonitoringDashboard
+                        initialScope={monitoringScope}
+                        drilldownKey={monitoringDrilldown}
+                      />
+                    </div>
+                  )}
+
+                  {currentTab === 'noc_clients' && (
+                    <NocClientsPanel
+                      connectedUserRole={user?.role ?? null}
+                      connectedUserId={user?.id ?? null}
+                      connectedUserName={user?.name ?? null}
+                    />
+                  )}
+
+                  {currentTab === 'noc_reporting' && (
+                    <div className="space-y-4">
+                      <NocReportingPanel
+                        report={nocReportData as {
+                          periodLabel?: string;
+                          generatedAt?: string;
+                          totalConsumptionGb?: number;
+                          availabilityPercent?: number;
+                          topClients?: Array<{ clientRef: string; consumptionGb: number }>;
+                        } | null}
+                        onGenerate={generateConsumptionReport}
+                      />
+                      <NocGenericSectionPanel
+                        sectionKey="reporting"
+                        title="Registre Reporting"
+                        subtitle="Creation et suivi des demandes de rapport et analyses post-generation."
+                      />
+                    </div>
+                  )}
+
+                  {currentTab === 'noc_callcenter' && (
+                    <NocCallCenterPanel />
+                  )}
+
+                  {currentTab === 'noc_equipement' && (
+                    <NocGenericSectionPanel
+                      sectionKey="equipement"
+                      title="Equipements"
+                      subtitle="Inventaire des ONT/ONU/OLT/switch/routeur lies aux clients."
+                    />
+                  )}
+
+                  {currentTab === 'noc_sites' && (
+                    <NocSitesPanel />
+                  )}
+
+                  {currentTab === 'noc_partenaire' && (
+                    <NocGenericSectionPanel
+                      sectionKey="partenaire"
+                      title="Partenaires"
+                      subtitle="Dependencies operateurs tiers et supervision interconnexions."
+                    />
+                  )}
+
+                  {currentTab === 'noc_fai' && (
+                    <NocGenericSectionPanel
+                      sectionKey="fai"
+                      title="FAI"
+                      subtitle="Suivi transit, peering, latence et pertes par fournisseur."
+                    />
+                  )}
+                </motion.div>
+              )}
+
               {/* Supervision */}
               {currentTab === 'supervision' && (user?.role === 'RESPONSABLE' || user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && (
                 <motion.div key="supervision" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-4">
                   <div>
-                    <h1 className="text-2xl lg:text-3xl font-bold">Supervision Temps Réel</h1>
-                    <p className="text-muted-foreground">Vue en direct de l'activité du NOC</p>
+                    <h1 className="text-2xl lg:text-3xl font-bold">Supervision Temps RÃ©el</h1>
+                    <p className="text-muted-foreground">Vue en direct de l'activitÃ© du NOC</p>
                   </div>
                   
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -13195,13 +14082,13 @@ export default function NOCActivityApp() {
                 </motion.div>
               )}
               
-              {/* Gestion utilisateurs - page dédiée */}
+              {/* Gestion utilisateurs - page dÃ©diÃ©e */}
               {currentTab === 'admin_users' && canManageUsers && (
                 <motion.div key="admin_users" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-4">
                   <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
                     <div>
                       <h1 className="text-2xl lg:text-3xl font-bold">Gestion des utilisateurs</h1>
-                      <p className="text-muted-foreground">Administration complète des comptes, rôles, accès et sécurité</p>
+                      <p className="text-muted-foreground">Administration complÃ¨te des comptes, rÃ´les, accÃ¨s et sÃ©curitÃ©</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <Button variant="outline" onClick={() => void syncUsersFromApi()} disabled={isUsersSyncing}>
@@ -13210,18 +14097,18 @@ export default function NOCActivityApp() {
                       </Button>
                       <Button variant="outline" onClick={() => setCurrentTabSafely('admin')}>
                         <Settings className="w-4 h-4 mr-2" />
-                        Aller à Administration
+                        Aller Ã  Administration
                       </Button>
                     </div>
                   </div>
 
                   <Card>
                     <CardHeader className="pb-2 pt-4">
-                      <CardTitle className="text-base">Créer un utilisateur</CardTitle>
-                      <CardDescription>Utilisez le formulaire popup standard pour créer un nouveau compte.</CardDescription>
+                      <CardTitle className="text-base">CrÃ©er un utilisateur</CardTitle>
+                      <CardDescription>Utilisez le formulaire popup standard pour crÃ©er un nouveau compte.</CardDescription>
                     </CardHeader>
                     <CardContent className="pb-4 flex items-center justify-between gap-3">
-                      <p className="text-sm text-muted-foreground">La création s'enregistre directement en base de données.</p>
+                      <p className="text-sm text-muted-foreground">La crÃ©ation s'enregistre directement en base de donnÃ©es.</p>
                       <Button onClick={openCreateUserDialog}>
                         <Plus className="w-4 h-4 mr-2" /> Nouveau compte
                       </Button>
@@ -13230,8 +14117,8 @@ export default function NOCActivityApp() {
 
                   <Card>
                     <CardHeader className="pb-2 pt-4">
-                      <CardTitle className="text-base">Répertoire utilisateurs</CardTitle>
-                      <CardDescription>Gérez les rôles, blocages, réinitialisations et suppressions.</CardDescription>
+                      <CardTitle className="text-base">RÃ©pertoire utilisateurs</CardTitle>
+                      <CardDescription>GÃ©rez les rÃ´les, blocages, rÃ©initialisations et suppressions.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4 pb-4">
                       <div className="flex flex-col gap-3 md:flex-row">
@@ -13243,10 +14130,10 @@ export default function NOCActivityApp() {
                         />
                         <Select value={roleFilter} onValueChange={setRoleFilter}>
                           <SelectTrigger className="md:w-[220px]">
-                            <SelectValue placeholder="Filtrer par rôle" />
+                            <SelectValue placeholder="Filtrer par rÃ´le" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="all">Tous les rôles</SelectItem>
+                            <SelectItem value="all">Tous les rÃ´les</SelectItem>
                             <SelectItem value="SUPER_ADMIN">Super Admin</SelectItem>
                             <SelectItem value="ADMIN">Admin</SelectItem>
                             <SelectItem value="RESPONSABLE">Responsable</SelectItem>
@@ -13270,8 +14157,8 @@ export default function NOCActivityApp() {
                                 <p className="text-xs text-muted-foreground truncate">{u.email}</p>
                               </div>
                               <Badge className={ROLE_CONFIG[u.role].color}>{ROLE_CONFIG[u.role].label}</Badge>
-                              {u.isBlocked && <Badge variant="destructive">Bloqué</Badge>}
-                              {u.mustChangePassword && <Badge variant="outline" className="text-yellow-600">Mot de passe à changer</Badge>}
+                              {u.isBlocked && <Badge variant="destructive">BloquÃ©</Badge>}
+                              {u.mustChangePassword && <Badge variant="outline" className="text-yellow-600">Mot de passe Ã  changer</Badge>}
                             </div>
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 lg:w-[860px]">
@@ -13289,7 +14176,7 @@ export default function NOCActivityApp() {
                                 disabled={Boolean(usersActionInProgress) || (u.role === 'SUPER_ADMIN' && user?.id !== u.id)}
                               >
                                 <SelectTrigger className="h-9 text-xs">
-                                  <SelectValue placeholder="Changer le rôle" />
+                                  <SelectValue placeholder="Changer le rÃ´le" />
                                 </SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="USER">Utilisateur</SelectItem>
@@ -13306,7 +14193,7 @@ export default function NOCActivityApp() {
                                 onClick={() => void handleToggleBlockUser(u)}
                                 disabled={Boolean(usersActionInProgress) || u.role === 'SUPER_ADMIN'}
                               >
-                                {u.isBlocked ? 'Débloquer' : 'Bloquer'}
+                                {u.isBlocked ? 'DÃ©bloquer' : 'Bloquer'}
                               </Button>
                               <Button
                                 variant="outline"
@@ -13319,7 +14206,7 @@ export default function NOCActivityApp() {
                                 }}
                                 disabled={Boolean(usersActionInProgress) || (u.role === 'SUPER_ADMIN' && user?.id !== u.id)}
                               >
-                                Réinitialiser MDP
+                                RÃ©initialiser MDP
                               </Button>
                               <Button
                                 variant="destructive"
@@ -13338,13 +14225,13 @@ export default function NOCActivityApp() {
 
                   <Card>
                     <CardHeader className="pb-2 pt-4">
-                      <CardTitle className="text-base">Journal d'activité</CardTitle>
-                      <CardDescription>Traçabilité des actions sensibles réalisées sur les comptes.</CardDescription>
+                      <CardTitle className="text-base">Journal d'activitÃ©</CardTitle>
+                      <CardDescription>TraÃ§abilitÃ© des actions sensibles rÃ©alisÃ©es sur les comptes.</CardDescription>
                     </CardHeader>
                     <CardContent className="pb-4">
                       <div className="space-y-2 max-h-[260px] overflow-y-auto pr-1">
                         {auditLogs.length === 0 ? (
-                          <p className="text-sm text-muted-foreground">Aucune activité enregistrée.</p>
+                          <p className="text-sm text-muted-foreground">Aucune activitÃ© enregistrÃ©e.</p>
                         ) : (
                           auditLogs.map((log) => (
                             <div key={log.id} className="flex items-center justify-between rounded-lg border bg-card p-3">
@@ -13370,14 +14257,14 @@ export default function NOCActivityApp() {
                 <motion.div key="admin" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-4">
                   <div>
                     <h1 className="text-2xl lg:text-3xl font-bold">Administration</h1>
-                    <p className="text-muted-foreground">Gestion des utilisateurs et paramètres</p>
+                    <p className="text-muted-foreground">Gestion des utilisateurs et paramÃ¨tres</p>
                   </div>
 
                   <Card>
                     <CardContent className="pt-6 pb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                       <div>
                         <p className="font-medium">Gestion des comptes utilisateurs</p>
-                        <p className="text-sm text-muted-foreground">Accédez à la page dédiée pour gérer rôles, sécurité et accès.</p>
+                        <p className="text-sm text-muted-foreground">AccÃ©dez Ã  la page dÃ©diÃ©e pour gÃ©rer rÃ´les, sÃ©curitÃ© et accÃ¨s.</p>
                       </div>
                       <Button onClick={() => setCurrentTabSafely('admin_users')}>
                         <Users className="w-4 h-4 mr-2" /> Ouvrir la gestion utilisateurs
@@ -13387,8 +14274,8 @@ export default function NOCActivityApp() {
                   
                   <Card>
                     <CardHeader className="pb-2 pt-4">
-                      <CardTitle className="text-base">Contrôle des Rubriques</CardTitle>
-                      <CardDescription>Activez ou désactivez les rubriques visibles pour les utilisateurs.</CardDescription>
+                      <CardTitle className="text-base">ContrÃ´le des Rubriques</CardTitle>
+                      <CardDescription>Activez ou dÃ©sactivez les rubriques visibles pour les utilisateurs.</CardDescription>
                     </CardHeader>
                     <CardContent className="pb-4">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -13443,7 +14330,7 @@ export default function NOCActivityApp() {
                                   <div className="w-3 h-3 rounded" style={{ backgroundColor: getShiftColor(shiftName) }} />
                                   Shift {shiftName}
                                 </CardTitle>
-                                <CardDescription className="text-xs">Début: {format(SHIFT_CYCLE_START[shiftName], 'dd/MM/yyyy')}</CardDescription>
+                                <CardDescription className="text-xs">DÃ©but: {format(SHIFT_CYCLE_START[shiftName], 'dd/MM/yyyy')}</CardDescription>
                               </CardHeader>
                               <CardContent className="pb-4">
                                 <div className="space-y-1.5">
@@ -13490,11 +14377,11 @@ export default function NOCActivityApp() {
                   <h4 className="font-medium flex items-center gap-2"><Coffee className="w-4 h-4" /> Repos Individuel</h4>
                   <div className="p-3 rounded-lg bg-muted">
                     {userRestInfo.isOnIndividualRest ? (
-                      <p className="text-green-600 font-medium">Vous êtes en repos aujourd'hui</p>
+                      <p className="text-green-600 font-medium">Vous Ãªtes en repos aujourd'hui</p>
                     ) : (
                       <div>
                         <p className="text-sm text-muted-foreground">Prochain repos :</p>
-                        <p className="font-bold">{userRestInfo.nextIndividualRest ? format(userRestInfo.nextIndividualRest, 'EEEE d MMMM yyyy', { locale: fr }) : 'Non planifié'}</p>
+                        <p className="font-bold">{userRestInfo.nextIndividualRest ? format(userRestInfo.nextIndividualRest, 'EEEE d MMMM yyyy', { locale: fr }) : 'Non planifiÃ©'}</p>
                       </div>
                     )}
                   </div>
@@ -13507,7 +14394,7 @@ export default function NOCActivityApp() {
                     ) : (
                       <div>
                         <p className="text-sm text-muted-foreground">Prochain repos collectif :</p>
-                        <p className="font-bold">{userRestInfo.nextCollectiveRestStart ? format(userRestInfo.nextCollectiveRestStart, 'EEEE d MMMM yyyy', { locale: fr }) : 'Non planifié'}</p>
+                        <p className="font-bold">{userRestInfo.nextCollectiveRestStart ? format(userRestInfo.nextCollectiveRestStart, 'EEEE d MMMM yyyy', { locale: fr }) : 'Non planifiÃ©'}</p>
                       </div>
                     )}
                   </div>
@@ -13525,7 +14412,7 @@ export default function NOCActivityApp() {
           <DialogContent className="sm:max-w-[400px]">
             <DialogHeader>
               <DialogTitle>Photo de profil</DialogTitle>
-              <DialogDescription>Téléchargez votre photo de profil</DialogDescription>
+              <DialogDescription>TÃ©lÃ©chargez votre photo de profil</DialogDescription>
             </DialogHeader>
             <div className="flex flex-col items-center gap-4 py-4">
               <Avatar
@@ -13566,8 +14453,8 @@ export default function NOCActivityApp() {
                     try {
                       await persistUserProfile({ avatar: null });
                       await fetchConversations();
-                      toast.success('Photo supprimée', {
-                        description: 'La suppression est enregistrée en base de données.',
+                      toast.success('Photo supprimÃ©e', {
+                        description: 'La suppression est enregistrÃ©e en base de donnÃ©es.',
                       });
                     } catch (error) {
                       console.error('Erreur suppression avatar', error);
@@ -13593,17 +14480,17 @@ export default function NOCActivityApp() {
                 <User className="w-5 h-5" />
                 Modifier mes informations
               </DialogTitle>
-              <DialogDescription>Mettez à jour vos informations professionnelles</DialogDescription>
+              <DialogDescription>Mettez Ã  jour vos informations professionnelles</DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="firstName">Prénom</Label>
+                  <Label htmlFor="firstName">PrÃ©nom</Label>
                   <Input
                     id="firstName"
                     value={editFirstName}
                     onChange={(e) => setEditFirstName(e.target.value)}
-                    placeholder="Votre prénom"
+                    placeholder="Votre prÃ©nom"
                   />
                 </div>
                 <div className="space-y-2">
@@ -13643,7 +14530,7 @@ export default function NOCActivityApp() {
           </DialogContent>
         </Dialog>
 
-        {/* Dialog Sécuriser le compte */}
+        {/* Dialog SÃ©curiser le compte */}
         <Dialog
           open={securityDialogOpen}
           onOpenChange={(open) => {
@@ -13659,12 +14546,12 @@ export default function NOCActivityApp() {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Settings className="w-5 h-5" />
-                {isAdminPasswordResetMode ? 'Réinitialiser mot de passe' : 'Sécuriser mon compte'}
+                {isAdminPasswordResetMode ? 'RÃ©initialiser mot de passe' : 'SÃ©curiser mon compte'}
               </DialogTitle>
               <DialogDescription>
                 {isAdminPasswordResetMode
-                  ? `Définissez un nouveau mot de passe temporaire pour ${selectedUser?.name || 'cet utilisateur'}`
-                  : 'Définissez votre mot de passe sécurisé'}
+                  ? `DÃ©finissez un nouveau mot de passe temporaire pour ${selectedUser?.name || 'cet utilisateur'}`
+                  : 'DÃ©finissez votre mot de passe sÃ©curisÃ©'}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
@@ -13675,7 +14562,7 @@ export default function NOCActivityApp() {
                   type="password"
                   value={editPassword}
                   onChange={(e) => setEditPassword(e.target.value)}
-                  placeholder="••••••••"
+                  placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
                 />
                 {editPassword && (
                   <div className="text-xs space-y-1 mt-2">
@@ -13684,7 +14571,7 @@ export default function NOCActivityApp() {
                         <CheckCircle2 className="w-3 h-3 text-green-500" /> : 
                         <XCircle className="w-3 h-3 text-red-500" />}
                       <span className={validatePassword(editPassword).hasMinLength ? 'text-green-600' : 'text-red-600'}>
-                        Minimum 8 caractères
+                        Minimum 8 caractÃ¨res
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
@@ -13708,7 +14595,7 @@ export default function NOCActivityApp() {
                         <CheckCircle2 className="w-3 h-3 text-green-500" /> : 
                         <XCircle className="w-3 h-3 text-red-500" />}
                       <span className={validatePassword(editPassword).hasSpecial ? 'text-green-600' : 'text-red-600'}>
-                        1 caractère spécial (!@#$%^&*)
+                        1 caractÃ¨re spÃ©cial (!@#$%^&*)
                       </span>
                     </div>
                     {editPassword.length >= 6 && (
@@ -13733,7 +14620,7 @@ export default function NOCActivityApp() {
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="••••••••"
+                  placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
                 />
                 {confirmPassword && editPassword !== confirmPassword && (
                   <p className="text-xs text-red-500">Les mots de passe ne correspondent pas</p>
@@ -13743,19 +14630,19 @@ export default function NOCActivityApp() {
             <DialogFooter>
               <DialogClose asChild><Button variant="outline">Annuler</Button></DialogClose>
               <Button onClick={handleSaveSecurity} disabled={!validatePassword(editPassword).isValid || editPassword !== confirmPassword}>
-                {isAdminPasswordResetMode ? 'Réinitialiser' : 'Sécuriser'}
+                {isAdminPasswordResetMode ? 'RÃ©initialiser' : 'SÃ©curiser'}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
-        {/* Dialog Définir mon Shift */}
+        {/* Dialog DÃ©finir mon Shift */}
         <Dialog open={shiftDialogOpen} onOpenChange={setShiftDialogOpen}>
           <DialogContent className="sm:max-w-[450px]">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Calendar className="w-5 h-5" />
-                Définir mon shift
+                DÃ©finir mon shift
               </DialogTitle>
               <DialogDescription>Configurez votre shift et votre fonction</DialogDescription>
             </DialogHeader>
@@ -13764,7 +14651,7 @@ export default function NOCActivityApp() {
                 <Label>Shift</Label>
                 <Select value={editShift} onValueChange={setEditShift}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Sélectionner un shift" />
+                    <SelectValue placeholder="SÃ©lectionner un shift" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="A">
@@ -13792,7 +14679,7 @@ export default function NOCActivityApp() {
                 <Label>Fonction</Label>
                 <Select value={editResponsibility} onValueChange={(v) => setEditResponsibility(v as ResponsibilityType)}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Sélectionner une fonction" />
+                    <SelectValue placeholder="SÃ©lectionner une fonction" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="CALL_CENTER"><div className="flex items-center gap-2"><Phone className="w-4 h-4" /> Call Center</div></SelectItem>
@@ -13810,22 +14697,22 @@ export default function NOCActivityApp() {
           </DialogContent>
         </Dialog>
 
-        {/* Dialog Paramètres */}
+        {/* Dialog ParamÃ¨tres */}
         <Dialog open={settingsDialogOpen} onOpenChange={setSettingsDialogOpen}>
           <DialogContent className="sm:max-w-[500px]">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Settings className="w-5 h-5" />
-                Paramètres
+                ParamÃ¨tres
               </DialogTitle>
-              <DialogDescription>Personnalisez votre expérience</DialogDescription>
+              <DialogDescription>Personnalisez votre expÃ©rience</DialogDescription>
             </DialogHeader>
             <div className="space-y-6 py-4">
               <div className="space-y-4">
                 <h4 className="text-sm font-medium">Apparence</h4>
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
-                    <p className="text-sm">Thème sombre</p>
+                    <p className="text-sm">ThÃ¨me sombre</p>
                     <p className="text-xs text-muted-foreground">Activer le mode sombre</p>
                   </div>
                   <Button
@@ -13844,10 +14731,10 @@ export default function NOCActivityApp() {
                 <h4 className="text-sm font-medium">Session</h4>
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
-                    <p className="text-sm">Déconnexion automatique</p>
-                    <p className="text-xs text-muted-foreground">Après 10 minutes d'inactivité</p>
+                    <p className="text-sm">DÃ©connexion automatique</p>
+                    <p className="text-xs text-muted-foreground">AprÃ¨s 10 minutes d'inactivitÃ©</p>
                   </div>
-                  <Badge variant="outline">Activé</Badge>
+                  <Badge variant="outline">ActivÃ©</Badge>
                 </div>
               </div>
               
@@ -13860,7 +14747,7 @@ export default function NOCActivityApp() {
                     <p className="text-sm">Notifications push</p>
                     <p className="text-xs text-muted-foreground">Recevoir les alertes importantes</p>
                   </div>
-                  <Badge variant="outline">Activé</Badge>
+                  <Badge variant="outline">ActivÃ©</Badge>
                 </div>
               </div>
             </div>
@@ -13877,9 +14764,9 @@ export default function NOCActivityApp() {
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
                   <Users className="w-5 h-5" />
-                  Gérer les utilisateurs
+                  GÃ©rer les utilisateurs
                 </DialogTitle>
-                <DialogDescription>Gérez tous les comptes utilisateurs</DialogDescription>
+                <DialogDescription>GÃ©rez tous les comptes utilisateurs</DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="flex gap-4">
@@ -13892,10 +14779,10 @@ export default function NOCActivityApp() {
                   </div>
                   <Select value={roleFilter} onValueChange={setRoleFilter}>
                     <SelectTrigger className="w-[180px]">
-                      <SelectValue placeholder="Filtrer par rôle" />
+                      <SelectValue placeholder="Filtrer par rÃ´le" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">Tous les rôles</SelectItem>
+                      <SelectItem value="all">Tous les rÃ´les</SelectItem>
                       <SelectItem value="SUPER_ADMIN">Super Admin</SelectItem>
                       <SelectItem value="ADMIN">Admin</SelectItem>
                       <SelectItem value="RESPONSABLE">Responsable</SelectItem>
@@ -13905,7 +14792,7 @@ export default function NOCActivityApp() {
                     </SelectContent>
                   </Select>
                   <Button onClick={() => setCreateUserDialogOpen(true)}>
-                    <Plus className="w-4 h-4 mr-2" /> Créer
+                    <Plus className="w-4 h-4 mr-2" /> CrÃ©er
                   </Button>
                 </div>
                 
@@ -13926,10 +14813,10 @@ export default function NOCActivityApp() {
                             {ROLE_CONFIG[u.role].label}
                           </Badge>
                           {u.isBlocked && (
-                            <Badge variant="destructive">Bloqué</Badge>
+                            <Badge variant="destructive">BloquÃ©</Badge>
                           )}
                           {u.mustChangePassword && (
-                            <Badge variant="outline" className="text-yellow-600">Mot de passe à changer</Badge>
+                            <Badge variant="outline" className="text-yellow-600">Mot de passe Ã  changer</Badge>
                           )}
                         </div>
                         <div className="flex items-center gap-2">
@@ -13939,7 +14826,7 @@ export default function NOCActivityApp() {
                             disabled={u.role === 'SUPER_ADMIN' && user?.id !== u.id}
                           >
                             <SelectTrigger className="w-[170px] h-8 text-xs">
-                              <SelectValue placeholder="Changer le rôle" />
+                              <SelectValue placeholder="Changer le rÃ´le" />
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="USER">Utilisateur</SelectItem>
@@ -13956,7 +14843,7 @@ export default function NOCActivityApp() {
                             onClick={() => handleToggleBlockUser(u)}
                             disabled={u.role === 'SUPER_ADMIN'}
                           >
-                            {u.isBlocked ? 'Débloquer' : 'Bloquer'}
+                            {u.isBlocked ? 'DÃ©bloquer' : 'Bloquer'}
                           </Button>
                           <Button
                             variant="outline"
@@ -13969,7 +14856,7 @@ export default function NOCActivityApp() {
                             }}
                             disabled={u.role === 'SUPER_ADMIN' && user?.id !== u.id}
                           >
-                            Réinitialiser MDP
+                            RÃ©initialiser MDP
                           </Button>
                           <Button
                             variant="destructive"
@@ -13987,7 +14874,7 @@ export default function NOCActivityApp() {
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setAuditLogDialogOpen(true)}>
-                  <FileText className="w-4 h-4 mr-2" /> Journal d'activité
+                  <FileText className="w-4 h-4 mr-2" /> Journal d'activitÃ©
                 </Button>
                 <DialogClose asChild><Button>Fermer</Button></DialogClose>
               </DialogFooter>
@@ -13995,18 +14882,18 @@ export default function NOCActivityApp() {
           </Dialog>
         )}
 
-        {/* Dialog Créer un utilisateur */}
+        {/* Dialog CrÃ©er un utilisateur */}
         {canManageUsers && (
           <Dialog open={createUserDialogOpen} onOpenChange={setCreateUserDialogOpen}>
             <DialogContent className="sm:max-w-[500px]">
               <DialogHeader>
-                <DialogTitle>Créer un nouvel utilisateur</DialogTitle>
+                <DialogTitle>CrÃ©er un nouvel utilisateur</DialogTitle>
                 <DialogDescription>Remplissez les informations du nouveau compte</DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Prénom</Label>
+                    <Label>PrÃ©nom</Label>
                     <Input value={editFirstName} onChange={(e) => setEditFirstName(e.target.value)} />
                   </div>
                   <div className="space-y-2">
@@ -14023,7 +14910,7 @@ export default function NOCActivityApp() {
                   <Input value={editUsername} onChange={(e) => setEditUsername(e.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Rôle</Label>
+                  <Label>RÃ´le</Label>
                   <Select value={editRole} onValueChange={(v) => setEditRole(v as UserRole)}>
                     <SelectTrigger>
                       <SelectValue />
@@ -14070,14 +14957,14 @@ export default function NOCActivityApp() {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label>Mot de passe par défaut</Label>
+                  <Label>Mot de passe par dÃ©faut</Label>
                   <Input type="password" value={editPassword} onChange={(e) => setEditPassword(e.target.value)} />
-                  <p className="text-xs text-muted-foreground">L'utilisateur devra changer ce mot de passe à sa première connexion</p>
+                  <p className="text-xs text-muted-foreground">L'utilisateur devra changer ce mot de passe Ã  sa premiÃ¨re connexion</p>
                 </div>
               </div>
               <DialogFooter>
                 <DialogClose asChild><Button variant="outline">Annuler</Button></DialogClose>
-                <Button onClick={() => void handleCreateUser()} disabled={usersActionInProgress === 'create'}>Créer l'utilisateur</Button>
+                <Button onClick={() => void handleCreateUser()} disabled={usersActionInProgress === 'create'}>CrÃ©er l'utilisateur</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -14089,12 +14976,12 @@ export default function NOCActivityApp() {
             <DialogContent className="sm:max-w-[560px]">
               <DialogHeader>
                 <DialogTitle>Modifier un utilisateur</DialogTitle>
-                <DialogDescription>Mettez à jour toutes les informations du compte.</DialogDescription>
+                <DialogDescription>Mettez Ã  jour toutes les informations du compte.</DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Prénom</Label>
+                    <Label>PrÃ©nom</Label>
                     <Input value={editFirstName} onChange={(e) => setEditFirstName(e.target.value)} />
                   </div>
                   <div className="space-y-2">
@@ -14112,7 +14999,7 @@ export default function NOCActivityApp() {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Rôle</Label>
+                    <Label>RÃ´le</Label>
                     <Select value={editRole} onValueChange={(v) => setEditRole(v as UserRole)}>
                       <SelectTrigger>
                         <SelectValue />
@@ -14163,7 +15050,7 @@ export default function NOCActivityApp() {
                     <Switch checked={editUserIsActive} onCheckedChange={setEditUserIsActive} />
                   </div>
                   <div className="flex items-center justify-between rounded-lg border p-3">
-                    <Label>Compte bloqué</Label>
+                    <Label>Compte bloquÃ©</Label>
                     <Switch checked={editUserIsBlocked} onCheckedChange={setEditUserIsBlocked} />
                   </div>
                 </div>
@@ -14178,7 +15065,7 @@ export default function NOCActivityApp() {
           </Dialog>
         )}
 
-        {/* Dialog Suppression sécurisée d'utilisateur */}
+        {/* Dialog Suppression sÃ©curisÃ©e d'utilisateur */}
         <Dialog open={deleteConfirmationOpen} onOpenChange={(open) => {
           setDeleteConfirmationOpen(open);
           if (!open) {
@@ -14193,7 +15080,7 @@ export default function NOCActivityApp() {
                 Supprimer cet utilisateur?
               </DialogTitle>
               <DialogDescription>
-                Cette action est définitive et ne peut pas être annulée.
+                Cette action est dÃ©finitive et ne peut pas Ãªtre annulÃ©e.
               </DialogDescription>
             </DialogHeader>
             {userToDelete && (
@@ -14204,7 +15091,7 @@ export default function NOCActivityApp() {
                       Vous allez supprimer le compte: <span className="font-semibold">{userToDelete.name}</span>
                     </p>
                     <p className="text-sm text-muted-foreground mt-2">
-                      Rôle: <span className="font-medium">{userToDelete.role}</span>
+                      RÃ´le: <span className="font-medium">{userToDelete.role}</span>
                     </p>
                   </CardContent>
                 </Card>
@@ -14226,7 +15113,7 @@ export default function NOCActivityApp() {
 
                 <div className="bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 p-3 rounded-lg">
                   <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                    ⚠️ La suppression est définitive. Toutes les données associées seront perdues.
+                    âš ï¸ La suppression est dÃ©finitive. Toutes les donnÃ©es associÃ©es seront perdues.
                   </p>
                 </div>
               </div>
@@ -14240,23 +15127,23 @@ export default function NOCActivityApp() {
                 onClick={confirmDeleteUser}
                 disabled={!userToDelete || deleteConfirmationInput.trim() !== (userToDelete.username || userToDelete.name)}
               >
-                Supprimer définitivement
+                Supprimer dÃ©finitivement
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
-        {/* Dialog Journal d'activité */}
+        {/* Dialog Journal d'activitÃ© */}
         {isSuperAdmin(user) && (
           <Dialog open={auditLogDialogOpen} onOpenChange={setAuditLogDialogOpen}>
             <DialogContent className="sm:max-w-[1000px] max-h-[85vh]">
               <DialogHeader>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <FileText className="w-5 h-5" />
                     <div>
-                      <DialogTitle>Journal d'activité (Audit Log)</DialogTitle>
-                      <DialogDescription>Historique de toutes les actions | Traçabilité des actions sensibles</DialogDescription>
+                      <DialogTitle>Journal d'activitÃ© (Audit Log)</DialogTitle>
+                      <DialogDescription>Historique des actions sensibles et traÃ§abilitÃ©.</DialogDescription>
                     </div>
                   </div>
                   <Button
@@ -14267,17 +15154,15 @@ export default function NOCActivityApp() {
                     className="gap-2"
                   >
                     <RefreshCw className={`w-4 h-4 ${auditLogRefreshing ? 'animate-spin' : ''}`} />
-                    Rafraîchir
+                    RafraÃ®chir
                   </Button>
                 </div>
               </DialogHeader>
 
-              {/* Contrôles de filtre */}
               <div className="space-y-4 mb-4 pb-4 border-b">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {/* Filtre Date - De */}
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">Date de début</label>
+                    <label className="text-sm font-medium">Date de dÃ©but</label>
                     <input
                       type="date"
                       value={auditLogDateFrom}
@@ -14286,7 +15171,6 @@ export default function NOCActivityApp() {
                     />
                   </div>
 
-                  {/* Filtre Date - À */}
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Date de fin</label>
                     <input
@@ -14297,7 +15181,6 @@ export default function NOCActivityApp() {
                     />
                   </div>
 
-                  {/* Filtre Type d'action */}
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Type d'action</label>
                     <select
@@ -14306,13 +15189,12 @@ export default function NOCActivityApp() {
                       className="w-full px-3 py-2 border rounded-md text-sm"
                     >
                       <option value="all">Tous les types</option>
-                      {uniqueActionTypes.map(type => (
+                      {uniqueActionTypes.map((type) => (
                         <option key={type} value={type}>{type}</option>
                       ))}
                     </select>
                   </div>
 
-                  {/* Filtre Statut */}
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Statut</label>
                     <select
@@ -14321,13 +15203,12 @@ export default function NOCActivityApp() {
                       className="w-full px-3 py-2 border rounded-md text-sm"
                     >
                       <option value="all">Tous les statuts</option>
-                      <option value="SUCCESS">Succès</option>
+                      <option value="SUCCESS">SuccÃ¨s</option>
                       <option value="FAILED">Erreur</option>
                     </select>
                   </div>
                 </div>
 
-                {/* Filtre Utilisateur */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Filtre par utilisateur</label>
                   <input
@@ -14339,32 +15220,30 @@ export default function NOCActivityApp() {
                   />
                 </div>
 
-                {/* Indicateur de résultats filtrés */}
                 {(auditLogDateFrom || auditLogDateTo || auditLogActionType !== 'all' || auditLogStatusFilter !== 'all' || auditLogUserFilter) && (
                   <div className="text-sm text-muted-foreground">
-                    {filteredAuditLogs.length} résultat(s) correspondant aux filtres
+                    {filteredAuditLogs.length} rÃ©sultat(s) correspondant aux filtres
                   </div>
                 )}
               </div>
 
-              {/* Liste des logs filtrés */}
               <ScrollArea className="h-[400px]">
                 <div className="space-y-2 pr-4">
                   {filteredAuditLogs.length === 0 ? (
                     <p className="text-center text-muted-foreground py-8">
-                      {auditLogs.length === 0 ? 'Aucune activité enregistrée' : 'Aucun résultat ne correspond aux filtres'}
+                      {auditLogs.length === 0 ? 'Aucune activitÃ© enregistrÃ©e' : 'Aucun rÃ©sultat ne correspond aux filtres'}
                     </p>
                   ) : (
                     filteredAuditLogs.map((log) => (
                       <div key={log.id} className="flex items-start justify-between p-3 rounded-lg border bg-card hover:bg-accent transition">
                         <div className="flex items-start gap-3 flex-1">
-                          <div className={`w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0 ${log.status === 'SUCCESS' ? 'bg-green-500' : 'bg-red-500'}`} />
+                          <div className={`w-2.5 h-2.5 rounded-full mt-1 shrink-0 ${log.status === 'SUCCESS' ? 'bg-green-500' : 'bg-red-500'}`} />
                           <div className="flex-1 min-w-0">
                             <p className="font-medium text-sm">{log.action}</p>
-                            <p className="text-xs text-muted-foreground break-words">{log.details}</p>
+                            <p className="text-xs text-muted-foreground wrap-break-word">{log.details}</p>
                           </div>
                         </div>
-                        <div className="text-right ml-4 flex-shrink-0">
+                        <div className="text-right ml-4 shrink-0">
                           <p className="text-sm font-medium">{log.userName}</p>
                           <p className="text-xs text-muted-foreground">
                             {new Date(log.createdAt).toLocaleString('fr-FR')}
@@ -14377,311 +15256,13 @@ export default function NOCActivityApp() {
               </ScrollArea>
 
               <DialogFooter>
-                <DialogClose asChild><Button>Fermer</Button></DialogClose>
+                <DialogClose asChild>
+                  <Button>Fermer</Button>
+                </DialogClose>
               </DialogFooter>
             </DialogContent>
           </Dialog>
         )}
- 
-        {/* Dialog Composition Email - Style Gmail */}
-        <Dialog open={composeOpen} onOpenChange={setComposeOpen}>
-          <DialogContent className="sm:max-w-[700px] p-0 gap-0">
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 bg-slate-100 dark:bg-slate-800 rounded-t-lg">
-              <h3 className="font-medium">Nouveau message</h3>
-              <div className="flex items-center gap-1">
-                <Button variant="ghost" size="icon" className="h-8 w-8">
-                  <Paperclip className="w-4 h-4" />
-                </Button>
-                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setComposeOpen(false)}>
-                  <X className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-            
-            {/* Form */}
-            <div className="p-4 space-y-3">
-              {/* To field */}
-              <div className="flex items-center border-b pb-2">
-                <span className="text-sm text-slate-500 w-12">À:</span>
-                <div className="flex-1 flex flex-wrap gap-1">
-                  {newEmail.to.map((recipient, index) => (
-                    <span key={index} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full text-sm">
-                      {recipient.name}
-                      <button onClick={() => setNewEmail(prev => ({...prev, to: prev.to.filter((_, i) => i !== index)}))}>
-                        <X className="w-3 h-3" />
-                      </button>
-                    </span>
-                  ))}
-                  <input
-                    type="text"
-                    value={toInput}
-                    onChange={(e) => setToInput(e.target.value)}
-                    onFocus={() => setShowSuggestions('to')}
-                    className="flex-1 outline-none text-sm bg-transparent"
-                    placeholder={newEmail.to.length === 0 ? "Rechercher un destinataire..." : ""}
-                  />
-                </div>
-                <button 
-                  onClick={() => setShowCc(!showCc)}
-                  className="text-sm text-blue-600 hover:underline ml-2"
-                >
-                  Cc
-                </button>
-              </div>
-              
-              {/* Suggestions */}
-              {showSuggestions && toInput && (
-                <div className="border rounded-lg bg-white dark:bg-slate-900 shadow-lg max-h-40 overflow-auto">
-                  {usersDirectory
-                    .filter(u => 
-                      u.name.toLowerCase().includes(toInput.toLowerCase()) ||
-                      u.email.toLowerCase().includes(toInput.toLowerCase())
-                    )
-                    .filter(u => !newEmail.to.some(t => t.id === u.id))
-                    .slice(0, 5)
-                    .map((u) => (
-                      <button
-                        key={u.id}
-                        onClick={() => {
-                          setNewEmail(prev => ({
-                            ...prev,
-                            to: [...prev.to, { id: u.id, name: u.name, email: u.email }]
-                          }));
-                          setToInput('');
-                          setShowSuggestions(null);
-                        }}
-                        className="w-full flex items-center gap-2 p-2 hover:bg-slate-100 dark:hover:bg-slate-800 text-left"
-                      >
-                        <Avatar className="w-6 h-6">
-                          <AvatarFallback className="text-xs bg-blue-600 text-white">
-                            {u.name.split(' ').map(n => n[0]).join('').toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <div className="text-sm font-medium">{u.name}</div>
-                          <div className="text-xs text-slate-500">{u.email}</div>
-                        </div>
-                      </button>
-                    ))}
-                </div>
-              )}
-              
-              {/* Cc field */}
-              {showCc && (
-                <div className="flex items-center border-b pb-2">
-                  <span className="text-sm text-slate-500 w-12">Cc:</span>
-                  <div className="flex-1 flex flex-wrap gap-1">
-                    {newEmail.cc.map((recipient, index) => (
-                      <span key={index} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full text-sm">
-                        {recipient.name}
-                        <button onClick={() => setNewEmail(prev => ({...prev, cc: prev.cc.filter((_, i) => i !== index)}))}>
-                          <X className="w-3 h-3" />
-                        </button>
-                      </span>
-                    ))}
-                    <input
-                      type="text"
-                      value={ccInput}
-                      onChange={(e) => setCcInput(e.target.value)}
-                      onFocus={() => setShowSuggestions('cc')}
-                      className="flex-1 outline-none text-sm bg-transparent"
-                      placeholder={newEmail.cc.length === 0 ? "Ajouter Cc..." : ""}
-                    />
-                  </div>
-                </div>
-              )}
-              
-              {/* Subject */}
-              <div className="flex items-center border-b pb-2">
-                <span className="text-sm text-slate-500 w-12">Objet:</span>
-                <input
-                  type="text"
-                  value={newEmail.subject}
-                  onChange={(e) => setNewEmail(prev => ({...prev, subject: e.target.value}))}
-                  className="flex-1 outline-none text-sm bg-transparent"
-                  placeholder="Objet du message"
-                />
-              </div>
-              
-              {/* Body */}
-              <Textarea
-                value={newEmail.body}
-                onChange={(e) => setNewEmail(prev => ({...prev, body: e.target.value}))}
-                className="min-h-[200px] border-0 resize-none focus-visible:ring-0"
-                placeholder="Écrivez votre message..."
-              />
-              
-              {/* Attachments */}
-              {newEmail.attachments.length > 0 && (
-                <div className="flex flex-wrap gap-2 pt-2 border-t">
-                  {newEmail.attachments.map((att, index) => (
-                    <div key={index} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg">
-                      <Paperclip className="w-4 h-4 text-slate-500" />
-                      <span className="text-sm">{att.fileName}</span>
-                      <button onClick={() => setNewEmail(prev => ({...prev, attachments: prev.attachments.filter((_, i) => i !== index)}))}>
-                        <X className="w-3 h-3 text-slate-400" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            
-            {/* Footer */}
-            <div className="flex items-center justify-between px-4 py-3 border-t bg-slate-50 dark:bg-slate-900/50 rounded-b-lg">
-              <div className="flex items-center gap-2">
-                <Button 
-                  onClick={() => {
-                    if (newEmail.to.length === 0) {
-                      toast.error('Erreur', { description: 'Veuillez ajouter au moins un destinataire' });
-                      return;
-                    }
-                    if (!newEmail.subject.trim()) {
-                      toast.error('Erreur', { description: 'Veuillez ajouter un objet' });
-                      return;
-                    }
-                    
-                    // Create the message
-                    const message: InternalMessage = {
-                      id: generateId(),
-                      from: {
-                        id: user?.id || '',
-                        name: user?.name || '',
-                        email: user?.email || '',
-                        avatar: user?.avatar
-                      },
-                      to: newEmail.to,
-                      cc: newEmail.cc,
-                      bcc: newEmail.bcc,
-                      subject: newEmail.subject,
-                      body: cleanEmptyDivs(newEmail.body),
-                      attachments: newEmail.attachments,
-                      folder: 'sent',
-                      status: 'read',
-                      priority: newEmail.priority,
-                      isStarred: false,
-                      isRead: true,
-                      labels: [],
-                      sentAt: new Date(),
-                      createdAt: new Date(),
-                      updatedAt: new Date(),
-                      isDraft: false
-                    };
-                    
-                    // Add to sent folder for sender
-                    setMessages(prev => [message, ...prev]);
-                    
-                    // Simulate delivery to recipients (in real app, this would be server-side)
-                    const deliveredMessage: InternalMessage = {
-                      ...message,
-                      id: generateId(),
-                      folder: 'inbox',
-                      status: 'unread',
-                      isRead: false,
-                      receivedAt: new Date()
-                    };
-                    setMessages(prev => [deliveredMessage, ...prev]);
-                    
-                    // Reset and close
-                    setNewEmail({
-                      to: [],
-                      cc: [],
-                      bcc: [],
-                      subject: '',
-                      body: '',
-                      attachments: [],
-                      priority: 'normal',
-                      scheduledAt: null
-                    });
-                    setToInput('');
-                    setCcInput('');
-                    setComposeOpen(false);
-                    
-                    toast.success('Message envoyé', { description: `Envoyé à ${newEmail.to.map(t => t.name).join(', ')}` });
-                  }}
-                  className="gap-2 bg-blue-600 hover:bg-blue-700"
-                >
-                  <Send className="w-4 h-4" /> Envoyer
-                </Button>
-                
-                {/* Attachment upload */}
-                <label className="cursor-pointer">
-                  <input
-                    type="file"
-                    className="hidden"
-                    multiple
-                    onChange={(e) => {
-                      const files = e.target.files;
-                      if (files) {
-                        Array.from(files).forEach(file => {
-                          const reader = new FileReader();
-                          reader.onload = () => {
-                            const attachment: EmailAttachment = {
-                              id: generateId(),
-                              messageId: '',
-                              fileName: file.name,
-                              fileSize: file.size,
-                              fileType: file.type,
-                              fileData: reader.result as string,
-                              uploadedAt: new Date()
-                            };
-                            setNewEmail(prev => ({
-                              ...prev,
-                              attachments: [...prev.attachments, attachment]
-                            }));
-                          };
-                          reader.readAsDataURL(file);
-                        });
-                      }
-                    }}
-                  />
-                  <Button variant="ghost" size="icon" type="button">
-                    <Paperclip className="w-4 h-4" />
-                  </Button>
-                </label>
-              </div>
-              
-              <Button 
-                variant="ghost" 
-                size="sm"
-                onClick={() => {
-                  // Save as draft
-                  if (newEmail.subject || newEmail.body || newEmail.to.length > 0) {
-                    const draft: InternalMessage = {
-                      id: generateId(),
-                      from: {
-                        id: user?.id || '',
-                        name: user?.name || '',
-                        email: user?.email || ''
-                      },
-                      to: newEmail.to,
-                      cc: newEmail.cc,
-                      bcc: newEmail.bcc,
-                      subject: newEmail.subject,
-                      body: cleanEmptyDivs(newEmail.body),
-                      attachments: newEmail.attachments,
-                      folder: 'drafts',
-                      status: 'unread',
-                      priority: 'normal',
-                      isStarred: false,
-                      isRead: true,
-                      labels: [],
-                      createdAt: new Date(),
-                      updatedAt: new Date(),
-                      isDraft: true
-                    };
-                    setMessages(prev => [draft, ...prev]);
-                    toast.success('Brouillon sauvegardé');
-                  }
-                  setComposeOpen(false);
-                }}
-              >
-                Enregistrer le brouillon
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
 
         <Dialog open={avatarViewerOpen} onOpenChange={setAvatarViewerOpen}>
           <DialogContent className="max-w-xl">
@@ -14708,7 +15289,7 @@ export default function NOCActivityApp() {
                   className="gap-2 bg-blue-600 hover:bg-blue-700 text-white"
                 >
                   <Download className="w-4 h-4" />
-                  Télécharger
+                  TÃ©lÃ©charger
                 </Button>
               </div>
             ) : null}

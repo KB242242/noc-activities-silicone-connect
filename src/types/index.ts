@@ -425,3 +425,75 @@ export interface AgentPerformance {
   reliabilityScore: number;
   badge?: 'exemplary' | 'reliable' | 'improving' | 'needs_attention';
 }
+
+// Site Management
+export type SiteTypeInfra = 'PASSIF' | 'ACTIF' | 'PASSIF_ET_ACTIF';
+export type SiteStatus = 'ACTIVE' | 'INACTIVE' | 'MAINTENANCE';
+export type SiteSecurityShiftStatus = 'PLANNED' | 'ACTIVE' | 'COMPLETED' | 'ABSENT' | 'REPLACED' | 'CANCELLED';
+
+export interface SiteEquipement {
+  id: string;
+  equipement_code: string;
+  equipement_type: string;
+  vendor?: string | null;
+  model?: string | null;
+  status: string;
+  client_name?: string | null;
+  linked?: boolean;
+}
+
+export interface SiteVigile {
+  id?: string;
+  first_name: string;
+  last_name: string;
+  full_name?: string;
+  personal_phone?: string | null;
+  is_active?: boolean;
+}
+
+export interface SiteSecurityPlanningEntry {
+  id: string;
+  site_id: string;
+  site_name: string;
+  site_ref: string;
+  vigile_id: string;
+  vigile_name: string;
+  vigile_phone?: string | null;
+  responsible_name?: string | null;
+  responsible_phone?: string | null;
+  service_phone?: string | null;
+  shift_start: string;
+  shift_end: string;
+  status: SiteSecurityShiftStatus;
+  notes?: string | null;
+  is_active_now?: boolean;
+}
+
+export interface Site {
+  id: string;
+  site_ref: string;
+  site_name: string;
+  site_type_infra: SiteTypeInfra;
+  departement: string;
+  arrondissement?: string | null;
+  quartier?: string | null;
+  localite?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  lieu_exact?: string | null;
+  responsible_name?: string | null;
+  responsible_phone?: string | null;
+  contact_email?: string | null;
+  contact_phone?: string | null;
+  service_phone?: string | null;
+  status: SiteStatus;
+  description?: string | null;
+  infrastructure_notes?: string | null;
+  equipment_count?: number;
+  vigiles_count?: number;
+  equipements?: SiteEquipement[];
+  vigiles?: SiteVigile[];
+  security_planning?: SiteSecurityPlanningEntry[];
+  createdAt?: Date;
+  updatedAt?: Date;
+}

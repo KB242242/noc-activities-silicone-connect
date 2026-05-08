@@ -174,6 +174,85 @@
   animation: slideIn 0.3s ease-out forwards;
 }
 
+.ticket-create-button {
+  border: 1px solid hsl(var(--foreground) / 0.24);
+  background: hsl(var(--background) / 0.55);
+  color: hsl(var(--foreground));
+  cursor: pointer;
+  transform-origin: center;
+  will-change: transform, box-shadow;
+  transform: translateZ(0);
+  box-shadow:
+    0 2px 8px hsl(var(--foreground) / 0.08),
+    inset 0 1px 0 hsl(0 0% 100% / 0.2);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transition: border-color 90ms ease-out, box-shadow 90ms ease-out, background-color 90ms ease-out, transform 90ms ease-out;
+}
+
+.ticket-create-button:hover {
+  transform: translateY(-1px) scale(1.035);
+  border-color: hsl(var(--foreground) / 0.36);
+  background: hsl(var(--background) / 0.65);
+  box-shadow:
+    0 6px 14px hsl(var(--foreground) / 0.12),
+    inset 0 1px 0 hsl(0 0% 100% / 0.26);
+}
+
+.ticket-create-button:active {
+  transform: translateY(1px) scale(0.98);
+  border-color: hsl(var(--foreground) / 0.3);
+  background: hsl(var(--background) / 0.58);
+  box-shadow:
+    0 2px 8px hsl(var(--foreground) / 0.08),
+    inset 0 1px 0 hsl(0 0% 100% / 0.2);
+}
+
+.dark .ticket-create-button {
+  border-color: hsl(var(--foreground) / 0.24);
+  background: hsl(var(--background) / 0.42);
+  color: hsl(var(--foreground));
+  box-shadow:
+    0 3px 10px hsl(0 0% 0% / 0.26),
+    inset 0 1px 0 hsl(0 0% 100% / 0.08);
+}
+
+.dark .ticket-create-button:hover {
+  transform: translateY(-1px) scale(1.035);
+  border-color: hsl(var(--foreground) / 0.34);
+  background: hsl(var(--background) / 0.5);
+  box-shadow:
+    0 7px 16px hsl(0 0% 0% / 0.34),
+    inset 0 1px 0 hsl(0 0% 100% / 0.12);
+}
+
+.dark .ticket-create-button:active {
+  border-color: hsl(var(--foreground) / 0.28);
+  background: hsl(var(--background) / 0.45);
+  box-shadow:
+    0 2px 8px hsl(0 0% 0% / 0.3),
+    inset 0 1px 0 hsl(0 0% 100% / 0.08);
+}
+
+.ticket-trash-button--active {
+  color: hsl(0 72% 48%);
+}
+
+.dark .ticket-trash-button--active {
+  color: hsl(0 82% 70%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ticket-create-button,
+  .ticket-create-button:hover,
+  .ticket-create-button:active,
+  .dark .ticket-create-button:hover,
+  .dark .ticket-create-button:active {
+    transform: none;
+    transition: border-color 0ms, box-shadow 0ms, background-color 0ms;
+  }
+}
+
 /* Card hover effect */
 .card-hover {
   transition: all 0.2s ease;

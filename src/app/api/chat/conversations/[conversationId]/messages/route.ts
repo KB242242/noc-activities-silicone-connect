@@ -8,7 +8,7 @@ import { randomUUID } from 'crypto';
 export const dynamic = 'force-dynamic';
 
 type MessagesRouteContext = {
-  params: Promise<{ conversationId?: string }> | { conversationId?: string };
+  params: Promise<{ conversationId?: string }>;
 };
 
 function extractConversationIdFromPath(pathname: string): string | undefined {

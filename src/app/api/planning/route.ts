@@ -6,9 +6,15 @@ const prisma = new PrismaClient();
 
 // Initial conditions for February 2026
 const INITIAL_SHIFT_START: Record<string, Date> = {
-  'A': new Date('2026-02-24T07:00:00'), // Shift A starts Feb 24, 2026 at 07h
-  'B': new Date('2026-02-21T07:00:00'), // Shift B starts Feb 21, 2026
-  'C': new Date('2026-02-18T07:00:00'), // Shift C starts Feb 18, 2026
+  'A': new Date('2026-02-24T00:00:00'),
+  'B': new Date('2026-02-21T00:00:00'),
+  'C': new Date('2026-02-18T00:00:00'),
+};
+
+const SHIFT_MEMBER_ORDER: Record<string, string[]> = {
+  'A': ['Luca', 'Alaine', 'Casimir', 'José'],
+  'B': ['Furys', 'Severin', 'Marly', 'Sahra'],
+  'C': ['Kevine', 'Audrey', 'Lapreuve', 'Lotti'],
 };
 
 // Cycle duration: 6 work days + 3 rest days = 9 days total
@@ -162,41 +168,34 @@ export async function GET(request: NextRequest) {
       
       const dayShifts = shifts.map(shift => {
         const schedule = getShiftScheduleForDate(shift.name, d);
+        const memberOrder = SHIFT_MEMBER_ORDER[shift.name] ?? shift.members.map(member => member.name);
+        const orderedMembers = memberOrder.map((memberName, memberIndex) => {
+          const existingMember = shift.members.find(member => member.name === memberName);
+          return existingMember ?? {
+            id: `${shift.id}-${memberIndex + 1}`,
+            name: memberName,
+            email: null,
+          };
+        });
         
-        // Calculate individual rest rotations
-        // Starting from day 3 of cycle, agents rotate rest on days 4, 5, 6
-        let agents = shift.members.map((member, idx) => {
+        // Individual rest starts on day 3 of each 9-day shift cycle, then rotates infinitely.
+        const restingAgentIndex = schedule.dayType !== 'REST_DAY' && schedule.dayNumber >= 3 && schedule.dayNumber <= 6
+          ? schedule.dayNumber - 3
+          : -1;
+
+        const activeAgents = orderedMembers.filter((_, idx) => idx !== restingAgentIndex);
+
+        const agents = orderedMembers.map((member, idx) => {
           let isResting = false;
           let responsibility: string | undefined;
           
-          // Only on work days, check for individual rest
-          if (schedule.dayType !== 'REST_DAY' && schedule.dayNumber >= 4) {
-            // Days 4, 5, 6 have individual rest rotation
-            const restDay = schedule.dayNumber - 3; // 1, 2, or 3 for resting agent
-            const cycleStart = new Date(INITIAL_SHIFT_START[shift.name]);
-            const daysSinceStart = Math.floor((d.getTime() - cycleStart.getTime()) / (1000 * 60 * 60 * 24));
-            const currentCycle = Math.floor(daysSinceStart / CYCLE_TOTAL_DAYS);
-            
-            // Rotating position based on cycle
-            const restingAgentIndex = (currentCycle * 3 + restDay - 1) % shift.members.length;
+          if (restingAgentIndex !== -1) {
             isResting = idx === restingAgentIndex;
           }
           
           // Assign responsibilities for non-resting agents
           if (!isResting && schedule.dayType !== 'REST_DAY') {
             const responsibilities = ['CALL_CENTER', 'MONITORING', 'REPORTING_1', 'REPORTING_2'];
-            const activeAgents = shift.members.filter((_, i) => {
-              if (schedule.dayNumber >= 4) {
-                const restDay = schedule.dayNumber - 3;
-                const cycleStart = new Date(INITIAL_SHIFT_START[shift.name]);
-                const daysSinceStart = Math.floor((d.getTime() - cycleStart.getTime()) / (1000 * 60 * 60 * 24));
-                const currentCycle = Math.floor(daysSinceStart / CYCLE_TOTAL_DAYS);
-                const restingAgentIndex = (currentCycle * 3 + restDay - 1) % shift.members.length;
-                return i !== restingAgentIndex;
-              }
-              return true;
-            });
-            
             const activeIdx = activeAgents.findIndex(a => a.id === member.id);
             if (activeIdx !== -1 && activeIdx < responsibilities.length) {
               responsibility = responsibilities[activeIdx];

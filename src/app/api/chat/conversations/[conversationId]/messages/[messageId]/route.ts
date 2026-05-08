@@ -3,9 +3,7 @@ import { db } from '@/lib/db';
 import { publishChatEvent } from '@/lib/chatRealtime';
 
 type MessageRouteContext = {
-  params:
-    | Promise<{ conversationId?: string; messageId?: string }>
-    | { conversationId?: string; messageId?: string };
+  params: Promise<{ conversationId?: string; messageId?: string }>;
 };
 
 function extractRouteIdsFromPath(pathname: string) {
