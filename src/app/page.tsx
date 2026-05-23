@@ -158,6 +158,13 @@ import {
   getIncomingCallRequest,
   getIncomingCallResponse,
 } from '@/features/app-shell/chat-call-signals';
+import {
+  createConversationRequest,
+  fetchConversationMessagesRequest,
+  fetchConversationsRequest,
+  patchConversationMessageRequest,
+  sendConversationMessageRequest,
+} from '@/features/app-shell/chat-api';
 import { resetConversationUnreadCount } from '@/features/app-shell/chat-conversations';
 import {
   markAllNotificationsAsRead,
@@ -173,6 +180,10 @@ import {
   buildInitialActivities,
   buildInitialTasks,
 } from '@/features/app-shell/demo-seed';
+import {
+  fetchNocMonthlyConsumptionRequest,
+  fetchNocOverviewRequest,
+} from '@/features/app-shell/noc-api';
 import { readBootstrapLocalData } from '@/features/app-shell/storage-bootstrap';
 import {
   normalizeTicketAdminSettings,
@@ -576,19 +587,12 @@ export default function NOCActivityApp() {
     const requestId = ++fetchMessagesRequestIdRef.current;
 
     try {
-      const response = await fetch(`/api/chat/conversations/${conversationId}/messages?userId=${user?.id || ''}`, {
-        cache: 'no-store',
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          Pragma: 'no-cache',
-          Expires: '0',
-        },
-      });
+      const response = await fetchConversationMessagesRequest(conversationId, user?.id || '');
       if (!response.ok) {
         console.warn('Échec téléchargement des messages', response.status);
         return;
       }
-      const data = await response.json();
+      const data = response.data;
       if (data.success) {
         if (requestId !== fetchMessagesRequestIdRef.current) {
           return;
@@ -608,19 +612,12 @@ export default function NOCActivityApp() {
   const fetchConversations = useCallback(async () => {
     if (!user) return;
     try {
-      const response = await fetch(`/api/chat/conversations?userId=${user.id}`, {
-        cache: 'no-store',
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          Pragma: 'no-cache',
-          Expires: '0',
-        },
-      });
+      const response = await fetchConversationsRequest(user.id);
       if (!response.ok) {
         console.warn('Échec téléchargement des conversations', response.status);
         return;
       }
-      const data = await response.json();
+      const data = response.data;
       if (data.success) {
         const loaded = data.conversations.map((conversation: any) => mapFetchedConversation(conversation));
 
@@ -687,20 +684,7 @@ export default function NOCActivityApp() {
   const refreshNocOverview = useCallback(async () => {
     try {
       setNocOverviewLoading(true);
-      const response = await fetch('/api/noc/overview', {
-        cache: 'no-store',
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          Pragma: 'no-cache',
-          Expires: '0',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Echec de synchronisation NOC');
-      }
-
-      const payload = await response.json();
+      const payload = await fetchNocOverviewRequest();
       setNocOverviewData(payload);
     } catch (error) {
       console.error('Erreur sync NOC overview:', error);
@@ -712,15 +696,7 @@ export default function NOCActivityApp() {
 
   const generateConsumptionReport = useCallback(async () => {
     try {
-      const response = await fetch('/api/noc/reporting/consumption?scope=monthly', {
-        cache: 'no-store',
-      });
-
-      if (!response.ok) {
-        throw new Error('Generation du rapport impossible');
-      }
-
-      const payload = await response.json();
+      const payload = await fetchNocMonthlyConsumptionRequest();
       setNocReportData(payload.report);
       toast.success('Rapport de consommation genere');
     } catch (error) {
@@ -777,33 +753,25 @@ export default function NOCActivityApp() {
       }
 
       try {
-        const response = await fetch('/api/chat/conversations', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            type,
-            name,
-            description,
-            createdBy: user.id,
-            participantIds: uniqueParticipantIds,
-          }),
+        const response = await createConversationRequest({
+          type,
+          name,
+          description,
+          createdBy: user.id,
+          participantIds: uniqueParticipantIds,
         });
 
         if (!response.ok) {
           let errMsg = `Erreur création conversation (${response.status})`;
-          try {
-            const errJson = await response.json();
-            if (errJson?.error) {
-              errMsg = `Erreur création conversation (${response.status}) : ${errJson.error}`;
-            }
-          } catch (_e) {
-            // réponse non JSON
+          const errJson = response.data;
+          if (errJson?.error) {
+            errMsg = `Erreur création conversation (${response.status}) : ${errJson.error}`;
           }
           toast.error(errMsg);
           return null;
         }
 
-        const data = await response.json();
+        const data = response.data;
         if (!data?.success || !data?.conversation) {
           toast.error('Erreur création conversation');
           return null;
@@ -2748,11 +2716,7 @@ export default function NOCActivityApp() {
         replyToId: messagePayload.replyTo?.id,
       });
 
-      let response = await fetch(`/api/chat/conversations/${conversationId}/messages`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(buildBody(conversationId)),
-      });
+      let response = await sendConversationMessageRequest(conversationId, buildBody(conversationId));
 
       if (!response.ok && response.status === 404 && selectedConversation) {
         const participantIds = selectedConversation.participants
@@ -2776,31 +2740,23 @@ export default function NOCActivityApp() {
             ]);
             setSelectedConversation(recreatedConversation);
 
-            response = await fetch(`/api/chat/conversations/${conversationId}/messages`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(buildBody(conversationId)),
-            });
+            response = await sendConversationMessageRequest(conversationId, buildBody(conversationId));
           }
         }
       }
 
       if (!response.ok) {
         let errMsg = `Erreur envoi du message (${response.status})`;
-        try {
-          const errJson = await response.json();
-          if (errJson?.error) {
-            errMsg = `Erreur envoi du message (${response.status}) : ${errJson.error}`;
-          }
-        } catch (_e) {
-          // peut être non-JSON
+        const errJson = response.data;
+        if (errJson?.error) {
+          errMsg = `Erreur envoi du message (${response.status}) : ${errJson.error}`;
         }
         console.error('Erreur API send message', response.status, errMsg);
         toast.error(errMsg);
         return;
       }
 
-      const result = await response.json();
+      const result = response.data;
       if (result.success && result.message) {
         // On s'assure que le mapping est bien à plat pour l'affichage
         const createdMessage: ChatMessage = {
@@ -2871,19 +2827,19 @@ export default function NOCActivityApp() {
       if (!user?.id) return null;
 
       try {
-        const response = await fetch(`/api/chat/conversations/${conversationId}/messages/${messageId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action, userId: user.id, ...(payload || {}) }),
+        const response = await patchConversationMessageRequest(conversationId, messageId, {
+          action,
+          userId: user.id,
+          ...(payload || {}),
         });
 
         if (!response.ok) {
-          const err = await response.json().catch(() => ({}));
+          const err = response.data;
           toast.error(err?.error || 'Erreur mise à jour du message');
           return null;
         }
 
-        const data = await response.json();
+        const data = response.data;
         if (!data?.success || !data?.message) {
           toast.error('Erreur mise à jour du message');
           return null;
