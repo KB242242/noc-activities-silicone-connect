@@ -138,6 +138,12 @@ import {
   getProfileUpdateFromPayload,
 } from '@/features/app-shell/chat-realtime';
 import {
+  markNotificationsReadForConversation,
+  mergeIncomingMessage,
+  mergePinnedMessages,
+  updateConversationsWithIncomingMessage,
+} from '@/features/app-shell/chat-stream-updates';
+import {
   CreateTicketDialog,
   TicketArchiveDashboard,
 } from '@/features/app-shell/lazy-components';
@@ -778,55 +784,21 @@ export default function NOCActivityApp() {
         if (!payload?.message) return;
 
         const message = mapIncomingChatMessage(payload.message);
-
-        setChatMessages((prev) => {
-          const exists = prev.some((existing) => existing.id === message.id);
-          if (exists) {
-            return prev.map((existing) => (existing.id === message.id ? { ...existing, ...message } : existing));
-          }
-
-          return [...prev, message];
-        });
-
-        setPinnedMessages((prev) => {
-          if (!message.isPinned) {
-            return prev.filter((existing) => existing.id !== message.id);
-          }
-          const exists = prev.some((existing) => existing.id === message.id);
-          return exists ? prev.map((existing) => (existing.id === message.id ? { ...existing, ...message } : existing)) : [...prev, message];
-        });
-
-        setConversations((prev) =>
-          prev.map((conversation) => {
-            if (conversation.id !== message.conversationId) return conversation;
-
-            const activeConversation = selectedConversationRef.current;
-            const isOpenConversation =
-              activeConversation?.id === message.conversationId && currentTabRef.current === 'messagerie';
-            const isIncoming = message.senderId !== user.id;
-
-            return {
-              ...conversation,
-              lastMessage: message,
-              updatedAt: new Date(),
-              unreadCount: isIncoming && !isOpenConversation ? (conversation.unreadCount || 0) + 1 : 0,
-            };
-          })
-        );
-
         const activeConversation = selectedConversationRef.current;
         const isOpenConversation =
           activeConversation?.id === message.conversationId && currentTabRef.current === 'messagerie';
         const isIncoming = message.senderId !== user.id;
 
+        setChatMessages((prev) => mergeIncomingMessage(prev, message));
+
+        setPinnedMessages((prev) => mergePinnedMessages(prev, message));
+
+        setConversations((prev) =>
+          updateConversationsWithIncomingMessage(prev, message, isIncoming, isOpenConversation)
+        );
+
         if (isIncoming && isOpenConversation) {
-          setNotifications((prev) =>
-            prev.map((notification) =>
-              notification.conversationId === message.conversationId
-                ? { ...notification, read: true }
-                : notification
-            )
-          );
+          setNotifications((prev) => markNotificationsReadForConversation(prev, message.conversationId));
         }
       } catch (error) {
         console.error('Erreur event stream chat', error);
