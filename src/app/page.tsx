@@ -128,6 +128,10 @@ import {
   mapIncomingChatMessage,
 } from '@/features/app-shell/chat-mappers';
 import {
+  mapCreatedConversation,
+  mapFetchedConversation,
+} from '@/features/app-shell/chat-conversation-mappers';
+import {
   CreateTicketDialog,
   TicketArchiveDashboard,
 } from '@/features/app-shell/lazy-components';
@@ -521,23 +525,7 @@ export default function NOCActivityApp() {
       }
       const data = await response.json();
       if (data.success) {
-        const loaded = data.conversations.map((c: any) => ({
-          ...c,
-          createdAt: new Date(c.createdAt),
-          updatedAt: new Date(c.updatedAt),
-          participants: c.participants?.map((p: any) => ({
-            ...p,
-            joinedAt: new Date(p.joinedAt),
-            lastReadAt: p.lastReadAt ? new Date(p.lastReadAt) : undefined,
-          })) || [],
-          lastMessage: c.messages?.[0] ? {
-            ...c.messages[0],
-            createdAt: new Date(c.messages[0].createdAt),
-            updatedAt: new Date(c.messages[0].updatedAt),
-            readAt: c.messages[0].readAt ? new Date(c.messages[0].readAt) : undefined,
-            mediaData: c.messages[0].mediaUrl || undefined,
-          } : undefined
-        })) as Conversation[];
+        const loaded = data.conversations.map((conversation: any) => mapFetchedConversation(conversation));
 
         setConversations(loaded);
         if (loaded.length > 0) {
@@ -724,36 +712,7 @@ export default function NOCActivityApp() {
           return null;
         }
 
-        const c = data.conversation;
-        const mappedConversation: Conversation = {
-          ...c,
-          createdAt: new Date(c.createdAt),
-          updatedAt: new Date(c.updatedAt),
-          participants: c.participants?.map((p: any) => ({
-            ...p,
-            joinedAt: new Date(p.joinedAt),
-            lastReadAt: p.lastReadAt ? new Date(p.lastReadAt) : undefined,
-          })) || [],
-          lastMessage: c.lastMessage
-            ? {
-                ...c.lastMessage,
-                createdAt: new Date(c.lastMessage.createdAt),
-                updatedAt: new Date(c.lastMessage.updatedAt),
-                readAt: c.lastMessage.readAt ? new Date(c.lastMessage.readAt) : undefined,
-                mediaData: c.lastMessage.mediaUrl || undefined,
-                reactions: c.lastMessage.reactions || [],
-                readBy: c.lastMessage.readBy || [],
-                isEdited: c.lastMessage.isEdited || false,
-                isDeleted: c.lastMessage.isDeleted || false,
-                deletedForEveryone: c.lastMessage.deletedForEveryone || false,
-                isPinned: c.lastMessage.isPinned || false,
-                isImportant: c.lastMessage.isImportant || false,
-                isArchived: c.lastMessage.isArchived || false,
-              }
-            : undefined,
-        };
-
-        return mappedConversation;
+        return mapCreatedConversation(data.conversation);
       } catch (error) {
         console.error('Erreur createConversationInDb', error);
         toast.error('Erreur création conversation');
