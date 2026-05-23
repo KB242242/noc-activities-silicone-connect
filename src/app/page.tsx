@@ -200,6 +200,7 @@ import {
   restoreTicketRequest,
   TicketApiRequestError,
   unarchiveTicketRequest,
+  updateTicketDetailsRequest,
   updateTicketStatusRequest,
 } from '@/features/app-shell/ticket-api';
 import {
@@ -11077,39 +11078,34 @@ export default function NOCActivityApp() {
                         try {
                           const selectedSites = resolveTicketSiteSelection(editingTicket.site);
                           const selectedTechnicians = resolveTicketTechnicians(editingTicket.technicien);
-                          const response = await fetch(`/api/tickets/${editingTicket.id}`, {
-                            method: 'PUT',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                              objet: editingTicket.objet,
-                              description: editingTicket.description,
-                              status: mapLegacyTicketStatusToApi(editingTicket.status),
-                              priority: mapLegacyTicketPriorityToApi(editingTicket.priority),
-                              siteIds: selectedSites.map((site) => site.id),
-                              siteNames: selectedSites.map((site) => site.name),
-                              localities: splitTicketValues(editingTicket.localite),
-                              technicianIds: selectedTechnicians.map((technician) => technician.id),
-                              technicianNames: selectedTechnicians.map((technician) => ({ id: technician.id, name: technician.name })),
-                              updatedBy: user?.name,
-                              updatedById: user?.id,
-                            }),
+                          const updatedPayload = await updateTicketDetailsRequest({
+                            ticketId: editingTicket.id,
+                            objet: editingTicket.objet,
+                            description: editingTicket.description,
+                            status: mapLegacyTicketStatusToApi(editingTicket.status),
+                            priority: mapLegacyTicketPriorityToApi(editingTicket.priority),
+                            siteIds: selectedSites.map((site) => site.id),
+                            siteNames: selectedSites.map((site) => site.name),
+                            localities: splitTicketValues(editingTicket.localite),
+                            technicianIds: selectedTechnicians.map((technician) => technician.id),
+                            technicianNames: selectedTechnicians.map((technician) => ({ id: technician.id, name: technician.name })),
+                            updatedBy: user?.name,
+                            updatedById: user?.id,
                           });
 
-                          if (!response.ok) {
-                            const err = await response.json().catch(() => ({}));
-                            if (response.status === 409 || err?.error === 'technician_capacity_exceeded') {
-                              toast.error(err?.message ?? 'Un technicien a deja 3 tickets actifs cette semaine.');
-                              return;
-                            }
-                            throw new Error('ticket_update_failed');
-                          }
-
-                          const updatedTicket = mapApiTicketToLegacy(await response.json());
+                          const updatedTicket = mapApiTicketToLegacy(updatedPayload);
                           setTickets((prev) => prev.map((ticket) => ticket.id === updatedTicket.id ? updatedTicket : ticket));
                           setSelectedTicket((prev) => prev?.id === updatedTicket.id ? updatedTicket : prev);
                           setEditTicketOpen(false);
                           toast.success('Ticket modifié');
                         } catch (error) {
+                          if (error instanceof TicketApiRequestError) {
+                            const err = error.payload;
+                            if (error.status === 409 || err?.error === 'technician_capacity_exceeded') {
+                              toast.error(err?.message ?? 'Un technicien a deja 3 tickets actifs cette semaine.');
+                              return;
+                            }
+                          }
                           console.error('[tickets page] update ticket', error);
                           toast.error('Impossible de modifier le ticket');
                         }

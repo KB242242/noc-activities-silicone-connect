@@ -107,3 +107,36 @@ export async function updateTicketStatusRequest(params: {
     errorMessage: 'status_update_failed',
   });
 }
+
+export async function updateTicketDetailsRequest(params: {
+  ticketId: string;
+  objet: string;
+  description: string;
+  status: string;
+  priority: string;
+  siteIds: string[];
+  siteNames: string[];
+  localities: string[];
+  technicianIds: string[];
+  technicianNames: Array<{ id: string; name: string }>;
+  updatedBy?: string;
+  updatedById?: string;
+}): Promise<any> {
+  return updateTicketRequest({
+    ticketId: params.ticketId,
+    payload: {
+      objet: params.objet,
+      description: params.description,
+      status: params.status,
+      priority: params.priority,
+      siteIds: params.siteIds,
+      siteNames: params.siteNames,
+      localities: params.localities,
+      technicianIds: params.technicianIds,
+      technicianNames: params.technicianNames,
+      updatedBy: params.updatedBy,
+      updatedById: params.updatedById,
+    },
+    errorMessage: 'ticket_update_failed',
+  });
+}
