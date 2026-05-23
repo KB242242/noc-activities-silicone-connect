@@ -123,6 +123,11 @@ import {
   updateTicketActionBusyKeys,
 } from '@/features/app-shell/ticket-selectors';
 import {
+  attachReplyMessages,
+  mapFetchedChatMessage,
+  mapIncomingChatMessage,
+} from '@/features/app-shell/chat-mappers';
+import {
   CreateTicketDialog,
   TicketArchiveDashboard,
 } from '@/features/app-shell/lazy-components';
@@ -488,45 +493,8 @@ export default function NOCActivityApp() {
           return;
         }
 
-        const mapped = data.messages.map((m: any) => {
-          let parsed = { ...m };
-          // Si le content est un JSON avec __chatPayload, on l'extrait
-          if (typeof m.content === 'string' && m.content.startsWith('{"__chatPayload"')) {
-            try {
-              const payload = JSON.parse(m.content);
-              if (payload.__chatPayload) {
-                parsed = {
-                  ...m,
-                  ...payload,
-                  content: payload.content || '',
-                  mediaData: payload.mediaUrl || payload.mediaData || undefined,
-                  fileName: payload.fileName,
-                  fileSize: payload.fileSize,
-                  fileType: payload.fileType,
-                  type: payload.type || m.type,
-                };
-              }
-            } catch (e) {
-              // ignore parse error, fallback to original
-            }
-          } else {
-            parsed.mediaData = m.mediaUrl || undefined;
-          }
-          return {
-            ...parsed,
-            createdAt: new Date(m.createdAt),
-            updatedAt: new Date(m.updatedAt),
-            readAt: m.readAt ? new Date(m.readAt) : undefined,
-            isImportant: Boolean(m.isImportant),
-            replyTo: undefined,
-          };
-        });
-
-        const byId = new Map(mapped.map((msg: ChatMessage) => [msg.id, msg]));
-        const withReplies = mapped.map((msg: ChatMessage) => ({
-          ...msg,
-          replyTo: msg.replyTo ? byId.get(msg.replyTo) : undefined,
-        }));
+        const mapped = data.messages.map((message: any) => mapFetchedChatMessage(message));
+        const withReplies = attachReplyMessages(mapped);
 
         setChatMessages(withReplies);
         setPinnedMessages(withReplies.filter((message: ChatMessage) => message.isPinned));
@@ -820,22 +788,6 @@ export default function NOCActivityApp() {
     const streamUrl = `/api/chat/stream?userId=${encodeURIComponent(user.id)}`;
     const source = new EventSource(streamUrl);
 
-    const mapIncomingMessage = (incoming: any): ChatMessage => ({
-      ...incoming,
-      createdAt: new Date(incoming.createdAt),
-      updatedAt: new Date(incoming.updatedAt),
-      readAt: incoming.readAt ? new Date(incoming.readAt) : undefined,
-      mediaData: incoming.mediaUrl || undefined,
-      reactions: incoming.reactions || [],
-      readBy: incoming.readBy || [],
-      isEdited: incoming.isEdited || false,
-      isDeleted: incoming.isDeleted || false,
-      deletedForEveryone: incoming.deletedForEveryone || false,
-      isPinned: incoming.isPinned || false,
-      isImportant: incoming.isImportant || false,
-      isArchived: incoming.isArchived || false,
-    });
-
     const handleChatEvent = (event: MessageEvent) => {
       try {
         const payload = JSON.parse(event.data || '{}');
@@ -901,7 +853,7 @@ export default function NOCActivityApp() {
 
         if (!payload?.message) return;
 
-        const message = mapIncomingMessage(payload.message);
+        const message = mapIncomingChatMessage(payload.message);
 
         setChatMessages((prev) => {
           const exists = prev.some((existing) => existing.id === message.id);
