@@ -80,18 +80,15 @@ function DialogContent({
   )
 }
 
-function FloatingDialogContent({
-  className,
-  children,
-  showCloseButton = true,
-  ...props
-}: React.ComponentProps<typeof DialogPrimitive.Content> & {
-  showCloseButton?: boolean
-}) {
+const FloatingDialogContent = React.forwardRef<
+  HTMLDivElement,
+  React.ComponentProps<typeof DialogPrimitive.Content> & { showCloseButton?: boolean }
+>(({ className, children, showCloseButton = true, ...props }, ref) => {
   return (
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay />
       <DialogPrimitive.Content
+        ref={ref}
         data-slot="dialog-content"
         className={cn(
           "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed z-50 rounded-lg border shadow-lg duration-200",
@@ -112,7 +109,8 @@ function FloatingDialogContent({
       </DialogPrimitive.Content>
     </DialogPortal>
   )
-}
+})
+FloatingDialogContent.displayName = 'FloatingDialogContent'
 
 function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
@@ -165,6 +163,7 @@ function DialogDescription({
 
 export {
   Dialog,
+  DialogTrigger,
   DialogClose,
   DialogContent,
   DialogDescription,
@@ -174,5 +173,4 @@ export {
   DialogOverlay,
   DialogPortal,
   DialogTitle,
-  DialogTrigger,
 }

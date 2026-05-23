@@ -1328,13 +1328,10 @@ export default function TicketManager({ userId, userName, userRole }: TicketMana
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    <AnimatePresence>
+                    <>
                       {filteredTickets.map(ticket => (
-                        <motion.tr
+                        <tr
                           key={ticket.id}
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          exit={{ opacity: 0 }}
                           className={`
                             cursor-pointer border-b border-gray-200 dark:border-gray-700
                             hover:bg-cyan-50 dark:hover:bg-cyan-900/30
@@ -1457,9 +1454,9 @@ export default function TicketManager({ userId, userName, userRole }: TicketMana
                               )}
                             </div>
                           </TableCell>
-                        </motion.tr>
+                        </tr>
                       ))}
-                    </AnimatePresence>
+                    </>
                     
                     {filteredTickets.length === 0 && (
                       <TableRow>

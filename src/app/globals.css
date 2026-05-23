@@ -175,6 +175,9 @@
 }
 
 .ticket-create-button {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   border: 1px solid hsl(var(--foreground) / 0.24);
   background: hsl(var(--background) / 0.55);
   color: hsl(var(--foreground));
@@ -187,11 +190,22 @@
     inset 0 1px 0 hsl(0 0% 100% / 0.2);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  transition: border-color 90ms ease-out, box-shadow 90ms ease-out, background-color 90ms ease-out, transform 90ms ease-out;
+  transition: border-color 110ms ease-out, box-shadow 110ms ease-out, background-color 110ms ease-out, transform 90ms ease-out;
+}
+
+.ticket-create-button::before {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0.85;
+  background: linear-gradient(160deg, hsl(0 0% 100% / 0.3), hsl(0 0% 100% / 0.06) 42%, transparent 100%);
+  transition: opacity 110ms ease-out;
 }
 
 .ticket-create-button:hover {
-  transform: translateY(-1px) scale(1.035);
+  transform: translateY(-1px) scale(1.01);
   border-color: hsl(var(--foreground) / 0.36);
   background: hsl(var(--background) / 0.65);
   box-shadow:
@@ -199,13 +213,30 @@
     inset 0 1px 0 hsl(0 0% 100% / 0.26);
 }
 
+.ticket-create-button:hover::before {
+  opacity: 1;
+}
+
 .ticket-create-button:active {
-  transform: translateY(1px) scale(0.98);
+  transform: translateY(1px) scale(0.985);
   border-color: hsl(var(--foreground) / 0.3);
   background: hsl(var(--background) / 0.58);
   box-shadow:
     0 2px 8px hsl(var(--foreground) / 0.08),
     inset 0 1px 0 hsl(0 0% 100% / 0.2);
+}
+
+.ticket-create-button:active::before {
+  opacity: 0.65;
+}
+
+.ticket-create-button:focus-visible {
+  outline: none;
+  border-color: hsl(var(--ring) / 0.7);
+  box-shadow:
+    0 0 0 3px hsl(var(--ring) / 0.24),
+    0 4px 12px hsl(var(--foreground) / 0.1),
+    inset 0 1px 0 hsl(0 0% 100% / 0.22);
 }
 
 .dark .ticket-create-button {
@@ -218,7 +249,7 @@
 }
 
 .dark .ticket-create-button:hover {
-  transform: translateY(-1px) scale(1.035);
+  transform: translateY(-1px) scale(1.01);
   border-color: hsl(var(--foreground) / 0.34);
   background: hsl(var(--background) / 0.5);
   box-shadow:
@@ -234,12 +265,73 @@
     inset 0 1px 0 hsl(0 0% 100% / 0.08);
 }
 
+.ticket-create-button--primary {
+  border-color: hsl(196 100% 42% / 0.58);
+  color: hsl(197 97% 25%);
+  background: linear-gradient(138deg, hsl(192 100% 96% / 0.88), hsl(198 100% 93% / 0.76));
+  box-shadow:
+    0 3px 11px hsl(196 90% 44% / 0.2),
+    inset 0 1px 0 hsl(0 0% 100% / 0.42);
+}
+
+.ticket-create-button--primary:hover {
+  border-color: hsl(196 100% 42% / 0.72);
+  background: linear-gradient(138deg, hsl(191 100% 95% / 0.94), hsl(198 100% 91% / 0.82));
+}
+
+.ticket-create-button--primary:active {
+  border-color: hsl(196 100% 39% / 0.68);
+  background: linear-gradient(138deg, hsl(191 100% 92% / 0.9), hsl(198 100% 89% / 0.78));
+}
+
+.dark .ticket-create-button--primary {
+  border-color: hsl(196 100% 58% / 0.46);
+  color: hsl(190 100% 92%);
+  background: linear-gradient(138deg, hsl(200 80% 25% / 0.78), hsl(210 82% 30% / 0.72));
+  box-shadow:
+    0 4px 12px hsl(202 100% 8% / 0.42),
+    inset 0 1px 0 hsl(0 0% 100% / 0.12);
+}
+
+.dark .ticket-create-button--primary:hover {
+  border-color: hsl(196 100% 62% / 0.58);
+  background: linear-gradient(138deg, hsl(200 80% 27% / 0.86), hsl(210 82% 33% / 0.78));
+}
+
+.dark .ticket-create-button--primary:active {
+  border-color: hsl(196 100% 58% / 0.52);
+  background: linear-gradient(138deg, hsl(200 72% 24% / 0.82), hsl(210 74% 30% / 0.74));
+}
+
+.ticket-trash-button::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0.45;
+  background: radial-gradient(120% 90% at 100% 0%, hsl(0 85% 62% / 0.2), transparent 56%);
+  transition: opacity 110ms ease-out;
+}
+
+.ticket-trash-button:hover::after {
+  opacity: 0.62;
+}
+
+.ticket-trash-button:active::after {
+  opacity: 0.5;
+}
+
 .ticket-trash-button--active {
   color: hsl(0 72% 48%);
+  border-color: hsl(0 75% 46% / 0.4);
+  background: hsl(0 100% 98% / 0.72);
 }
 
 .dark .ticket-trash-button--active {
   color: hsl(0 82% 70%);
+  border-color: hsl(0 72% 56% / 0.45);
+  background: hsl(0 44% 16% / 0.68);
 }
 
 @media (prefers-reduced-motion: reduce) {

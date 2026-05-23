@@ -7,25 +7,70 @@ export async function POST(
 ) {
   try {
     const { id } = await context.params;
-    const { description, creatorId } = await req.json();
+    const {
+      description,
+      creatorId,
+      creatorName,
+      linkedTicketId,
+      linkedTicketNumero,
+      linkedTicketObjet,
+      linkedTicketStatus,
+      linkedTicketPriority,
+      referenceTicketIds,
+      manualTechnicianNames,
+      selectedLocalities,
+      activityKind,
+    } = await req.json();
     if (!description?.trim()) {
       return NextResponse.json({ error: 'Description requise' }, { status: 400 });
     }
-    // Store sub-tasks as history entries for now (no dedicated model)
+
+    const normalizedReferences = Array.isArray(referenceTicketIds)
+      ? referenceTicketIds.map((value) => String(value ?? '').trim()).filter(Boolean)
+      : [];
+    const normalizedManualTechnicians = Array.isArray(manualTechnicianNames)
+      ? manualTechnicianNames.map((value) => String(value ?? '').trim()).filter(Boolean)
+      : [];
+    const normalizedLocalities = Array.isArray(selectedLocalities)
+      ? selectedLocalities.map((value) => String(value ?? '').trim()).filter(Boolean)
+      : [];
+
+    const payload = {
+      description: description.trim(),
+      status: 'TODO',
+      linkedTicketId: String(linkedTicketId ?? '').trim() || null,
+      linkedTicketNumero: String(linkedTicketNumero ?? '').trim() || null,
+      linkedTicketObjet: String(linkedTicketObjet ?? '').trim() || null,
+      linkedTicketStatus: String(linkedTicketStatus ?? '').trim() || null,
+      linkedTicketPriority: String(linkedTicketPriority ?? '').trim() || null,
+      referenceTicketIds: normalizedReferences,
+      manualTechnicianNames: normalizedManualTechnicians,
+      selectedLocalities: normalizedLocalities,
+      activityKind: String(activityKind ?? 'task').trim() || 'task',
+    };
+
     const entry = await (db as any).ticketHistory.create({
       data: {
         ticketId: id,
-        action: `sous-tâche: ${description.trim()}`,
+        action: 'subtask_created',
+        field: 'subtask',
+        oldValue: null,
+        newValue: JSON.stringify(payload),
         userId: creatorId ?? 'system',
-        userName: 'Système',
+        userName: creatorName ?? 'Systeme',
       },
     });
+
+    await (db as any).ticket.update({
+      where: { id },
+      data: { updatedAt: new Date() },
+    }).catch(() => null);
+
     return NextResponse.json({
       id: entry.id,
       ticketId: id,
-      description: description.trim(),
-      status: 'TODO',
-      createdAt: entry.createdAt,
+      ...payload,
+      createdAt: entry.timestamp,
     }, { status: 201 });
   } catch (err) {
     console.error('[subtasks POST]', err);

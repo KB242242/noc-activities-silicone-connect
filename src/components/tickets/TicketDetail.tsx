@@ -1,16 +1,22 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   X, Edit2, Trash2, MessageSquare, Clock, Paperclip, Activity,
   History, CheckSquare, ThumbsUp, Send, Lock, Globe, Plus, Save,
-  Loader2, Download, Eye, AlertCircle, RefreshCw, Upload,
+  Loader2, Download, Eye, AlertCircle, RefreshCw, Upload, Copy,
 } from 'lucide-react';
 import { format, formatDistanceToNow, differenceInSeconds, intervalToDuration } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
+import dynamic from 'next/dynamic';
+const Zarko = dynamic(
+  () => import('@/components/ui/rich-text-editor').then((module) => module.RichTextEditor),
+  { ssr: false, loading: () => <div className="h-55 rounded-md border bg-muted/20" /> }
+);
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
@@ -35,7 +41,7 @@ import {
 
 // ── Types ─────────────────────────────────────────────────────
 
-type DetailTab = 'comments' | 'resolution' | 'time' | 'attachments' | 'subtasks' | 'approval' | 'history';
+type DetailTab = 'comments' | 'resolution' | 'time' | 'attachments' | 'subtasks' | 'approval' | 'history' | 'quick_actions' | 'quick_menu';
 
 interface Props {
   ticket: NocTicket;
@@ -77,8 +83,8 @@ function ElapsedTimer({ startDate, closedAt }: { startDate: Date; closedAt?: Dat
 // ── Comment ────────────────────────────────────────────────────
 
 function CommentItem({
-  comment, userId, onDelete,
-}: { comment: NocTicketComment; userId: string; onDelete: (id: string) => void }) {
+  comment, canDelete, onDelete,
+}: { comment: NocTicketComment; canDelete: boolean; onDelete: (id: string) => void }) {
   return (
     <div className={`flex gap-3 ${comment.isPrivate ? 'opacity-80' : ''}`}>
       <div className="h-8 w-8 rounded-full bg-indigo-600/40 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
@@ -95,7 +101,7 @@ function CommentItem({
           <span className="text-xs text-muted-foreground ml-auto">
             {formatDistanceToNow(new Date(comment.createdAt), { addSuffix: true, locale: fr })}
           </span>
-          {comment.authorId === userId && (
+          {canDelete && (
             <button
               className="text-muted-foreground hover:text-red-400 transition-colors"
               onClick={() => onDelete(comment.id)}
@@ -117,6 +123,7 @@ function CommentItem({
 export default function TicketDetail({
   ticket: initialTicket, user, isEditor, isSuperAdmin, onClose, onEdit, onRefresh,
 }: Props) {
+  const router = useRouter();
   const [ticket, setTicket] = useState<NocTicket>(initialTicket);
   const [activeTab, setActiveTab] = useState<DetailTab>('comments');
   const [comments, setComments] = useState<NocTicketComment[]>(initialTicket.comments ?? []);
@@ -147,6 +154,15 @@ export default function TicketDetail({
     resolutionDescription: ticket.resolutionDescription ?? '',
     resolutionCause: ticket.resolutionCause ?? '' as NocResolutionCause | '',
   });
+
+  const copyText = async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(`${label} copié`);
+    } catch {
+      toast.error(`Impossible de copier ${label.toLowerCase()}`);
+    }
+  };
 
   const typeCfg = TICKET_TYPE_CONFIG[ticket.type];
   const statusCfg = TICKET_STATUS_CONFIG[ticket.status];
@@ -206,8 +222,19 @@ export default function TicketDetail({
 
   const deleteComment = async (commentId: string) => {
     try {
-      const res = await fetch(`/api/tickets/${ticket.id}/comments/${commentId}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error();
+      const res = await fetch(`/api/tickets/${ticket.id}/comments/${commentId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requesterId: user.id, requesterRole: user.role }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        if (res.status === 403 || err?.error === 'Non autorise') {
+          toast.error('Suppression non autorisee (auteur ou super admin uniquement)');
+          return;
+        }
+        throw new Error();
+      }
       setComments((p) => p.filter((c) => c.id !== commentId));
       toast.success('Commentaire supprimé');
     } catch {
@@ -347,6 +374,8 @@ export default function TicketDetail({
     { id: 'subtasks', label: 'Activité', icon: <Activity className="w-4 h-4" />, count: subTasks.length },
     { id: 'approval', label: 'Approbation', icon: <ThumbsUp className="w-4 h-4" /> },
     { id: 'history', label: 'Historique', icon: <History className="w-4 h-4" /> },
+    { id: 'quick_actions', label: 'Actions rapides', icon: <RefreshCw className="w-4 h-4" /> },
+    { id: 'quick_menu', label: 'Menu contextuel', icon: <MessageSquare className="w-4 h-4" /> },
   ];
 
   // ── Render ─────────────────────────────────────────────────
@@ -383,6 +412,20 @@ export default function TicketDetail({
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
+              <Button
+                variant={activeTab === 'quick_actions' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setActiveTab('quick_actions')}
+              >
+                <RefreshCw className="w-4 h-4 mr-1.5" /> Actions rapides
+              </Button>
+              <Button
+                variant={activeTab === 'quick_menu' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setActiveTab('quick_menu')}
+              >
+                <MessageSquare className="w-4 h-4 mr-1.5" /> Menu contextuel
+              </Button>
               {isEditor && (
                 <Button variant="outline" size="sm" onClick={() => onEdit(ticket)}>
                   <Edit2 className="w-4 h-4 mr-1.5" /> Modifier
@@ -471,7 +514,12 @@ export default function TicketDetail({
                   <p className="text-center text-muted-foreground text-sm py-8">Aucun commentaire pour le moment</p>
                 )}
                 {comments.map((c) => (
-                  <CommentItem key={c.id} comment={c} userId={user.id} onDelete={deleteComment} />
+                  <CommentItem
+                    key={c.id}
+                    comment={c}
+                    canDelete={c.authorId === user.id || isSuperAdmin}
+                    onDelete={deleteComment}
+                  />
                 ))}
 
                 <Separator />
@@ -510,40 +558,56 @@ export default function TicketDetail({
             {/* RESOLUTION */}
             {activeTab === 'resolution' && (
               <div className="space-y-4">
-                <div className="space-y-1.5">
-                  <Label>Description de la résolution</Label>
-                  <Textarea
-                    value={resolutionForm.resolutionDescription}
-                    onChange={(e) => setResolutionForm((p) => ({ ...p, resolutionDescription: e.target.value }))}
-                    rows={5}
-                    className="resize-none"
-                    placeholder="Décrire la solution apportée…"
-                    disabled={!isEditor}
-                  />
+                <div className="rounded-lg border bg-muted/30 p-4 mb-2">
+                  <h2 className="text-lg font-semibold mb-1">Rubrique Resolution</h2>
+                  <p className="text-sm text-muted-foreground mb-2">Decrire la resolution technique du ticket</p>
+                  {/* Un seul message de résolution par utilisateur */}
+                  {ticket.resolutionAuthorId && ticket.resolutionAuthorId !== user.id ? (
+                    <div className="space-y-1.5">
+                      <Label>Description resolution</Label>
+                      <div className="prose prose-sm max-w-none bg-muted/10 rounded p-3 min-h-30" dangerouslySetInnerHTML={{ __html: ticket.resolutionDescription || '<em>Aucune résolution saisie</em>' }} />
+                      <div className="text-xs text-muted-foreground mt-1">Seul l&apos;auteur peut modifier la résolution.</div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="space-y-1.5">
+                        <Label>Categorie resolution</Label>
+                        <Select
+                          value={resolutionForm.resolutionCause}
+                          onValueChange={(v) => setResolutionForm((p) => ({ ...p, resolutionCause: v as NocResolutionCause | '' }))}
+                          disabled={!isEditor}
+                        >
+                          <SelectTrigger className="max-w-xs">
+                            <SelectValue placeholder="" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="">—</SelectItem>
+                            {(Object.keys(RESOLUTION_CAUSE_CONFIG) as NocResolutionCause[]).map((c) => (
+                              <SelectItem key={c} value={c}>{RESOLUTION_CAUSE_CONFIG[c]}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Description resolution</Label>
+                        <Zarko
+                          value={resolutionForm.resolutionDescription}
+                          onChange={(html) => setResolutionForm((p) => ({ ...p, resolutionDescription: html }))}
+                          placeholder="Saisir la resolution..."
+                          minHeight="180px"
+                          enableTicketReferences
+                          className="bg-white/70 dark:bg-slate-900/45 backdrop-blur-sm"
+                          disabled={!isEditor}
+                        />
+                      </div>
+                      {isEditor && (
+                        <Button onClick={saveResolution} className="bg-blue-600 hover:bg-blue-700 text-white mt-2">
+                          <Save className="w-4 h-4 mr-1.5" /> Enregistrer Resolution
+                        </Button>
+                      )}
+                    </>
+                  )}
                 </div>
-                <div className="space-y-1.5">
-                  <Label>Cause de la panne</Label>
-                  <Select
-                    value={resolutionForm.resolutionCause}
-                    onValueChange={(v) => setResolutionForm((p) => ({ ...p, resolutionCause: v as NocResolutionCause | '' }))}
-                    disabled={!isEditor}
-                  >
-                    <SelectTrigger className="max-w-xs">
-                      <SelectValue placeholder="Sélectionner" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">—</SelectItem>
-                      {(Object.keys(RESOLUTION_CAUSE_CONFIG) as NocResolutionCause[]).map((c) => (
-                        <SelectItem key={c} value={c}>{RESOLUTION_CAUSE_CONFIG[c]}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {isEditor && (
-                  <Button onClick={saveResolution} className="bg-indigo-600 hover:bg-indigo-700 text-white">
-                    <Save className="w-4 h-4 mr-1.5" /> Enregistrer la résolution
-                  </Button>
-                )}
                 {ticket.status !== 'CLOSED' && isEditor && (
                   <Card className="p-4 border-amber-500/30 bg-amber-500/5">
                     <p className="text-sm text-amber-400 flex items-center gap-2">
@@ -729,6 +793,52 @@ export default function TicketDetail({
                   ))
                 )}
               </div>
+            )}
+
+            {activeTab === 'quick_actions' && (
+              <Card className="p-4 space-y-3">
+                <p className="text-sm font-medium">Navigation directe vers les ecrans existants</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" size="sm" onClick={() => onClose()}>
+                    <X className="w-4 h-4 mr-1.5" /> Retour liste tickets
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => router.push('/')}>
+                    <Eye className="w-4 h-4 mr-1.5" /> Tableau de bord
+                  </Button>
+                  <Button size="sm" onClick={fetchDetail}>
+                    <RefreshCw className="w-4 h-4 mr-1.5" /> Actualiser les donnees
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => void copyText(ticket.numero ?? '', 'ID ticket')}>
+                    <Copy className="w-4 h-4 mr-1.5" /> Copier ID
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => void copyText(`${window.location.origin}/tickets/${ticket.id}`, 'URL ticket')}>
+                    <Globe className="w-4 h-4 mr-1.5" /> Copier URL
+                  </Button>
+                </div>
+              </Card>
+            )}
+
+            {activeTab === 'quick_menu' && (
+              <Card className="p-4 space-y-3">
+                <p className="text-sm font-medium">Operations rapides (reponse, transfert, impression)</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" size="sm" onClick={() => toast.info('Reponse')}>
+                    <Send className="w-4 h-4 mr-1.5" /> Reponse
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => toast.info('Repondre a tous')}>
+                    <Globe className="w-4 h-4 mr-1.5" /> Repondre a tous
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => toast.info('Transferer')}>
+                    <Upload className="w-4 h-4 mr-1.5" /> Transferer
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => window.print()}>
+                    <Download className="w-4 h-4 mr-1.5" /> Imprimer
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => toast.success('Message epingle')}>
+                    <CheckSquare className="w-4 h-4 mr-1.5" /> Epingler
+                  </Button>
+                </div>
+              </Card>
             )}
 
           </div>

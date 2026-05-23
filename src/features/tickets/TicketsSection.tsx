@@ -4,8 +4,10 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import { toast as sonnerToast } from 'sonner';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
-  AlertCircle, AlertTriangle, CheckCircle2, ClipboardList, Edit, Eye,
+  AlertCircle, AlertTriangle, Archive, ArchiveRestore, CheckCircle2, ClipboardList, Edit, Eye, MoreHorizontal,
   File, Inbox, LayoutDashboard, Lock, MapPin, Pin, Plus, RefreshCw,
   Search, Send, Trash2, Upload, User,
 } from 'lucide-react';
@@ -18,6 +20,14 @@ import {
   DialogFooter, DialogHeader, DialogTitle,
   FloatingDialogContent,
 } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -84,6 +94,8 @@ export function TicketsSection({ user, usersDirectory }: TicketsSectionProps) {
 
   // ── Data state ──────────────────────────────────────────────────────────────
   const [tickets, setTickets] = useState<TicketItem[]>([]);
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [siteOptions, setSiteOptions] = useState<TicketOptionItem[]>(
     SITES_LIST.map((name, i) => ({ id: `fallback-site-${i + 1}`, name }))
   );
@@ -100,6 +112,7 @@ export function TicketsSection({ user, usersDirectory }: TicketsSectionProps) {
   // ── UI state ─────────────────────────────────────────────────────────────────
   const [viewMode, setViewMode] = useState<'list' | 'card'>('list');
   const [showTrash, setShowTrash] = useState(false);
+  const [showArchive, setShowArchive] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<TicketStatus | 'all'>('all');
   const [priorityFilter, setPriorityFilter] = useState<TicketPriority | 'all'>('all');
@@ -122,11 +135,28 @@ export function TicketsSection({ user, usersDirectory }: TicketsSectionProps) {
 
   // ── Create dialog ────────────────────────────────────────────────────────────
   const [createOpen, setCreateOpen] = useState(false);
+    const openTicketDetailPage = useCallback((ticketId: string) => {
+      router.push(`/tickets/${ticketId}`);
+    }, []);
+
+  const prefetchTicketDetail = useCallback((ticketId: string) => {
+    router.prefetch(`/tickets/${ticketId}`);
+  }, [router]);
+
   const [form, setForm] = useState(DEFAULT_FORM);
   const [localityDraft, setLocalityDraft] = useState<TicketLocalityDraft>(DEFAULT_LOCALITY_DRAFT);
   const [localityEnabled, setLocalityEnabled] = useState(false);
   const [isCreatingLocality, setIsCreatingLocality] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const resetFilters = useCallback(() => {
+    setSearchQuery('');
+    setStatusFilter('all');
+    setPriorityFilter('all');
+    setSiteFilter('all');
+    setLocaliteFilter('all');
+    setTechFilter('all');
+  }, []);
 
   // ── Create dialog drag/resize ─────────────────────────────────────────────────
   const [dialogPos, setDialogPos] = useState({ x: 48, y: 72 });
@@ -234,6 +264,24 @@ export function TicketsSection({ user, usersDirectory }: TicketsSectionProps) {
     if (!editOpen) return;
     setEditLocalityDraft((prev) => ({ ...prev, freeText: editingTicket?.localite ?? '' }));
   }, [editOpen, editingTicket?.localite]);
+
+  useEffect(() => {
+    const requestedView = String(searchParams.get('ticketsView') ?? '').toLowerCase();
+    if (requestedView === 'archive') {
+      setShowArchive(true);
+      setShowTrash(false);
+      return;
+    }
+    if (requestedView === 'trash') {
+      setShowTrash(true);
+      setShowArchive(false);
+      return;
+    }
+    if (requestedView === 'active') {
+      setShowTrash(false);
+      setShowArchive(false);
+    }
+  }, [searchParams]);
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Create dialog positioning
@@ -369,7 +417,14 @@ export function TicketsSection({ user, usersDirectory }: TicketsSectionProps) {
           sla: form.sla, slr: form.slr,
         }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        if (res.status === 409 || err?.error === 'technician_capacity_exceeded') {
+          toast.error(err?.message ?? 'Un technicien a deja 3 tickets actifs cette semaine.');
+          return;
+        }
+        throw new Error();
+      }
       const created = mapApiTicketToLegacy(await res.json());
       setTickets((prev) => [created, ...prev.filter((t) => t.id !== created.id)]);
       setForm(DEFAULT_FORM);
@@ -411,7 +466,14 @@ export function TicketsSection({ user, usersDirectory }: TicketsSectionProps) {
           updatedById: user?.id,
         }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        if (res.status === 409 || err?.error === 'technician_capacity_exceeded') {
+          toast.error(err?.message ?? 'Un technicien a deja 3 tickets actifs cette semaine.');
+          return;
+        }
+        throw new Error();
+      }
       const updated = mapApiTicketToLegacy(await res.json());
       setTickets((prev) => prev.map((t) => t.id === updated.id ? updated : t));
       setSelectedTicket((prev) => prev?.id === updated.id ? updated : prev);
@@ -463,12 +525,85 @@ export function TicketsSection({ user, usersDirectory }: TicketsSectionProps) {
     }
   }, [user?.id, user?.name]);
 
+  const isTicketArchived = useCallback((ticket: TicketItem) => {
+    if (ticket.isArchived) return true;
+    if (ticket.status !== 'closed' || !ticket.closedAt) return false;
+    const now = new Date();
+    const oneYearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+    const closedAt = new Date(ticket.closedAt);
+    if (Number.isNaN(closedAt.getTime())) return false;
+    // Regle metier: auto-archive apres 1 an OU au passage d'annee (1er janvier).
+    return closedAt <= oneYearAgo || closedAt.getFullYear() < now.getFullYear();
+  }, []);
+
+  const resolveArchiveYear = useCallback((ticket: TicketItem) => {
+    if (ticket.archiveYear && Number.isFinite(ticket.archiveYear)) return ticket.archiveYear;
+    if (ticket.archivedAt) return new Date(ticket.archivedAt).getFullYear();
+    if (ticket.closedAt) return new Date(ticket.closedAt).getFullYear();
+    return ticket.createdAt.getFullYear();
+  }, []);
+
+  const handleArchiveTicket = useCallback(async (ticket: TicketItem) => {
+    try {
+      const archivedAt = new Date();
+      const res = await fetch(`/api/tickets/${ticket.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'CLOSED',
+          isArchived: true,
+          archivedAt: archivedAt.toISOString(),
+          archivedYear: archivedAt.getFullYear(),
+          updatedBy: user?.name,
+          updatedById: user?.id,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      const updated = mapApiTicketToLegacy(await res.json());
+      setTickets((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+      setSelectedTicket((prev) => (prev?.id === updated.id ? updated : prev));
+      toast.success('Ticket archivé');
+    } catch {
+      toast.error('Impossible d\'archiver le ticket');
+    }
+  }, [user?.id, user?.name]);
+
+  const handleUnarchiveTicket = useCallback(async (ticket: TicketItem) => {
+    try {
+      const res = await fetch(`/api/tickets/${ticket.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          isArchived: false,
+          archivedAt: null,
+          archivedYear: null,
+          updatedBy: user?.name,
+          updatedById: user?.id,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      const updated = mapApiTicketToLegacy(await res.json());
+      setTickets((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+      setSelectedTicket((prev) => (prev?.id === updated.id ? updated : prev));
+      toast.success('Ticket désarchivé');
+    } catch {
+      toast.error('Impossible de désarchiver le ticket');
+    }
+  }, [user?.id, user?.name]);
+
   // ─────────────────────────────────────────────────────────────────────────────
   // Filtered tickets
   // ─────────────────────────────────────────────────────────────────────────────
 
   const filteredTickets = useMemo(() => tickets.filter((t) => {
-    if (showTrash !== t.isDeleted) return false;
+    const archived = isTicketArchived(t);
+    if (showTrash) {
+      if (!t.isDeleted) return false;
+    } else if (showArchive) {
+      if (t.isDeleted || !archived) return false;
+    } else {
+      if (t.isDeleted || archived) return false;
+    }
     if (searchQuery && !t.objet.toLowerCase().includes(searchQuery.toLowerCase()) && !t.numero.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     if (statusFilter !== 'all' && t.status !== statusFilter) return false;
     if (priorityFilter !== 'all' && t.priority !== priorityFilter) return false;
@@ -476,7 +611,24 @@ export function TicketsSection({ user, usersDirectory }: TicketsSectionProps) {
     if (localiteFilter !== 'all' && t.localite !== localiteFilter) return false;
     if (techFilter !== 'all' && t.technicien !== techFilter) return false;
     return true;
-  }), [tickets, showTrash, searchQuery, statusFilter, priorityFilter, siteFilter, localiteFilter, techFilter]);
+  }), [tickets, showTrash, showArchive, isTicketArchived, searchQuery, statusFilter, priorityFilter, siteFilter, localiteFilter, techFilter]);
+
+  const archivedByYear = useMemo(() => {
+    if (!showArchive) return [] as Array<{ year: number; items: TicketItem[] }>;
+    const grouped = new Map<number, TicketItem[]>();
+    filteredTickets.forEach((ticket) => {
+      const year = resolveArchiveYear(ticket);
+      const current = grouped.get(year) ?? [];
+      current.push(ticket);
+      grouped.set(year, current);
+    });
+    return Array.from(grouped.entries())
+      .sort((a, b) => b[0] - a[0])
+      .map(([year, items]) => ({
+        year,
+        items: items.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
+      }));
+  }, [filteredTickets, resolveArchiveYear, showArchive]);
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Render
@@ -497,6 +649,66 @@ export function TicketsSection({ user, usersDirectory }: TicketsSectionProps) {
           <p className="text-muted-foreground">Suivi et création de tickets</p>
         </div>
         <div className="flex items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon" aria-label="Menu tickets" title="Menu tickets">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-60">
+              <DropdownMenuLabel>Gestion Tickets</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={() => {
+                  setShowArchive(false);
+                  setShowTrash(false);
+                }}
+              >
+                <Inbox className="mr-2 h-4 w-4" />
+                Aller vers les tickets actifs
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => {
+                  setShowArchive(true);
+                  setShowTrash(false);
+                }}
+              >
+                <Archive className="mr-2 h-4 w-4" />
+                Aller vers les archives
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => {
+                  setShowTrash(true);
+                  setShowArchive(false);
+                }}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Aller vers la corbeille
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => setViewMode('list')}>
+                <ClipboardList className="mr-2 h-4 w-4" />
+                Vue liste
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setViewMode('card')}>
+                <LayoutDashboard className="mr-2 h-4 w-4" />
+                Vue cartes
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setCreateOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Créer un ticket
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={resetFilters}>
+                <Search className="mr-2 h-4 w-4" />
+                Réinitialiser les filtres
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => void loadData()}>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Rafraîchir la liste
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           <Button
             variant="outline"
             size="icon"
@@ -508,20 +720,45 @@ export function TicketsSection({ user, usersDirectory }: TicketsSectionProps) {
           </Button>
           <Button
             variant="outline"
-            onClick={() => setShowTrash((p) => !p)}
-            className={`h-9 rounded-lg px-3 text-sm font-semibold sm:h-10 sm:px-4 ${showTrash ? 'bg-red-50 border-red-300 text-red-700 dark:bg-red-900/20 dark:border-red-700 dark:text-red-400' : ''}`}
+            onClick={() => {
+              setShowTrash((p) => {
+                const next = !p;
+                if (next) setShowArchive(false);
+                return next;
+              });
+            }}
+            aria-label={showTrash ? 'Masquer corbeille' : 'Corbeille'}
+            className={`ticket-create-button ticket-trash-button group h-8 rounded-md px-2.5 text-xs font-semibold sm:h-9 sm:px-3.5 sm:text-sm ${showTrash ? 'ticket-trash-button--active' : ''}`}
           >
-            <Trash2 className="w-4 h-4 mr-2" />
-            {showTrash ? 'Masquer corbeille' : 'Corbeille'}
+            <Trash2 className="h-4 w-4 shrink-0 sm:mr-2" />
+            <span className="hidden sm:inline">{showTrash ? 'Masquer corbeille' : 'Corbeille'}</span>
+          </Button>
+
+          <Button
+            variant="outline"
+            onClick={() => {
+              setShowArchive((p) => {
+                const next = !p;
+                if (next) setShowTrash(false);
+                return next;
+              });
+            }}
+            aria-label={showArchive ? 'Masquer archive' : 'Archive'}
+            className={`ticket-create-button group h-8 rounded-md px-2.5 text-xs font-semibold sm:h-9 sm:px-3.5 sm:text-sm ${showArchive ? 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-300' : ''}`}
+          >
+            <Archive className="h-4 w-4 shrink-0 sm:mr-2" />
+            <span className="hidden sm:inline">{showArchive ? 'Masquer archive' : 'Archive'}</span>
           </Button>
 
           {/* ── Create Ticket Button + Dialog ── */}
           <Dialog open={createOpen} onOpenChange={(v) => { setCreateOpen(v); if (!v) setLocalityEnabled(false); }}>
             <button
               onClick={() => setCreateOpen(true)}
-              className="inline-flex items-center gap-2 h-9 sm:h-10 px-3 sm:px-4 rounded-lg border-2 border-cyan-500 bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-sm font-semibold hover:from-cyan-600 hover:to-blue-700 transition-all shadow-sm"
+              aria-label="Créer un ticket"
+              className="ticket-create-button ticket-create-button--primary group inline-flex items-center justify-center h-8 sm:h-9 px-2.5 sm:px-3.5 rounded-md text-xs sm:text-sm font-semibold"
             >
-              <Plus className="w-4 h-4" />
+              <span className="text-lg leading-none transition-transform duration-200 group-hover:scale-110 sm:hidden">+</span>
+              <Plus className="hidden h-4 w-4 transition-transform duration-200 group-hover:scale-110 sm:mr-2 sm:inline-block" />
               <span className="hidden sm:inline">Créer un ticket</span>
             </button>
 
@@ -705,7 +942,56 @@ export function TicketsSection({ user, usersDirectory }: TicketsSectionProps) {
       {/* ── Filtres ── */}
       <Card className="border-2 dark:border-slate-700 bg-white dark:bg-slate-900">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base text-foreground">Filtres</CardTitle>
+          <div className="flex items-center justify-between gap-2">
+            <CardTitle className="text-base text-foreground">Filtres</CardTitle>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" aria-label="Menu filtres tickets" title="Menu filtres tickets">
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-60">
+                <DropdownMenuLabel>Menu Filtres</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onSelect={() => {
+                    setShowArchive(false);
+                    setShowTrash(false);
+                  }}
+                >
+                  <Inbox className="mr-2 h-4 w-4" />
+                  Voir les tickets actifs
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => {
+                    setShowArchive(true);
+                    setShowTrash(false);
+                  }}
+                >
+                  <Archive className="mr-2 h-4 w-4" />
+                  Voir les archives
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => {
+                    setShowTrash(true);
+                    setShowArchive(false);
+                  }}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Voir la corbeille
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={resetFilters}>
+                  <Search className="mr-2 h-4 w-4" />
+                  Réinitialiser les filtres
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => void loadData()}>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Rafraîchir la liste
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-3">
@@ -768,8 +1054,53 @@ export function TicketsSection({ user, usersDirectory }: TicketsSectionProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredTickets.map((ticket) => (
-                    <tr key={ticket.id} className="group border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer" onClick={() => { setSelectedTicket(ticket); setDetailOpen(true); }}>
+                  {showArchive ? archivedByYear.map((group) => (
+                    <>
+                      <tr key={`archive-year-${group.year}`} className="bg-amber-50/70 dark:bg-amber-900/20">
+                        <td colSpan={8} className="p-3 font-semibold text-amber-700 dark:text-amber-300">
+                          Dossier Archive {group.year} ({group.items.length})
+                        </td>
+                      </tr>
+                      {group.items.map((ticket) => (
+                        <tr key={ticket.id} className="group border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer" onMouseEnter={() => prefetchTicketDetail(ticket.id)} onClick={() => openTicketDetailPage(ticket.id)}>
+                          <td className="p-3 font-mono font-semibold text-cyan-600 dark:text-cyan-400">{ticket.numero}</td>
+                          <td className="p-3 max-w-[200px] truncate text-foreground">{ticket.objet}</td>
+                          <td className="p-3">
+                            <Badge className={`${TICKET_STATUSES[ticket.status]?.bgColor} ${TICKET_STATUSES[ticket.status]?.color} border ${TICKET_STATUSES[ticket.status]?.borderColor} font-semibold`}>
+                              {TICKET_STATUSES[ticket.status]?.label}
+                            </Badge>
+                          </td>
+                          <td className="p-3">
+                            <Badge className={`${TICKET_PRIORITIES[ticket.priority]?.bgColor} ${TICKET_PRIORITIES[ticket.priority]?.color} font-semibold`}>
+                              {TICKET_PRIORITIES[ticket.priority]?.label}
+                            </Badge>
+                          </td>
+                          <td className="p-3 text-foreground">{ticket.site || '-'}</td>
+                          <td className="p-3 text-foreground">{ticket.technicien || '-'}</td>
+                          <td className="p-3 text-muted-foreground text-sm">{format(ticket.createdAt, 'dd/MM/yyyy HH:mm')}</td>
+                          <td className="p-3">
+                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                              <Button asChild variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-blue-100 dark:hover:bg-blue-900/40">
+                                <Link href={`/tickets/${ticket.id}`} aria-label={`Voir le ticket ${ticket.numero}`}>
+                                  <Eye className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                                </Link>
+                              </Button>
+                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-yellow-100 dark:hover:bg-yellow-900/40" onClick={() => { setEditingTicket(ticket); setEditOpen(true); }}>
+                                <Edit className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />
+                              </Button>
+                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-emerald-100 dark:hover:bg-emerald-900/40" onClick={() => void handleUnarchiveTicket(ticket)}>
+                                <ArchiveRestore className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                              </Button>
+                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-red-100 dark:hover:bg-red-900/40" onClick={() => void handleDelete(ticket, ticket.isDeleted)}>
+                                <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </>
+                  )) : filteredTickets.map((ticket) => (
+                    <tr key={ticket.id} className="group border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer" onMouseEnter={() => prefetchTicketDetail(ticket.id)} onClick={() => openTicketDetailPage(ticket.id)}>
                       <td className="p-3 font-mono font-semibold text-cyan-600 dark:text-cyan-400">{ticket.numero}</td>
                       <td className="p-3 max-w-[200px] truncate text-foreground">{ticket.objet}</td>
                       <td className="p-3">
@@ -787,12 +1118,19 @@ export function TicketsSection({ user, usersDirectory }: TicketsSectionProps) {
                       <td className="p-3 text-muted-foreground text-sm">{format(ticket.createdAt, 'dd/MM/yyyy HH:mm')}</td>
                       <td className="p-3">
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-blue-100 dark:hover:bg-blue-900/40" onClick={() => { setSelectedTicket(ticket); setDetailOpen(true); }}>
-                            <Eye className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                          <Button asChild variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-blue-100 dark:hover:bg-blue-900/40">
+                            <Link href={`/tickets/${ticket.id}`} aria-label={`Voir le ticket ${ticket.numero}`}>
+                              <Eye className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                            </Link>
                           </Button>
                           <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-yellow-100 dark:hover:bg-yellow-900/40" onClick={() => { setEditingTicket(ticket); setEditOpen(true); }}>
                             <Edit className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />
                           </Button>
+                          {!showTrash && !showArchive && (
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-amber-100 dark:hover:bg-amber-900/40" onClick={() => void handleArchiveTicket(ticket)}>
+                              <Archive className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                            </Button>
+                          )}
                           <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-red-100 dark:hover:bg-red-900/40" onClick={() => void handleDelete(ticket, ticket.isDeleted)}>
                             <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400" />
                           </Button>
@@ -803,7 +1141,7 @@ export function TicketsSection({ user, usersDirectory }: TicketsSectionProps) {
                   {filteredTickets.length === 0 && (
                     <tr>
                       <td colSpan={8} className="p-8 text-center text-muted-foreground">
-                        {showTrash ? 'La corbeille est vide' : 'Aucun ticket. Cliquez sur "Créer un ticket" pour commencer.'}
+                        {showTrash ? 'La corbeille est vide' : showArchive ? 'Aucun ticket archivé' : 'Aucun ticket. Cliquez sur "Créer un ticket" pour commencer.'}
                       </td>
                     </tr>
                   )}
@@ -814,11 +1152,65 @@ export function TicketsSection({ user, usersDirectory }: TicketsSectionProps) {
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredTickets.map((ticket) => (
+          {showArchive ? archivedByYear.map((group) => (
+            <>
+              <Card key={`archive-card-year-${group.year}`} className="col-span-full border border-amber-300 bg-amber-50/70 dark:border-amber-800 dark:bg-amber-900/20">
+                <CardContent className="py-3 text-sm font-semibold text-amber-700 dark:text-amber-300">
+                  Dossier Archive {group.year} ({group.items.length})
+                </CardContent>
+              </Card>
+              {group.items.map((ticket) => (
+                <Card
+                  key={ticket.id}
+                  className={`border-2 ${TICKET_STATUSES[ticket.status]?.borderColor} bg-white dark:bg-slate-900 hover:shadow-lg transition-shadow cursor-pointer`}
+                  onMouseEnter={() => prefetchTicketDetail(ticket.id)}
+                  onClick={() => openTicketDetailPage(ticket.id)}
+                >
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono font-semibold text-cyan-600 dark:text-cyan-400">{ticket.numero}</span>
+                      <Badge className={`${TICKET_STATUSES[ticket.status]?.bgColor} ${TICKET_STATUSES[ticket.status]?.color} font-semibold`}>
+                        {TICKET_STATUSES[ticket.status]?.label}
+                      </Badge>
+                    </div>
+                    <CardTitle className="text-base text-foreground line-clamp-2">{ticket.objet}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="pb-3">
+                    <div className="space-y-2 text-sm">
+                      <div className="flex items-center gap-2">
+                        <Badge className={`${TICKET_PRIORITIES[ticket.priority]?.bgColor} ${TICKET_PRIORITIES[ticket.priority]?.color} text-xs`}>
+                          {TICKET_PRIORITIES[ticket.priority]?.label}
+                        </Badge>
+                        {(() => { const Cat = TICKET_CATEGORIES[ticket.category]?.icon; return Cat ? <Cat className="w-4 h-4 text-muted-foreground" /> : null; })()}
+                        <span className="text-muted-foreground">{TICKET_CATEGORIES[ticket.category]?.label}</span>
+                      </div>
+                      {ticket.site && <p className="text-muted-foreground flex items-center gap-1"><MapPin className="w-4 h-4" /> {ticket.site}</p>}
+                      {ticket.technicien && <p className="text-muted-foreground flex items-center gap-1"><User className="w-4 h-4" /> {ticket.technicien}</p>}
+                      <p className="text-muted-foreground text-xs">{format(ticket.createdAt, 'dd/MM/yyyy HH:mm')}</p>
+                    </div>
+                    <div className="flex items-center gap-1 mt-3 pt-3 border-t dark:border-slate-700" onClick={(e) => e.stopPropagation()}>
+                      <Button asChild variant="ghost" size="sm" className="h-8 px-2 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-blue-600 dark:text-blue-400">
+                        <Link href={`/tickets/${ticket.id}`}>
+                          <Eye className="w-4 h-4 mr-1" /> Voir
+                        </Link>
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-8 px-2 hover:bg-yellow-100 dark:hover:bg-yellow-900/40 text-yellow-600 dark:text-yellow-400" onClick={() => { setEditingTicket(ticket); setEditOpen(true); }}>
+                        <Edit className="w-4 h-4 mr-1" /> Modifier
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-8 px-2 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400" onClick={() => void handleUnarchiveTicket(ticket)}>
+                        <ArchiveRestore className="w-4 h-4 mr-1" /> Désarchiver
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </>
+          )) : filteredTickets.map((ticket) => (
             <Card
               key={ticket.id}
               className={`border-2 ${TICKET_STATUSES[ticket.status]?.borderColor} bg-white dark:bg-slate-900 hover:shadow-lg transition-shadow cursor-pointer`}
-              onClick={() => { setSelectedTicket(ticket); setDetailOpen(true); }}
+              onMouseEnter={() => prefetchTicketDetail(ticket.id)}
+              onClick={() => openTicketDetailPage(ticket.id)}
             >
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
@@ -843,19 +1235,26 @@ export function TicketsSection({ user, usersDirectory }: TicketsSectionProps) {
                   <p className="text-muted-foreground text-xs">{format(ticket.createdAt, 'dd/MM/yyyy HH:mm')}</p>
                 </div>
                 <div className="flex items-center gap-1 mt-3 pt-3 border-t dark:border-slate-700" onClick={(e) => e.stopPropagation()}>
-                  <Button variant="ghost" size="sm" className="h-8 px-2 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-blue-600 dark:text-blue-400" onClick={() => { setSelectedTicket(ticket); setDetailOpen(true); }}>
-                    <Eye className="w-4 h-4 mr-1" /> Voir
+                  <Button asChild variant="ghost" size="sm" className="h-8 px-2 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-blue-600 dark:text-blue-400">
+                    <Link href={`/tickets/${ticket.id}`}>
+                      <Eye className="w-4 h-4 mr-1" /> Voir
+                    </Link>
                   </Button>
                   <Button variant="ghost" size="sm" className="h-8 px-2 hover:bg-yellow-100 dark:hover:bg-yellow-900/40 text-yellow-600 dark:text-yellow-400" onClick={() => { setEditingTicket(ticket); setEditOpen(true); }}>
                     <Edit className="w-4 h-4 mr-1" /> Modifier
                   </Button>
+                  {!showTrash && !showArchive && (
+                    <Button variant="ghost" size="sm" className="h-8 px-2 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-600 dark:text-amber-400" onClick={() => void handleArchiveTicket(ticket)}>
+                      <Archive className="w-4 h-4 mr-1" /> Archiver
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>
           ))}
           {filteredTickets.length === 0 && (
             <div className="col-span-full py-12 text-center text-muted-foreground">
-              {showTrash ? 'La corbeille est vide' : 'Aucun ticket'}
+              {showTrash ? 'La corbeille est vide' : showArchive ? 'Aucun ticket archivé' : 'Aucun ticket'}
             </div>
           )}
         </div>

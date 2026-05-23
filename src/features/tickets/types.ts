@@ -36,6 +36,9 @@ export interface TicketItem {
   etr?: Date;
   sla?: string;
   slr?: string;
+  isArchived: boolean;
+  archivedAt?: Date;
+  archiveYear?: number;
   isDeleted: boolean;
   deletedAt?: Date;
   deletedBy?: string;

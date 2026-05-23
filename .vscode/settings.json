@@ -1,0 +1,26 @@
+{
+  "npm.packageManager": "npm",
+  "files.watcherExclude": {
+    "**/.git/**": true,
+    "**/.next/**": true,
+    "**/node_modules/**": true,
+    "**/.venv/**": true,
+    "**/public/chat-media/**": true,
+    "**/public/profile-avatars/**": true,
+    "**/public/upload/**": true,
+    "**/upload/**": true
+  },
+  "search.exclude": {
+    "**/.next": true,
+    "**/node_modules": true,
+    "**/.venv": true,
+    "**/public/chat-media": true,
+    "**/public/profile-avatars": true,
+    "**/public/upload": true,
+    "**/upload": true
+  },
+  "files.exclude": {
+    "**/.next": true,
+    "**/node_modules": true
+  }
+}

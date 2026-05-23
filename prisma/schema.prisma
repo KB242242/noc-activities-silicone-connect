@@ -523,7 +523,7 @@ model Ticket {
   id           String             @id @default(cuid())
   numero       String             @unique(map: "uk_tickets_numero") @db.VarChar(50)
   objet        String             @db.VarChar(500)
-  description  String?            @db.Text
+  description  String?            @db.LongText
   status       tickets_status?    @default(OPEN)
   priority     tickets_priority?  @default(MEDIUM)
   category     tickets_category?  @default(OTHER)

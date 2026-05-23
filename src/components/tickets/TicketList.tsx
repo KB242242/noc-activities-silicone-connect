@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import Link from 'next/link';
 import {
   Search, Plus, Filter, RefreshCw, Eye, Edit2, Trash2, RotateCcw,
   ChevronUp, ChevronDown, ChevronsUpDown, ChevronLeft, ChevronRight,
@@ -163,7 +164,7 @@ export default function TicketList({
     } finally {
       setLoading(false);
     }
-  }, [isTrash, filters, refreshKey]);
+  }, [isTrash, filters]);
 
   const fetchFilterOptions = useCallback(async () => {
     try {
@@ -200,8 +201,10 @@ export default function TicketList({
     }
   }, []);
 
-  useEffect(() => { fetchTickets(); }, [fetchTickets, refreshKey]);
-  useEffect(() => { fetchFilterOptions(); }, [fetchFilterOptions]);
+  // Fetch on filter change, isTrash change, or when refreshKey is bumped (after mutations)
+  useEffect(() => { fetchTickets(); }, [fetchTickets, refreshKey, isTrash]);
+  // Fetch filter options once on mount
+  useEffect(() => { fetchFilterOptions(); }, []);
   useEffect(() => { setPage(1); }, [filters, sort]);
 
   // ── Sort + paginate ────────────────────────────────────────
@@ -538,6 +541,22 @@ export default function TicketList({
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>Voir</TooltipContent>
+                              </Tooltip>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  {ticket.id ? (
+                                    <Button asChild variant="ghost" size="icon" className="h-7 w-7">
+                                      <Link href={`/tickets/${encodeURIComponent(String(ticket.id))}`}>
+                                        <ArrowUpRight className="w-4 h-4" />
+                                      </Link>
+                                    </Button>
+                                  ) : (
+                                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onView(ticket)}>
+                                      <ArrowUpRight className="w-4 h-4" />
+                                    </Button>
+                                  )}
+                                </TooltipTrigger>
+                                <TooltipContent>Page detail</TooltipContent>
                               </Tooltip>
                               {isEditor && (
                                 <Tooltip>

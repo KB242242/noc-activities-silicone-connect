@@ -74,7 +74,7 @@ export function parseTicketId(ticketId: string): { date: Date; increment: number
 }
 
 // ============================================
-// TICKET TITLE FORMATTING
+// TICKET TITLE FORMATTING 
 // ============================================
 
 /**

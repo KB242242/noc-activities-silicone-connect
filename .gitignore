@@ -54,4 +54,6 @@ server.log
 .config
 .stats
 2
+tmp/
+public/upload/tickets/
 

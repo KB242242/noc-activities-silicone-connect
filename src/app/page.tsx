@@ -5,9 +5,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from 'next-themes';
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isToday, addDays } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import dynamic from 'next/dynamic';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 // UI Components
 import { Button } from '@/components/ui/button';
@@ -20,7 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Dialog, DialogContent, FloatingDialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogClose, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogClose, DialogTrigger } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from '@/components/ui/dropdown-menu';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -36,8 +37,16 @@ import { NocReportingPanel } from '../components/noc/NocReportingPanel';
 import { NocGenericSectionPanel } from '../components/noc/NocGenericSectionPanel';
 import { NocSitesPanel } from '../components/noc/NocSitesPanel';
 import { NocCallCenterPanel } from '../components/noc/NocCallCenterPanel';
-import { CreateTicketDialog } from '../components/tickets/CreateTicketDialog';
-import { TicketsSection } from '../features/tickets/TicketsSection';
+
+const CreateTicketDialog = dynamic(
+  () => import('../components/tickets/CreateTicketDialog').then((module) => module.CreateTicketDialog),
+  { ssr: false }
+);
+
+const TicketArchiveDashboard = dynamic(
+  () => import('../components/tickets/TicketArchiveDashboard'),
+  { ssr: false }
+);
 
 // Icons
 import {
@@ -565,7 +574,7 @@ interface MessagingStats {
 // TYPES GESTION TICKETS
 // ============================================
 
-type TicketStatus = 'open' | 'in_progress' | 'pending' | 'resolved' | 'closed';
+type TicketStatus = 'open' | 'in_progress' | 'pending' | 'escalated' | 'suspended' | 'waiting_fiche' | 'resolved' | 'closed';
 type TicketPriority = 'low' | 'medium' | 'high' | 'critical';
 type TicketCategory = 'incident' | 'request' | 'problem' | 'change' | 'other';
 
@@ -607,10 +616,14 @@ interface TicketItem {
   id: string;
   numero: string;
   objet: string;
+  contactName: string;
+  accountName: string;
+  recentThread: string;
   description: string;
   status: TicketStatus;
   priority: TicketPriority;
   category: TicketCategory;
+  channel: string;
   site: string;
   localite: string;
   technicien: string;
@@ -630,6 +643,9 @@ interface TicketItem {
   etr?: Date; // Estimated Time of Resolution
   sla?: string; // Service Level Agreement (e.g., "4h", "24h")
   slr?: string; // Service Level Resolution
+  isArchived?: boolean;
+  archivedAt?: Date;
+  archivedYear?: number;
   isDeleted: boolean;
   deletedAt?: Date;
   deletedBy?: string;
@@ -763,6 +779,9 @@ const TICKET_STATUSES: Record<TicketStatus, { label: string; color: string; bgCo
   open: { label: 'Ouvert', color: 'text-red-700 dark:text-red-400', bgColor: 'bg-red-100 dark:bg-red-900/40', borderColor: 'border-red-300 dark:border-red-700' },
   in_progress: { label: 'En cours', color: 'text-blue-700 dark:text-blue-400', bgColor: 'bg-blue-100 dark:bg-blue-900/40', borderColor: 'border-blue-300 dark:border-blue-700' },
   pending: { label: 'En attente', color: 'text-yellow-700 dark:text-yellow-400', bgColor: 'bg-yellow-100 dark:bg-yellow-900/40', borderColor: 'border-yellow-300 dark:border-yellow-700' },
+  escalated: { label: 'Escalade', color: 'text-fuchsia-700 dark:text-fuchsia-300', bgColor: 'bg-fuchsia-100 dark:bg-fuchsia-900/40', borderColor: 'border-fuchsia-300 dark:border-fuchsia-700' },
+  suspended: { label: 'En suspens', color: 'text-amber-700 dark:text-amber-300', bgColor: 'bg-amber-100 dark:bg-amber-900/40', borderColor: 'border-amber-300 dark:border-amber-700' },
+  waiting_fiche: { label: 'En attente de la fiche', color: 'text-indigo-700 dark:text-indigo-300', bgColor: 'bg-indigo-100 dark:bg-indigo-900/40', borderColor: 'border-indigo-300 dark:border-indigo-700' },
   resolved: { label: 'Résolu', color: 'text-green-700 dark:text-green-400', bgColor: 'bg-green-100 dark:bg-green-900/40', borderColor: 'border-green-300 dark:border-green-700' },
   closed: { label: 'Fermé', color: 'text-slate-700 dark:text-slate-400', bgColor: 'bg-slate-100 dark:bg-slate-800', borderColor: 'border-slate-300 dark:border-slate-600' }
 };
@@ -789,65 +808,188 @@ interface TicketOptionItem {
   id: string;
   name: string;
   localite?: string | null;
+  departement?: string | null;
 }
 
 interface TicketCountryOption {
   code: string;
   name: string;
-  flag: string;
+  flagImage: string;
 }
 
 interface TicketLocalityDraft {
   countryCode: string;
   countryName: string;
+  departement: string;
   city: string;
   arrondissement: string;
   quartier: string;
   address: string;
-  latitude: string;
-  longitude: string;
+  reference: string;
   freeText: string;
 }
 
-type TicketDialogResizeDirection = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
+interface TicketManagedLocality {
+  id: string;
+  name: string;
+  countryCode?: string;
+  countryName?: string;
+  departement?: string;
+  city?: string;
+  arrondissement?: string;
+  quartier?: string;
+  address?: string;
+  reference?: string;
+}
+
+interface TicketAdminSettings {
+  numberFormat: string;
+  numberSeed: number;
+  notificationEmails: string[];
+  defaultSlaHours: number;
+  trashRetentionDays: number;
+  slaByCategory: Record<string, number>;
+}
 
 const TICKET_COUNTRIES: TicketCountryOption[] = [
-  { code: 'CD', name: 'RDC', flag: 'ðŸ‡¨ðŸ‡©' },
-  { code: 'CG', name: 'Congo', flag: 'ðŸ‡¨ðŸ‡¬' },
-  { code: 'CM', name: 'Cameroun', flag: 'ðŸ‡¨ðŸ‡²' },
-  { code: 'CI', name: "Côte d'Ivoire", flag: 'ðŸ‡¨ðŸ‡®' },
-  { code: 'SN', name: 'Sénégal', flag: 'ðŸ‡¸ðŸ‡³' },
-  { code: 'MA', name: 'Maroc', flag: 'ðŸ‡²ðŸ‡¦' },
-  { code: 'DZ', name: 'Algérie', flag: 'ðŸ‡©ðŸ‡¿' },
-  { code: 'TN', name: 'Tunisie', flag: 'ðŸ‡¹ðŸ‡³' },
-  { code: 'NG', name: 'Nigeria', flag: 'ðŸ‡³ðŸ‡¬' },
-  { code: 'KE', name: 'Kenya', flag: 'ðŸ‡°ðŸ‡ª' },
-  { code: 'ZA', name: 'Afrique du Sud', flag: 'ðŸ‡¿ðŸ‡¦' },
-  { code: 'FR', name: 'France', flag: 'ðŸ‡«ðŸ‡·' },
-  { code: 'BE', name: 'Belgique', flag: 'ðŸ‡§ðŸ‡ª' },
-  { code: 'CA', name: 'Canada', flag: 'ðŸ‡¨ðŸ‡¦' },
-  { code: 'US', name: 'États-Unis', flag: 'ðŸ‡ºðŸ‡¸' },
+  { code: 'DZ', name: 'Algérie', flagImage: 'https://flagcdn.com/w40/dz.png' },
+  { code: 'AO', name: 'Angola', flagImage: 'https://flagcdn.com/w40/ao.png' },
+  { code: 'BJ', name: 'Bénin', flagImage: 'https://flagcdn.com/w40/bj.png' },
+  { code: 'BW', name: 'Botswana', flagImage: 'https://flagcdn.com/w40/bw.png' },
+  { code: 'BF', name: 'Burkina Faso', flagImage: 'https://flagcdn.com/w40/bf.png' },
+  { code: 'BI', name: 'Burundi', flagImage: 'https://flagcdn.com/w40/bi.png' },
+  { code: 'CV', name: 'Cap-Vert', flagImage: 'https://flagcdn.com/w40/cv.png' },
+  { code: 'CM', name: 'Cameroun', flagImage: 'https://flagcdn.com/w40/cm.png' },
+  { code: 'CF', name: 'République centrafricaine', flagImage: 'https://flagcdn.com/w40/cf.png' },
+  { code: 'TD', name: 'Tchad', flagImage: 'https://flagcdn.com/w40/td.png' },
+  { code: 'KM', name: 'Comores', flagImage: 'https://flagcdn.com/w40/km.png' },
+  { code: 'CG', name: 'République du Congo', flagImage: 'https://flagcdn.com/w40/cg.png' },
+  { code: 'CD', name: 'RDC', flagImage: 'https://flagcdn.com/w40/cd.png' },
+  { code: 'CI', name: "Côte d'Ivoire", flagImage: 'https://flagcdn.com/w40/ci.png' },
+  { code: 'DJ', name: 'Djibouti', flagImage: 'https://flagcdn.com/w40/dj.png' },
+  { code: 'EG', name: 'Égypte', flagImage: 'https://flagcdn.com/w40/eg.png' },
+  { code: 'GQ', name: 'Guinée équatoriale', flagImage: 'https://flagcdn.com/w40/gq.png' },
+  { code: 'ER', name: 'Érythrée', flagImage: 'https://flagcdn.com/w40/er.png' },
+  { code: 'SZ', name: 'Eswatini', flagImage: 'https://flagcdn.com/w40/sz.png' },
+  { code: 'ET', name: 'Éthiopie', flagImage: 'https://flagcdn.com/w40/et.png' },
+  { code: 'GA', name: 'Gabon', flagImage: 'https://flagcdn.com/w40/ga.png' },
+  { code: 'GM', name: 'Gambie', flagImage: 'https://flagcdn.com/w40/gm.png' },
+  { code: 'GH', name: 'Ghana', flagImage: 'https://flagcdn.com/w40/gh.png' },
+  { code: 'GN', name: 'Guinée', flagImage: 'https://flagcdn.com/w40/gn.png' },
+  { code: 'GW', name: 'Guinée-Bissau', flagImage: 'https://flagcdn.com/w40/gw.png' },
+  { code: 'KE', name: 'Kenya', flagImage: 'https://flagcdn.com/w40/ke.png' },
+  { code: 'LS', name: 'Lesotho', flagImage: 'https://flagcdn.com/w40/ls.png' },
+  { code: 'LR', name: 'Libéria', flagImage: 'https://flagcdn.com/w40/lr.png' },
+  { code: 'LY', name: 'Libye', flagImage: 'https://flagcdn.com/w40/ly.png' },
+  { code: 'MG', name: 'Madagascar', flagImage: 'https://flagcdn.com/w40/mg.png' },
+  { code: 'MW', name: 'Malawi', flagImage: 'https://flagcdn.com/w40/mw.png' },
+  { code: 'ML', name: 'Mali', flagImage: 'https://flagcdn.com/w40/ml.png' },
+  { code: 'MR', name: 'Mauritanie', flagImage: 'https://flagcdn.com/w40/mr.png' },
+  { code: 'MU', name: 'Maurice', flagImage: 'https://flagcdn.com/w40/mu.png' },
+  { code: 'MA', name: 'Maroc', flagImage: 'https://flagcdn.com/w40/ma.png' },
+  { code: 'MZ', name: 'Mozambique', flagImage: 'https://flagcdn.com/w40/mz.png' },
+  { code: 'NA', name: 'Namibie', flagImage: 'https://flagcdn.com/w40/na.png' },
+  { code: 'NE', name: 'Niger', flagImage: 'https://flagcdn.com/w40/ne.png' },
+  { code: 'NG', name: 'Nigeria', flagImage: 'https://flagcdn.com/w40/ng.png' },
+  { code: 'RW', name: 'Rwanda', flagImage: 'https://flagcdn.com/w40/rw.png' },
+  { code: 'ST', name: 'Sao Tomé-et-Principe', flagImage: 'https://flagcdn.com/w40/st.png' },
+  { code: 'SN', name: 'Sénégal', flagImage: 'https://flagcdn.com/w40/sn.png' },
+  { code: 'SC', name: 'Seychelles', flagImage: 'https://flagcdn.com/w40/sc.png' },
+  { code: 'SL', name: 'Sierra Leone', flagImage: 'https://flagcdn.com/w40/sl.png' },
+  { code: 'SO', name: 'Somalie', flagImage: 'https://flagcdn.com/w40/so.png' },
+  { code: 'ZA', name: 'Afrique du Sud', flagImage: 'https://flagcdn.com/w40/za.png' },
+  { code: 'SS', name: 'Soudan du Sud', flagImage: 'https://flagcdn.com/w40/ss.png' },
+  { code: 'SD', name: 'Soudan', flagImage: 'https://flagcdn.com/w40/sd.png' },
+  { code: 'TZ', name: 'Tanzanie', flagImage: 'https://flagcdn.com/w40/tz.png' },
+  { code: 'TG', name: 'Togo', flagImage: 'https://flagcdn.com/w40/tg.png' },
+  { code: 'TN', name: 'Tunisie', flagImage: 'https://flagcdn.com/w40/tn.png' },
+  { code: 'UG', name: 'Ouganda', flagImage: 'https://flagcdn.com/w40/ug.png' },
+  { code: 'ZM', name: 'Zambie', flagImage: 'https://flagcdn.com/w40/zm.png' },
+  { code: 'ZW', name: 'Zimbabwe', flagImage: 'https://flagcdn.com/w40/zw.png' },
+].sort((left, right) => left.name.localeCompare(right.name, 'fr', { sensitivity: 'base' }));
+
+const CONGO_DEPARTMENTS: string[] = [
+  'Bouenza',
+  'Brazzaville',
+  'Cuvette',
+  'Cuvette-Ouest',
+  'Kouilou',
+  'Lékoumou',
+  'Likouala',
+  'Niari',
+  'Plateaux',
+  'Pointe-Noire',
+  'Pool',
+  'Sangha',
 ];
 
 const DEFAULT_TICKET_LOCALITY_DRAFT: TicketLocalityDraft = {
-  countryCode: 'CD',
-  countryName: 'RDC',
+  countryCode: 'CG',
+  countryName: 'République du Congo',
+  departement: '',
   city: '',
   arrondissement: '',
   quartier: '',
   address: '',
-  latitude: '',
-  longitude: '',
+  reference: '',
   freeText: '',
 };
+
+const TICKET_ADMIN_CATEGORY_KEYS = [
+  'deployment',
+  'supervision',
+  'ravitaillement',
+  'routine_visit',
+  'security',
+  'maintenance',
+  'incident',
+  'survey',
+] as const;
+
+const DEFAULT_TICKET_ADMIN_SETTINGS: TicketAdminSettings = {
+  numberFormat: '#SC{date}-{seq}',
+  numberSeed: 100000000,
+  notificationEmails: ['ange.bata@siliconeconnect.com'],
+  defaultSlaHours: 24,
+  trashRetentionDays: 30,
+  slaByCategory: {
+    deployment: 24,
+    supervision: 8,
+    ravitaillement: 24,
+    routine_visit: 48,
+    security: 4,
+    maintenance: 12,
+    incident: 4,
+    survey: 72,
+  },
+};
+
+function renderTicketCountryLabel(country: TicketCountryOption) {
+  return (
+    <span className="inline-flex items-center gap-2">
+      <img
+        src={country.flagImage}
+        alt={`Drapeau ${country.name}`}
+        className="h-4 w-6 rounded-[2px] border border-slate-300 object-cover dark:border-slate-600"
+        loading="lazy"
+      />
+      <span>{country.name}</span>
+    </span>
+  );
+}
 
 function mapApiTicketStatusToLegacy(status?: string): TicketStatus {
   switch (status) {
     case 'IN_PROGRESS':
       return 'in_progress';
     case 'PENDING':
-    case 'ESCALATED':
       return 'pending';
+    case 'ESCALATED':
+      return 'escalated';
+    case 'SUSPENDED':
+      return 'suspended';
+    case 'WAITING_FICHE':
+      return 'waiting_fiche';
     case 'RESOLVED':
       return 'resolved';
     case 'CLOSED':
@@ -863,6 +1005,12 @@ function mapLegacyTicketStatusToApi(status?: TicketStatus): string {
       return 'IN_PROGRESS';
     case 'pending':
       return 'PENDING';
+    case 'escalated':
+      return 'ESCALATED';
+    case 'suspended':
+      return 'SUSPENDED';
+    case 'waiting_fiche':
+      return 'WAITING_FICHE';
     case 'resolved':
       return 'RESOLVED';
     case 'closed':
@@ -936,17 +1084,29 @@ function mapApiTicketToLegacy(ticket: any): TicketItem {
   const technicianNames = Array.isArray(ticket.technicians)
     ? ticket.technicians.map((technician: { name?: string }) => technician.name).filter(Boolean)
     : [];
+  const clientNames = Array.isArray(ticket.clients)
+    ? ticket.clients.map((client: { name?: string }) => client.name).filter(Boolean)
+    : [];
   const siteNames = Array.isArray(ticket.sites) ? ticket.sites.filter(Boolean) : [];
   const localities = Array.isArray(ticket.localities) ? ticket.localities.filter(Boolean) : [];
+  const latestComment = Array.isArray(ticket.comments) && ticket.comments.length > 0
+    ? ticket.comments
+        .slice()
+        .sort((left: any, right: any) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())[0]
+    : null;
 
   return {
     id: String(ticket.id),
     numero: ticket.numero ?? '',
     objet: ticket.objet ?? '',
+    contactName: ticket.contactName ?? ticket.creatorName ?? ticket.reporterName ?? '-',
+    accountName: clientNames[0] ?? '-',
+    recentThread: latestComment?.content ? String(latestComment.content).slice(0, 90) : '-',
     description: ticket.description ?? '',
     status: mapApiTicketStatusToLegacy(ticket.status),
     priority: mapApiTicketPriorityToLegacy(ticket.priority),
     category: mapApiTicketTypeToLegacyCategory(ticket.type),
+    channel: ticket.channel ?? '-',
     site: siteNames.join(', '),
     localite: localities.join(', '),
     technicien: technicianNames.join(', '),
@@ -1000,6 +1160,9 @@ function mapApiTicketToLegacy(ticket: any): TicketItem {
     etr: ticket.etr ? new Date(ticket.etr) : undefined,
     sla: ticket.sla ?? undefined,
     slr: ticket.slr ?? undefined,
+    isArchived: Boolean(ticket.isArchived),
+    archivedAt: ticket.archivedAt ? new Date(ticket.archivedAt) : undefined,
+    archivedYear: Number.isFinite(Number(ticket.archivedYear)) ? Number(ticket.archivedYear) : undefined,
     isDeleted: Boolean(ticket.isDeleted),
     deletedAt: ticket.deletedAt ? new Date(ticket.deletedAt) : undefined,
     deletedBy: ticket.deletedBy ?? undefined,
@@ -1795,6 +1958,7 @@ function getAgentRestInfo(agentName: string, shiftName: string, targetDate: Date
 
 export default function NOCActivityApp() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   // États principaux
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -1870,6 +2034,10 @@ export default function NOCActivityApp() {
   const [userToDelete, setUserToDelete] = useState<UserProfile | null>(null);
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
   const [deleteConfirmationInput, setDeleteConfirmationInput] = useState('');
+  const [ticketAdminSettings, setTicketAdminSettings] = useState<TicketAdminSettings>(DEFAULT_TICKET_ADMIN_SETTINGS);
+  const [ticketAdminEmailsInput, setTicketAdminEmailsInput] = useState(DEFAULT_TICKET_ADMIN_SETTINGS.notificationEmails.join(', '));
+  const [ticketAdminSettingsLoading, setTicketAdminSettingsLoading] = useState(false);
+  const [ticketAdminSettingsSaving, setTicketAdminSettingsSaving] = useState(false);
 
   // États pour les filtres du Journal d'activité
   const [auditLogDateFrom, setAuditLogDateFrom] = useState<string>('');
@@ -2600,6 +2768,13 @@ export default function NOCActivityApp() {
   const [contextMenuMessage, setContextMenuMessage] = useState<ChatMessage | null>(null);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
   const [showContextMenu, setShowContextMenu] = useState(false);
+  const [trashContextTicket, setTrashContextTicket] = useState<TicketItem | null>(null);
+  const [trashContextMenuPosition, setTrashContextMenuPosition] = useState({ x: 0, y: 0 });
+  const [showTrashContextMenu, setShowTrashContextMenu] = useState(false);
+  const [deleteTicketDialogOpen, setDeleteTicketDialogOpen] = useState(false);
+  const [deleteTicketTarget, setDeleteTicketTarget] = useState<TicketItem | null>(null);
+  const [deleteTicketPermanent, setDeleteTicketPermanent] = useState(false);
+  const [ticketActionBusyKeys, setTicketActionBusyKeys] = useState<string[]>([]);
   
   // Conversation filter
   const [conversationFilter, setConversationFilter] = useState<'all' | 'unread' | 'groups'>('all');
@@ -2771,9 +2946,7 @@ export default function NOCActivityApp() {
   const [tickets, setTickets] = useState<TicketItem[]>([]);
   const [gedDocuments, setGedDocuments] = useState<any[]>([]);
   const [selectedTicket, setSelectedTicket] = useState<TicketItem | null>(null);
-  const [ticketDialogOpen, setTicketDialogOpen] = useState(false);
   const [ticketDetailOpen, setTicketDetailOpen] = useState(false);
-  const [createTicketOpen, setCreateTicketOpen] = useState(false);
   const [ticketViewMode, setTicketViewMode] = useState<'list' | 'card'>('list');
   const [ticketSearchQuery, setTicketSearchQuery] = useState('');
   const [ticketStatusFilter, setTicketStatusFilter] = useState<TicketStatus | 'all'>('all');
@@ -2781,47 +2954,114 @@ export default function NOCActivityApp() {
   const [ticketSiteFilter, setTicketSiteFilter] = useState<string>('all');
   const [ticketLocaliteFilter, setTicketLocaliteFilter] = useState<string>('all');
   const [ticketTechnicienFilter, setTicketTechnicienFilter] = useState<string>('all');
+  const [archiveYearFilter, setArchiveYearFilter] = useState<'all' | string>('all');
   const [ticketSiteOptions, setTicketSiteOptions] = useState<TicketOptionItem[]>(
     SITES_LIST.map((site, index) => ({ id: `fallback-site-${index + 1}`, name: site }))
   );
   const [ticketLocalityOptions, setTicketLocalityOptions] = useState<string[]>(LOCALITES_LIST);
   const [showDeletedTickets, setShowDeletedTickets] = useState(false);
-  const [newTicket, setNewTicket] = useState({
-    objet: '',
-    description: '',
-    priority: 'medium' as TicketPriority,
-    category: 'incident' as TicketCategory,
-    site: '',
-    localite: '',
-    technicien: '',
-    dueDate: null as Date | null,
-    etr: null as Date | null,
-    sla: '',
-    slr: ''
-  });
+  const [showArchivedTickets, setShowArchivedTickets] = useState(false);
+  const [quickLocalityDialogOpen, setQuickLocalityDialogOpen] = useState(false);
+  const [quickLocalityTab, setQuickLocalityTab] = useState<'create' | 'manage'>('create');
+  const [quickLocalityDraft, setQuickLocalityDraft] = useState<TicketLocalityDraft>(DEFAULT_TICKET_LOCALITY_DRAFT);
+  const [managedLocalities, setManagedLocalities] = useState<TicketManagedLocality[]>([]);
+  const [managedLocalitySearch, setManagedLocalitySearch] = useState('');
+  const [selectedManagedLocalityId, setSelectedManagedLocalityId] = useState<string>('');
+  const [managedLocalityName, setManagedLocalityName] = useState('');
+  const [managedLocalityDraft, setManagedLocalityDraft] = useState<TicketLocalityDraft>(DEFAULT_TICKET_LOCALITY_DRAFT);
+  const [isUpdatingLocality, setIsUpdatingLocality] = useState(false);
+  const [isDeletingLocality, setIsDeletingLocality] = useState(false);
+  const [ticketCongoDepartments, setTicketCongoDepartments] = useState<string[]>(CONGO_DEPARTMENTS);
   const [newTicketComment, setNewTicketComment] = useState('');
   const [isPrivateComment, setIsPrivateComment] = useState(false);
   const [editingTicket, setEditingTicket] = useState<TicketItem | null>(null);
   const [editTicketOpen, setEditTicketOpen] = useState(false);
   const [isCreatingLocality, setIsCreatingLocality] = useState(false);
-  const [isNewLocalityCreationEnabled, setIsNewLocalityCreationEnabled] = useState(false);
   const [isEditLocalityCreationEnabled, setIsEditLocalityCreationEnabled] = useState(false);
-  const [newTicketLocalityDraft, setNewTicketLocalityDraft] = useState<TicketLocalityDraft>(DEFAULT_TICKET_LOCALITY_DRAFT);
   const [editTicketLocalityDraft, setEditTicketLocalityDraft] = useState<TicketLocalityDraft>(DEFAULT_TICKET_LOCALITY_DRAFT);
-  const [createTicketDialogPosition, setCreateTicketDialogPosition] = useState({ x: 48, y: 72 });
-  const [createTicketDialogSize, setCreateTicketDialogSize] = useState({ width: 1100, height: 820 });
-  const [isCreateTicketDialogDragging, setIsCreateTicketDialogDragging] = useState(false);
-  const [createTicketDialogResizeDirection, setCreateTicketDialogResizeDirection] = useState<TicketDialogResizeDirection | null>(null);
-  const createTicketDialogPointerStateRef = useRef({
-    startX: 0,
-    startY: 0,
-    startLeft: 48,
-    startTop: 72,
-    startWidth: 1100,
-    startHeight: 820,
-    dragOffsetX: 0,
-    dragOffsetY: 0,
-  });
+  const getTicketActionKey = useCallback((action: 'delete' | 'restore' | 'permanent', ticketId: string) => `${action}:${ticketId}`, []);
+  const isTicketActionBusy = useCallback((action: 'delete' | 'restore' | 'permanent', ticketId: string) => (
+    ticketActionBusyKeys.includes(getTicketActionKey(action, ticketId))
+  ), [getTicketActionKey, ticketActionBusyKeys]);
+  const setTicketActionBusy = useCallback((actionKey: string, busy: boolean) => {
+    setTicketActionBusyKeys((prev) => {
+      if (busy) {
+        return prev.includes(actionKey) ? prev : [...prev, actionKey];
+      }
+      return prev.filter((key) => key !== actionKey);
+    });
+  }, []);
+  const matchesTicketStorageView = useCallback((ticket: TicketItem) => {
+    if (showDeletedTickets) return ticket.isDeleted;
+    if (showArchivedTickets) return !ticket.isDeleted && Boolean(ticket.isArchived);
+    return !ticket.isDeleted && !Boolean(ticket.isArchived);
+  }, [showArchivedTickets, showDeletedTickets]);
+  const currentStorageTickets = useMemo(() => tickets.filter((ticket) => matchesTicketStorageView(ticket)), [matchesTicketStorageView, tickets]);
+  const visibleTickets = useMemo(() => {
+    return currentStorageTickets.filter((ticket) => {
+      if (ticketSearchQuery) {
+        const query = ticketSearchQuery.toLowerCase();
+        const haystack = [ticket.numero, ticket.objet, ticket.contactName, ticket.accountName, ticket.recentThread, ticket.technicien, ticket.site, ticket.localite, ticket.channel].join(' ').toLowerCase();
+        if (!haystack.includes(query)) return false;
+      }
+      if (ticketStatusFilter !== 'all' && ticket.status !== ticketStatusFilter) return false;
+      if (ticketPriorityFilter !== 'all' && ticket.priority !== ticketPriorityFilter) return false;
+      if (ticketSiteFilter !== 'all' && !ticket.site.toLowerCase().includes(ticketSiteFilter.toLowerCase())) return false;
+      if (ticketLocaliteFilter !== 'all' && !ticket.localite.toLowerCase().includes(ticketLocaliteFilter.toLowerCase())) return false;
+      if (ticketTechnicienFilter !== 'all' && !ticket.technicien.toLowerCase().includes(ticketTechnicienFilter.toLowerCase())) return false;
+      return true;
+    });
+  }, [currentStorageTickets, ticketLocaliteFilter, ticketPriorityFilter, ticketSearchQuery, ticketSiteFilter, ticketStatusFilter, ticketTechnicienFilter]);
+  const archivedTickets = useMemo(() => tickets.filter((ticket) => !ticket.isDeleted && Boolean(ticket.isArchived)), [tickets]);
+  const archiveYears = useMemo(() => {
+    const years = Array.from(new Set(
+      archivedTickets
+        .map((ticket) => ticket.archivedYear ?? ticket.archivedAt?.getFullYear() ?? ticket.closedAt?.getFullYear() ?? ticket.createdAt.getFullYear())
+        .filter((year) => Number.isFinite(year))
+    ));
+    return years.sort((a, b) => Number(b) - Number(a));
+  }, [archivedTickets]);
+  const selectedArchiveTickets = useMemo(() => {
+    if (archiveYearFilter === 'all') return archivedTickets;
+    const selectedYear = Number(archiveYearFilter);
+    return archivedTickets.filter((ticket) => {
+      const year = ticket.archivedYear ?? ticket.archivedAt?.getFullYear() ?? ticket.closedAt?.getFullYear() ?? ticket.createdAt.getFullYear();
+      return year === selectedYear;
+    });
+  }, [archiveYearFilter, archivedTickets]);
+  const archiveReport = useMemo(() => {
+    const totalArchived = selectedArchiveTickets.length;
+    const slaSatisfied = selectedArchiveTickets.filter((ticket) => {
+      if (!ticket.dueDate) return false;
+      const archivedMoment = ticket.archivedAt ?? ticket.closedAt ?? ticket.updatedAt;
+      return archivedMoment.getTime() <= ticket.dueDate.getTime();
+    }).length;
+    const openInSelectedYear = tickets.filter((ticket) => {
+      const ticketYear = ticket.createdAt.getFullYear();
+      const selectedYear = archiveYearFilter === 'all' ? null : Number(archiveYearFilter);
+      const matchesYear = selectedYear ? ticketYear === selectedYear : true;
+      const ticketStatus = String(ticket.status ?? '').toUpperCase();
+      return matchesYear && !ticket.isDeleted && !ticket.isArchived && ticketStatus !== 'CLOSED' && ticketStatus !== 'RESOLVED';
+    }).length;
+    const slaRate = totalArchived > 0 ? Math.round((slaSatisfied / totalArchived) * 100) : 0;
+    return { totalArchived, slaSatisfied, slaRate, openInSelectedYear };
+  }, [archiveYearFilter, selectedArchiveTickets, tickets]);
+  const archiveYearBuckets = useMemo(() => {
+    const groups = new Map<number, TicketItem[]>();
+    selectedArchiveTickets.forEach((ticket) => {
+      const year = ticket.archivedYear ?? ticket.archivedAt?.getFullYear() ?? ticket.closedAt?.getFullYear() ?? ticket.createdAt.getFullYear();
+      const current = groups.get(year) ?? [];
+      current.push(ticket);
+      groups.set(year, current);
+    });
+
+    return Array.from(groups.entries())
+      .sort((left, right) => right[0] - left[0])
+      .map(([year, items]) => ({
+        year,
+        items: items.sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime()),
+      }));
+  }, [selectedArchiveTickets]);
   const ticketTechnicianOptions = useMemo(
     () => usersDirectory
       .filter((profile) => profile.isActive && (profile.role === 'TECHNICIEN' || profile.role === 'TECHNICIEN_NO'))
@@ -2829,6 +3069,25 @@ export default function NOCActivityApp() {
       .sort((left, right) => left.name.localeCompare(right.name, 'fr', { sensitivity: 'base' })),
     [usersDirectory]
   );
+
+  const filteredManagedLocalities = useMemo(() => {
+    const query = managedLocalitySearch.trim().toLowerCase();
+    if (!query) return managedLocalities;
+    return managedLocalities.filter((locality) => {
+      const haystack = [
+        locality.name,
+        locality.countryName,
+        locality.departement,
+        locality.city,
+        locality.arrondissement,
+        locality.quartier,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [managedLocalities, managedLocalitySearch]);
 
   // Typing indicator simulation
   const [simulatedTyping, setSimulatedTyping] = useState<{ userId: string; userName: string; isRecording: boolean } | null>(null);
@@ -3993,19 +4252,116 @@ export default function NOCActivityApp() {
     void syncUsersFromApi();
   }, [syncUsersFromApi]);
 
+  const loadTicketAdminSettings = useCallback(async () => {
+    if (!canManageUsers) return;
+    setTicketAdminSettingsLoading(true);
+    try {
+      const response = await fetch('/api/tickets/settings', { cache: 'no-store' });
+      if (!response.ok) {
+        throw new Error('ticket_settings_load_failed');
+      }
+      const payload = await response.json();
+      const nextSettings: TicketAdminSettings = {
+        numberFormat: String(payload?.numberFormat ?? DEFAULT_TICKET_ADMIN_SETTINGS.numberFormat),
+        numberSeed: Number(payload?.numberSeed ?? DEFAULT_TICKET_ADMIN_SETTINGS.numberSeed),
+        notificationEmails: Array.isArray(payload?.notificationEmails)
+          ? payload.notificationEmails.map((item: unknown) => String(item).trim()).filter(Boolean)
+          : DEFAULT_TICKET_ADMIN_SETTINGS.notificationEmails,
+        defaultSlaHours: Number(payload?.defaultSlaHours ?? DEFAULT_TICKET_ADMIN_SETTINGS.defaultSlaHours),
+        trashRetentionDays: Number(payload?.trashRetentionDays ?? DEFAULT_TICKET_ADMIN_SETTINGS.trashRetentionDays),
+        slaByCategory: {
+          ...DEFAULT_TICKET_ADMIN_SETTINGS.slaByCategory,
+          ...(payload?.slaByCategory && typeof payload.slaByCategory === 'object' ? payload.slaByCategory : {}),
+        },
+      };
+      setTicketAdminSettings(nextSettings);
+      setTicketAdminEmailsInput(nextSettings.notificationEmails.join(', '));
+    } catch {
+      toast.error('Paramètres Tickets indisponibles', {
+        description: 'Impossible de charger la configuration des tickets.',
+      });
+    } finally {
+      setTicketAdminSettingsLoading(false);
+    }
+  }, [canManageUsers]);
+
+  useEffect(() => {
+    if (currentTab !== 'admin' || !canManageUsers) return;
+    void loadTicketAdminSettings();
+  }, [currentTab, canManageUsers, loadTicketAdminSettings]);
+
+  const saveTicketAdminSettings = useCallback(async () => {
+    if (!canManageUsers || !user) return;
+
+    const parsedEmails = ticketAdminEmailsInput
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    if (parsedEmails.length === 0) {
+      toast.error('Emails requis', {
+        description: 'Ajoutez au moins une adresse email de notification.',
+      });
+      return;
+    }
+
+    setTicketAdminSettingsSaving(true);
+    try {
+      const response = await fetch('/api/tickets/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          role: user.role,
+          numberFormat: ticketAdminSettings.numberFormat,
+          numberSeed: ticketAdminSettings.numberSeed,
+          notificationEmails: parsedEmails,
+          defaultSlaHours: ticketAdminSettings.defaultSlaHours,
+          trashRetentionDays: ticketAdminSettings.trashRetentionDays,
+          slaByCategory: ticketAdminSettings.slaByCategory,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('ticket_settings_save_failed');
+      }
+
+      const payload = await response.json();
+      const nextSettings: TicketAdminSettings = payload?.settings ?? ticketAdminSettings;
+      setTicketAdminSettings(nextSettings);
+      setTicketAdminEmailsInput((nextSettings.notificationEmails ?? parsedEmails).join(', '));
+      toast.success('Paramètres Tickets enregistrés');
+    } catch {
+      toast.error('Enregistrement impossible', {
+        description: 'Les paramètres tickets n\'ont pas pu être sauvegardés.',
+      });
+    } finally {
+      setTicketAdminSettingsSaving(false);
+    }
+  }, [canManageUsers, ticketAdminEmailsInput, ticketAdminSettings, user]);
+
+  const openTicketDetailPage = useCallback((ticketId: string) => {
+    router.push(`/tickets/${ticketId}`);
+  }, [router]);
+
   const splitTicketValues = useCallback((value?: string) => {
     if (!value) return [] as string[];
     return value.split(',').map((item) => item.trim()).filter(Boolean);
   }, []);
 
-  const normalizeTicketLocality = useCallback((value: string) => value.trim().replace(/\s+/g, ' '), []);
+  const normalizeTicketLocality = useCallback((value: string) => {
+    const cleaned = value.trim().replace(/\s+/g, ' ');
+    if (!cleaned) return '';
+    return cleaned
+      .split(/(\s+|-|')/)
+      .map((chunk) => {
+        if (!chunk || /^(\s+|-|')$/.test(chunk)) return chunk;
+        const [first, ...rest] = chunk;
+        return `${first.toUpperCase()}${rest.join('').toLowerCase()}`;
+      })
+      .join('');
+  }, []);
 
-  const applyLocalityToTicket = useCallback((name: string, target: 'new' | 'edit') => {
-    if (target === 'new') {
-      setNewTicket((prev) => ({ ...prev, localite: name }));
-      return;
-    }
-
+  const applyLocalityToTicket = useCallback((name: string) => {
     setEditingTicket((prev) => prev ? { ...prev, localite: name } : prev);
   }, []);
 
@@ -4014,24 +4370,29 @@ export default function NOCActivityApp() {
     if (!normalized) return;
 
     setTicketLocalityOptions((prev) => {
-      if (prev.some((item) => item.toLowerCase() === normalized.toLowerCase())) {
+      if (prev.some((item) => normalizeTicketLocality(item).toLowerCase() === normalized.toLowerCase())) {
         return prev;
       }
       return [...prev, normalized].sort((left, right) => left.localeCompare(right, 'fr'));
     });
   }, [normalizeTicketLocality]);
 
-  const createTicketLocality = useCallback(async (payload: Partial<TicketLocalityDraft>, target: 'new' | 'edit') => {
+  const createTicketLocality = useCallback(async (payload: Partial<TicketLocalityDraft>, target: 'edit' | 'none' = 'none') => {
     const freeText = normalizeTicketLocality(payload.freeText ?? '');
+    const normalizedDepartment = normalizeTicketLocality(payload.departement ?? '');
+    const normalizedCity = normalizeTicketLocality(payload.city ?? '');
+    const normalizedArrondissement = normalizeTicketLocality(payload.arrondissement ?? '');
+    const normalizedQuartier = normalizeTicketLocality(payload.quartier ?? '');
+    const fallbackName = freeText || normalizedCity || normalizedDepartment || normalizedArrondissement || normalizedQuartier;
 
     if (
       !freeText
+      && !normalizedDepartment
       && !payload.city?.trim()
       && !payload.arrondissement?.trim()
       && !payload.quartier?.trim()
       && !payload.address?.trim()
-      && !String(payload.latitude ?? '').trim()
-      && !String(payload.longitude ?? '').trim()
+      && !payload.reference?.trim()
     ) {
       toast.error('Veuillez renseigner une localité');
       return;
@@ -4043,171 +4404,203 @@ export default function NOCActivityApp() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: freeText,
+          name: fallbackName,
           countryCode: payload.countryCode,
           countryName: payload.countryName,
-          city: payload.city,
-          arrondissement: payload.arrondissement,
-          quartier: payload.quartier,
+          departement: normalizedDepartment,
+          city: normalizedCity,
+          arrondissement: normalizedArrondissement,
+          quartier: normalizedQuartier,
           address: payload.address,
-          latitude: payload.latitude,
-          longitude: payload.longitude,
+          reference: payload.reference,
         }),
       });
 
       if (!response.ok) {
-        throw new Error('locality_create_failed');
+        const errorPayload = await response.json().catch(() => ({}));
+        throw new Error(String(errorPayload?.error ?? 'locality_create_failed'));
       }
 
       const created = await response.json();
-      const localityName = normalizeTicketLocality(String(created?.name ?? created?.label ?? created?.value ?? freeText));
+      const localityName = normalizeTicketLocality(String(created?.name ?? created?.label ?? created?.value ?? fallbackName));
       if (!localityName) {
         throw new Error('locality_name_empty');
       }
 
       upsertLocalityOption(localityName);
-      applyLocalityToTicket(localityName, target);
-
-      if (target === 'new') {
-        setNewTicketLocalityDraft((prev) => ({ ...DEFAULT_TICKET_LOCALITY_DRAFT, countryCode: prev.countryCode, countryName: prev.countryName }));
-      } else {
-        setEditTicketLocalityDraft((prev) => ({ ...DEFAULT_TICKET_LOCALITY_DRAFT, countryCode: prev.countryCode, countryName: prev.countryName }));
+      if (target === 'edit') {
+        applyLocalityToTicket(localityName);
+        setEditTicketLocalityDraft(DEFAULT_TICKET_LOCALITY_DRAFT);
+      }
+      if (target === 'none') {
+        setQuickLocalityDraft(DEFAULT_TICKET_LOCALITY_DRAFT);
       }
 
       toast.success('Localité enregistrée', { description: localityName });
+      return localityName;
     } catch (error) {
       console.error('[tickets page] create locality', error);
-      toast.error('Impossible d\'enregistrer la localité');
+      const message = error instanceof Error && error.message && error.message !== 'locality_create_failed'
+        ? error.message
+        : 'Impossible d\'enregistrer la localité';
+      toast.error(message);
+      return null;
     } finally {
       setIsCreatingLocality(false);
     }
   }, [applyLocalityToTicket, normalizeTicketLocality, upsertLocalityOption]);
 
-  const clampTicketDialogValue = useCallback((value: number, min: number, max: number) => {
-    return Math.min(Math.max(value, min), max);
-  }, []);
+  const handleQuickCreateLocality = useCallback(async () => {
+    const hasStructuredData = Boolean(
+      quickLocalityDraft.city.trim()
+      || quickLocalityDraft.departement.trim()
+      || quickLocalityDraft.arrondissement.trim()
+      || quickLocalityDraft.quartier.trim()
+      || quickLocalityDraft.address.trim()
+      || quickLocalityDraft.reference.trim()
+    );
 
-  const startCreateTicketDialogDrag = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    createTicketDialogPointerStateRef.current.dragOffsetX = event.clientX - createTicketDialogPosition.x;
-    createTicketDialogPointerStateRef.current.dragOffsetY = event.clientY - createTicketDialogPosition.y;
-    setIsCreateTicketDialogDragging(true);
-  }, [createTicketDialogPosition.x, createTicketDialogPosition.y]);
+    const normalized = normalizeTicketLocality(quickLocalityDraft.freeText);
+    if (!normalized && !hasStructuredData) {
+      toast.error('Veuillez renseigner au moins un champ de localisation');
+      return;
+    }
 
-  const startCreateTicketDialogResize = useCallback((direction: TicketDialogResizeDirection, event: React.MouseEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    createTicketDialogPointerStateRef.current.startX = event.clientX;
-    createTicketDialogPointerStateRef.current.startY = event.clientY;
-    createTicketDialogPointerStateRef.current.startLeft = createTicketDialogPosition.x;
-    createTicketDialogPointerStateRef.current.startTop = createTicketDialogPosition.y;
-    createTicketDialogPointerStateRef.current.startWidth = createTicketDialogSize.width;
-    createTicketDialogPointerStateRef.current.startHeight = createTicketDialogSize.height;
-    setCreateTicketDialogResizeDirection(direction);
-  }, [createTicketDialogPosition.x, createTicketDialogPosition.y, createTicketDialogSize.height, createTicketDialogSize.width]);
+    const created = await createTicketLocality({ ...quickLocalityDraft, freeText: normalized }, 'none');
+    if (!created) return;
 
-  useEffect(() => {
-    if (!createTicketOpen || typeof window === 'undefined') return;
+    setQuickLocalityDialogOpen(false);
+  }, [createTicketLocality, normalizeTicketLocality, quickLocalityDraft]);
 
-    const viewportPadding = 16;
-    const maxWidth = Math.max(460, window.innerWidth - viewportPadding * 2);
-    const maxHeight = Math.max(360, window.innerHeight - viewportPadding * 2);
+  const handleSelectManagedLocality = useCallback((id: string) => {
+    setSelectedManagedLocalityId(id);
+    const locality = managedLocalities.find((item) => item.id === id);
+    if (!locality) {
+      setManagedLocalityName('');
+      setManagedLocalityDraft(DEFAULT_TICKET_LOCALITY_DRAFT);
+      return;
+    }
 
-    setCreateTicketDialogSize((prev) => ({
-      width: clampTicketDialogValue(prev.width, 460, maxWidth),
-      height: clampTicketDialogValue(prev.height, 360, maxHeight),
-    }));
-
-    setCreateTicketDialogPosition((prev) => {
-      const centeredX = Math.round((window.innerWidth - Math.min(maxWidth, createTicketDialogSize.width)) / 2);
-      const centeredY = Math.round((window.innerHeight - Math.min(maxHeight, createTicketDialogSize.height)) / 2);
-      if (prev.x === 48 && prev.y === 72) {
-        return {
-          x: Math.max(viewportPadding, centeredX),
-          y: Math.max(viewportPadding, centeredY),
-        };
-      }
-
-      return {
-        x: clampTicketDialogValue(prev.x, viewportPadding, Math.max(viewportPadding, window.innerWidth - viewportPadding - createTicketDialogSize.width)),
-        y: clampTicketDialogValue(prev.y, viewportPadding, Math.max(viewportPadding, window.innerHeight - viewportPadding - createTicketDialogSize.height)),
-      };
+    setManagedLocalityName(locality.name);
+    setManagedLocalityDraft({
+      countryCode: locality.countryCode ?? DEFAULT_TICKET_LOCALITY_DRAFT.countryCode,
+      countryName: locality.countryName ?? DEFAULT_TICKET_LOCALITY_DRAFT.countryName,
+      departement: locality.departement ?? '',
+      city: locality.city ?? '',
+      arrondissement: locality.arrondissement ?? '',
+      quartier: locality.quartier ?? '',
+      address: locality.address ?? '',
+      reference: locality.reference ?? '',
+      freeText: locality.name,
     });
-  }, [clampTicketDialogValue, createTicketDialogSize.height, createTicketDialogSize.width, createTicketOpen]);
+  }, [managedLocalities]);
 
-  useEffect(() => {
-    if ((!isCreateTicketDialogDragging && !createTicketDialogResizeDirection) || typeof window === 'undefined') return;
+  const handleUpdateManagedLocality = useCallback(async () => {
+    if (!selectedManagedLocalityId) {
+      toast.error('Sélectionnez une localité à modifier');
+      return;
+    }
 
-    const viewportPadding = 16;
-    const minWidth = 460;
-    const minHeight = 360;
+    const normalizedName = normalizeTicketLocality(managedLocalityName);
+    if (!normalizedName) {
+      toast.error('Le nom du site est requis');
+      return;
+    }
 
-    const handlePointerMove = (event: MouseEvent) => {
-      if (isCreateTicketDialogDragging) {
-        const maxX = Math.max(viewportPadding, window.innerWidth - viewportPadding - createTicketDialogSize.width);
-        const maxY = Math.max(viewportPadding, window.innerHeight - viewportPadding - createTicketDialogSize.height);
-        const nextX = clampTicketDialogValue(event.clientX - createTicketDialogPointerStateRef.current.dragOffsetX, viewportPadding, maxX);
-        const nextY = clampTicketDialogValue(event.clientY - createTicketDialogPointerStateRef.current.dragOffsetY, viewportPadding, maxY);
-        setCreateTicketDialogPosition({ x: nextX, y: nextY });
-        return;
+    setIsUpdatingLocality(true);
+    try {
+      const response = await fetch('/api/tickets/localities', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: selectedManagedLocalityId,
+          name: normalizedName,
+          countryCode: managedLocalityDraft.countryCode,
+          countryName: managedLocalityDraft.countryName,
+          departement: managedLocalityDraft.departement,
+          city: managedLocalityDraft.city,
+          arrondissement: managedLocalityDraft.arrondissement,
+          quartier: managedLocalityDraft.quartier,
+          address: managedLocalityDraft.address,
+          reference: managedLocalityDraft.reference,
+        }),
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(String(payload?.error ?? 'update_locality_failed'));
       }
 
-      if (!createTicketDialogResizeDirection) return;
+      const updated = await response.json().catch(() => ({}));
+      const updatedName = normalizeTicketLocality(String(updated?.name ?? managedLocalityName));
 
-      const maxWidth = Math.max(minWidth, window.innerWidth - viewportPadding * 2);
-      const maxHeight = Math.max(minHeight, window.innerHeight - viewportPadding * 2);
-      const deltaX = event.clientX - createTicketDialogPointerStateRef.current.startX;
-      const deltaY = event.clientY - createTicketDialogPointerStateRef.current.startY;
+      setManagedLocalities((prev) => prev
+        .map((entry) => entry.id === selectedManagedLocalityId
+          ? {
+              ...entry,
+              name: updatedName,
+              countryCode: String(updated?.countryCode ?? managedLocalityDraft.countryCode ?? ''),
+              countryName: String(updated?.countryName ?? managedLocalityDraft.countryName ?? ''),
+              departement: normalizeTicketLocality(String(updated?.departement ?? managedLocalityDraft.departement ?? '')),
+              city: normalizeTicketLocality(String(updated?.city ?? managedLocalityDraft.city ?? '')),
+              arrondissement: normalizeTicketLocality(String(updated?.arrondissement ?? managedLocalityDraft.arrondissement ?? '')),
+              quartier: normalizeTicketLocality(String(updated?.quartier ?? managedLocalityDraft.quartier ?? '')),
+              address: String(updated?.address ?? managedLocalityDraft.address ?? ''),
+              reference: String(updated?.reference ?? managedLocalityDraft.reference ?? ''),
+            }
+          : entry)
+        .sort((left, right) => left.name.localeCompare(right.name, 'fr'))
+      );
 
-      let nextWidth = createTicketDialogPointerStateRef.current.startWidth;
-      let nextHeight = createTicketDialogPointerStateRef.current.startHeight;
-      let nextLeft = createTicketDialogPointerStateRef.current.startLeft;
-      let nextTop = createTicketDialogPointerStateRef.current.startTop;
+      upsertLocalityOption(updatedName);
+      setManagedLocalityName(updatedName);
 
-      if (createTicketDialogResizeDirection.includes('e')) {
-        nextWidth = clampTicketDialogValue(createTicketDialogPointerStateRef.current.startWidth + deltaX, minWidth, maxWidth);
+      toast.success('Localité mise à jour');
+    } catch (error) {
+      console.error('[tickets page] update locality', error);
+      toast.error('Impossible de modifier la localité');
+    } finally {
+      setIsUpdatingLocality(false);
+    }
+  }, [managedLocalityDraft, managedLocalityName, normalizeTicketLocality, selectedManagedLocalityId, upsertLocalityOption]);
+
+  const handleDeleteManagedLocality = useCallback(async () => {
+    if (!selectedManagedLocalityId) {
+      toast.error('Sélectionnez une localité à supprimer');
+      return;
+    }
+
+    if (typeof window !== 'undefined') {
+      const confirmed = window.confirm('Supprimer cette localité ?');
+      if (!confirmed) return;
+    }
+
+    setIsDeletingLocality(true);
+    try {
+      const response = await fetch('/api/tickets/localities', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: selectedManagedLocalityId }),
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(String(payload?.error ?? 'delete_locality_failed'));
       }
 
-      if (createTicketDialogResizeDirection.includes('s')) {
-        nextHeight = clampTicketDialogValue(createTicketDialogPointerStateRef.current.startHeight + deltaY, minHeight, maxHeight);
-      }
-
-      if (createTicketDialogResizeDirection.includes('w')) {
-        nextWidth = clampTicketDialogValue(createTicketDialogPointerStateRef.current.startWidth - deltaX, minWidth, maxWidth);
-        nextLeft = createTicketDialogPointerStateRef.current.startLeft + (createTicketDialogPointerStateRef.current.startWidth - nextWidth);
-      }
-
-      if (createTicketDialogResizeDirection.includes('n')) {
-        nextHeight = clampTicketDialogValue(createTicketDialogPointerStateRef.current.startHeight - deltaY, minHeight, maxHeight);
-        nextTop = createTicketDialogPointerStateRef.current.startTop + (createTicketDialogPointerStateRef.current.startHeight - nextHeight);
-      }
-
-      nextLeft = clampTicketDialogValue(nextLeft, viewportPadding, Math.max(viewportPadding, window.innerWidth - viewportPadding - nextWidth));
-      nextTop = clampTicketDialogValue(nextTop, viewportPadding, Math.max(viewportPadding, window.innerHeight - viewportPadding - nextHeight));
-
-      setCreateTicketDialogSize({ width: nextWidth, height: nextHeight });
-      setCreateTicketDialogPosition({ x: nextLeft, y: nextTop });
-    };
-
-    const stopPointerInteraction = () => {
-      setIsCreateTicketDialogDragging(false);
-      setCreateTicketDialogResizeDirection(null);
-    };
-
-    window.addEventListener('mousemove', handlePointerMove);
-    window.addEventListener('mouseup', stopPointerInteraction);
-
-    return () => {
-      window.removeEventListener('mousemove', handlePointerMove);
-      window.removeEventListener('mouseup', stopPointerInteraction);
-    };
-  }, [
-    clampTicketDialogValue,
-    createTicketDialogResizeDirection,
-    createTicketDialogSize.height,
-    createTicketDialogSize.width,
-    isCreateTicketDialogDragging,
-  ]);
+      setSelectedManagedLocalityId('');
+      setManagedLocalityName('');
+      setManagedLocalityDraft(DEFAULT_TICKET_LOCALITY_DRAFT);
+      setManagedLocalities((prev) => prev.filter((entry) => entry.id !== selectedManagedLocalityId));
+      setTicketLocalityOptions((prev) => prev.filter((entry) => normalizeTicketLocality(entry) !== normalizeTicketLocality(managedLocalityName)));
+      toast.success('Localité supprimée');
+    } catch (error) {
+      console.error('[tickets page] delete locality', error);
+      toast.error('Impossible de supprimer la localité');
+    } finally {
+      setIsDeletingLocality(false);
+    }
+  }, [managedLocalityName, normalizeTicketLocality, selectedManagedLocalityId]);
 
   const resolveTicketSiteSelection = useCallback((value?: string) => {
     const names = splitTicketValues(value);
@@ -4228,8 +4621,17 @@ export default function NOCActivityApp() {
         fetch('/api/tickets/localities', { cache: 'no-store' }),
       ]);
 
-      if (activeRes.ok && trashRes.ok) {
-        const [activeData, trashData] = await Promise.all([activeRes.json(), trashRes.json()]);
+      const activeData = activeRes.ok ? await activeRes.json() : [];
+      const trashData = trashRes.ok ? await trashRes.json() : [];
+
+      if (!activeRes.ok) {
+        console.error('[tickets page] active tickets request failed', activeRes.status);
+      }
+      if (!trashRes.ok) {
+        console.error('[tickets page] trash tickets request failed', trashRes.status);
+      }
+
+      if (activeRes.ok || trashRes.ok) {
         const mergedTickets = [...(Array.isArray(activeData) ? activeData : []), ...(Array.isArray(trashData) ? trashData : [])]
           .map(mapApiTicketToLegacy)
           .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
@@ -4242,14 +4644,23 @@ export default function NOCActivityApp() {
         const sitesData = await sitesRes.json();
         if (Array.isArray(sitesData) && sitesData.length > 0) {
           const normalizedSites = sitesData
-            .map((site: { id?: string; name?: string; localite?: string | null; locality?: string | null }) => ({
+            .map((site: { id?: string; name?: string; localite?: string | null; locality?: string | null; departement?: string | null }) => ({
               id: String(site.id ?? site.name ?? ''),
               name: String(site.name ?? '').trim(),
               localite: site.localite ?? site.locality ?? null,
+              departement: site.departement ?? null,
             }))
             .filter((site: TicketOptionItem) => Boolean(site.id) && Boolean(site.name));
 
           setTicketSiteOptions(normalizedSites);
+
+          const departments = new Set<string>();
+          CONGO_DEPARTMENTS.forEach((department) => departments.add(department));
+          normalizedSites.forEach((site) => {
+            const department = normalizeTicketLocality(site.departement ?? '');
+            if (department) departments.add(department);
+          });
+          setTicketCongoDepartments(Array.from(departments).sort((left, right) => left.localeCompare(right, 'fr')));
 
           normalizedSites.forEach((site) => {
             const siteLocality = normalizeTicketLocality(site.localite ?? '');
@@ -4266,6 +4677,26 @@ export default function NOCActivityApp() {
       if (localitiesRes.ok) {
         const localitiesData = await localitiesRes.json();
         if (Array.isArray(localitiesData)) {
+          const managedEntries = localitiesData
+            .filter((locality: unknown): locality is { id?: string | number; name?: string; countryCode?: string; countryName?: string; departement?: string; city?: string; arrondissement?: string; quartier?: string; address?: string; reference?: string } => typeof locality === 'object' && locality !== null && 'id' in locality)
+            .map((locality) => ({
+              id: String(locality.id ?? '').trim(),
+              name: normalizeTicketLocality(String(locality.name ?? '')),
+              countryCode: locality.countryCode,
+              countryName: locality.countryName,
+              departement: normalizeTicketLocality(String(locality.departement ?? '')),
+              city: normalizeTicketLocality(String(locality.city ?? '')),
+              arrondissement: normalizeTicketLocality(String(locality.arrondissement ?? '')),
+              quartier: normalizeTicketLocality(String(locality.quartier ?? '')),
+              address: String(locality.address ?? '').trim(),
+              reference: String(locality.reference ?? '').trim(),
+            }))
+            .filter((locality) => Boolean(locality.id))
+            .filter((locality) => Boolean(locality.name))
+            .sort((left, right) => left.name.localeCompare(right.name, 'fr'));
+
+          setManagedLocalities(managedEntries);
+
           localitiesData
             .map((locality: { name?: string; value?: string; label?: string } | string) => {
               if (typeof locality === 'string') {
@@ -4293,36 +4724,185 @@ export default function NOCActivityApp() {
   }, [loadTicketsModuleData]);
 
   useEffect(() => {
+    const onFocus = () => {
+      void loadTicketsModuleData();
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void loadTicketsModuleData();
+      }
+    };
+
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [loadTicketsModuleData]);
+
+  useEffect(() => {
     if (!editTicketOpen) return;
-    setEditTicketLocalityDraft((prev) => ({
-      ...prev,
+    setEditTicketLocalityDraft({
+      ...DEFAULT_TICKET_LOCALITY_DRAFT,
       freeText: editingTicket?.localite ?? '',
-    }));
+    });
   }, [editTicketOpen, editingTicket?.localite]);
 
+  useEffect(() => {
+    if (!quickLocalityDialogOpen) return;
+    setQuickLocalityTab('create');
+    setManagedLocalitySearch('');
+    setSelectedManagedLocalityId('');
+    setManagedLocalityName('');
+    setManagedLocalityDraft(DEFAULT_TICKET_LOCALITY_DRAFT);
+    void loadTicketsModuleData();
+  }, [quickLocalityDialogOpen, loadTicketsModuleData]);
+
   const handleDeleteTicket = useCallback(async (ticket: TicketItem, permanent = false) => {
+    const action: 'delete' | 'permanent' = permanent ? 'permanent' : 'delete';
+    const actionKey = getTicketActionKey(action, ticket.id);
+    if (isTicketActionBusy(action, ticket.id)) {
+      return;
+    }
+
+    const previousTickets = tickets;
+    setTicketActionBusy(actionKey, true);
+    setShowTrashContextMenu(false);
+    setTrashContextTicket(null);
+    setTickets((prev) => {
+      if (permanent) {
+        return prev.filter((entry) => entry.id !== ticket.id);
+      }
+      return prev.map((entry) => (
+        entry.id === ticket.id
+          ? {
+              ...entry,
+              isDeleted: true,
+              deletedAt: new Date(),
+              deletedBy: user?.id ?? entry.deletedBy,
+            }
+          : entry
+      ));
+    });
+
     try {
       const response = await fetch(`/api/tickets/${ticket.id}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ permanent, deletedBy: user?.name }),
+        body: JSON.stringify({ permanent, deletedBy: user?.id, deletedByName: user?.name }),
       });
 
       if (!response.ok) {
         throw new Error('delete_failed');
       }
 
-      await loadTicketsModuleData();
+      const payload = await response.json().catch(() => ({}));
+      const retentionDays = Number(payload?.retentionDays ?? ticketAdminSettings.trashRetentionDays ?? 30);
+
+      void loadTicketsModuleData();
       if (selectedTicket?.id === ticket.id) {
         setSelectedTicket(null);
         setTicketDetailOpen(false);
       }
-      toast.success(permanent ? 'Ticket supprimé définitivement' : 'Ticket déplacé dans la corbeille');
+
+      if (permanent) {
+        toast.success('Ticket supprimé définitivement');
+      } else {
+        toast.success(`Ticket déplacé en corbeille (suppression auto dans ${retentionDays} jour${retentionDays > 1 ? 's' : ''})`);
+      }
     } catch (error) {
+      setTickets(previousTickets);
       console.error('[tickets page] handleDeleteTicket', error);
       toast.error('Impossible de supprimer le ticket');
+    } finally {
+      setTicketActionBusy(actionKey, false);
     }
-  }, [loadTicketsModuleData, selectedTicket?.id, user?.name]);
+  }, [getTicketActionKey, isTicketActionBusy, loadTicketsModuleData, selectedTicket?.id, setTicketActionBusy, ticketAdminSettings.trashRetentionDays, tickets, user?.id, user?.name]);
+
+  const requestDeleteTicket = useCallback((ticket: TicketItem, permanent = false) => {
+    setDeleteTicketTarget(ticket);
+    setDeleteTicketPermanent(permanent);
+    setDeleteTicketDialogOpen(true);
+  }, []);
+
+  const handleRestoreTicket = useCallback(async (ticket: TicketItem) => {
+    const actionKey = getTicketActionKey('restore', ticket.id);
+    if (isTicketActionBusy('restore', ticket.id)) {
+      return;
+    }
+
+    const previousTickets = tickets;
+    setTicketActionBusy(actionKey, true);
+    setShowTrashContextMenu(false);
+    setTrashContextTicket(null);
+    setTickets((prev) => prev.map((entry) => (
+      entry.id === ticket.id
+        ? {
+            ...entry,
+            isDeleted: false,
+            deletedAt: undefined,
+            deletedBy: undefined,
+          }
+        : entry
+    )));
+
+    try {
+      const response = await fetch(`/api/tickets/${ticket.id}/restore`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ restoredBy: user?.id, restoredByName: user?.name }),
+      });
+
+      if (!response.ok) {
+        throw new Error('restore_failed');
+      }
+
+      void loadTicketsModuleData();
+      toast.success('Ticket restauré depuis la corbeille');
+    } catch (error) {
+      setTickets(previousTickets);
+      console.error('[tickets page] handleRestoreTicket', error);
+      toast.error('Impossible de restaurer le ticket');
+    } finally {
+      setTicketActionBusy(actionKey, false);
+    }
+  }, [getTicketActionKey, isTicketActionBusy, loadTicketsModuleData, setTicketActionBusy, tickets, user?.id, user?.name]);
+
+  const openTrashTicketContextMenu = useCallback((event: React.MouseEvent, ticket: TicketItem) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setTrashContextTicket(ticket);
+    setTrashContextMenuPosition({ x: event.clientX, y: event.clientY });
+    setShowTrashContextMenu(true);
+  }, []);
+
+  const handleUnarchiveTicket = useCallback(async (ticket: TicketItem) => {
+    try {
+      const response = await fetch(`/api/tickets/${ticket.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          isArchived: false,
+          archivedAt: null,
+          archivedYear: null,
+          updatedBy: user?.name,
+          updatedById: user?.id,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('unarchive_failed');
+      }
+
+      await loadTicketsModuleData();
+      toast.success('Ticket désarchivé');
+    } catch (error) {
+      console.error('[tickets page] handleUnarchiveTicket', error);
+      toast.error('Impossible de désarchiver le ticket');
+    }
+  }, [loadTicketsModuleData, user?.id, user?.name]);
 
   const handleUpdateTicketStatus = useCallback(async (ticket: TicketItem, status: TicketStatus) => {
     try {
@@ -4337,6 +4917,11 @@ export default function NOCActivityApp() {
       });
 
       if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        if (response.status === 409 || err?.error === 'technician_capacity_exceeded') {
+          toast.error(err?.message ?? 'Un technicien a deja 3 tickets actifs cette semaine.');
+          return;
+        }
         throw new Error('status_update_failed');
       }
 
@@ -4769,6 +5354,7 @@ export default function NOCActivityApp() {
       setIsAuthenticated(true);
       setLastActivity(new Date());
       localStorage.setItem('noc_user', JSON.stringify(loggedUser));
+      window.dispatchEvent(new Event('noc-user-updated'));
       if (result.token) {
         localStorage.setItem('noc_auth_token', String(result.token));
       }
@@ -5123,6 +5709,22 @@ export default function NOCActivityApp() {
     }
   }, [showContextMenu]);
 
+  useEffect(() => {
+    const handleClick = () => setShowTrashContextMenu(false);
+    const handleEsc = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setShowTrashContextMenu(false);
+    };
+
+    if (showTrashContextMenu) {
+      document.addEventListener('click', handleClick);
+      document.addEventListener('keydown', handleEsc);
+      return () => {
+        document.removeEventListener('click', handleClick);
+        document.removeEventListener('keydown', handleEsc);
+      };
+    }
+  }, [showTrashContextMenu]);
+
   const persistUserProfile = useCallback(
     async (payload: {
       firstName?: string;
@@ -5148,6 +5750,7 @@ export default function NOCActivityApp() {
       const updatedUser = { ...user, ...result.user };
       setUser(updatedUser);
       localStorage.setItem('noc_user', JSON.stringify(updatedUser));
+      window.dispatchEvent(new Event('noc-user-updated'));
 
       setAllUsers((prev) => {
         const exists = prev.some((entry) => entry.id === updatedUser.id);
@@ -5666,6 +6269,7 @@ export default function NOCActivityApp() {
 
       setUser(updatedUser);
       localStorage.setItem('noc_user', JSON.stringify(updatedUser));
+      window.dispatchEvent(new Event('noc-user-updated'));
 
       setAllUsers(prev => {
         const updated = prev.map(u => u.id === user.id ? updatedUser : u);
@@ -5718,6 +6322,7 @@ export default function NOCActivityApp() {
       if (user?.id === targetUser.id) {
         setUser(updatedUser);
         localStorage.setItem('noc_user', JSON.stringify(updatedUser));
+        window.dispatchEvent(new Event('noc-user-updated'));
       }
     } catch (error) {
       toast.error('Erreur', { description: error instanceof Error ? error.message : 'Mise à jour du rôle impossible' });
@@ -5759,6 +6364,7 @@ export default function NOCActivityApp() {
     
     setUser(updatedUser);
     localStorage.setItem('noc_user', JSON.stringify(updatedUser));
+    window.dispatchEvent(new Event('noc-user-updated'));
     
     setAllUsers(prev => {
       const updated = prev.map(u => u.id === user.id ? updatedUser : u);
@@ -5892,6 +6498,7 @@ export default function NOCActivityApp() {
       if (user.id === userToEdit.id) {
         setUser(updatedUser);
         localStorage.setItem('noc_user', JSON.stringify(updatedUser));
+        window.dispatchEvent(new Event('noc-user-updated'));
       }
 
       addAuditLog('USER_UPDATED', `Utilisateur modifié: ${updatedUser.name} (${updatedUser.role})`);
@@ -6336,7 +6943,7 @@ export default function NOCActivityApp() {
     doc.line(pageWidth - margin, bodyStartY, pageWidth - margin, bodyStartY + totalRowsHeight); // Bordure droite
 
     // ============================================
-    // 6. NOM EN VERTICAL - ROTATION 90Â° DANS LA CELLULE FUSIONNÉE
+    // 6. NOM EN VERTICAL - ROTATION 90° DANS LA CELLULE FUSIONNÉE
     // Positionnement précis
     // ============================================
     
@@ -6586,7 +7193,7 @@ export default function NOCActivityApp() {
         if (restInfo) {
           doc.setFontSize(5);
           doc.setTextColor(234, 88, 12); // Orange
-          doc.text('â€¢', x + dayColWidth / 2, rowY + rowHeight - 2, { align: 'center' });
+          doc.text('•', x + dayColWidth / 2, rowY + rowHeight - 2, { align: 'center' });
         }
       });
     });
@@ -6879,7 +7486,7 @@ export default function NOCActivityApp() {
   // Login Screen
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 relative overflow-hidden">
+      <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-slate-50 via-blue-50/30 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 relative overflow-hidden">
         {/* Animated background elements - subtil et élégant */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <motion.div
@@ -6921,7 +7528,7 @@ export default function NOCActivityApp() {
         >
           <Card className="border border-slate-200/80 dark:border-slate-700/50 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.15)] dark:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)] bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl overflow-hidden">
             {/* Header avec nouvelle image animée */}
-            <div className="relative pt-10 pb-6 text-center bg-gradient-to-b from-slate-50/50 to-transparent dark:from-slate-800/30 dark:to-transparent">
+            <div className="relative pt-10 pb-6 text-center bg-linear-to-b from-slate-50/50 to-transparent dark:from-slate-800/30 dark:to-transparent">
               {/* Glow effect derrière le logo */}
               <motion.div
                 animate={{
@@ -6959,7 +7566,7 @@ export default function NOCActivityApp() {
                 initial={{ scaleX: 0, opacity: 0 }}
                 animate={{ scaleX: 1, opacity: 1 }}
                 transition={{ delay: 0.4, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-                className="mt-6 mx-8 h-[1px] bg-gradient-to-r from-transparent via-slate-300 dark:via-slate-600 to-transparent"
+                className="mt-6 mx-8 h-px bg-linear-to-r from-transparent via-slate-300 dark:via-slate-600 to-transparent"
               />
             </div>
 
@@ -7062,7 +7669,7 @@ export default function NOCActivityApp() {
                 </motion.div>
 
                 {/* Message d'erreur */}
-                <AnimatePresence mode="wait">
+                <AnimatePresence>
                   {loginError && (
                     <motion.p
                       initial={{ opacity: 0, y: -10, scale: 0.95 }}
@@ -7078,13 +7685,13 @@ export default function NOCActivityApp() {
                 </AnimatePresence>
 
                 {/* Compte à rebours si verrouillé */}
-                <AnimatePresence mode="wait">
+                <AnimatePresence>
                   {isLocked && (
                     <motion.div
                       initial={{ opacity: 0, scale: 0.95, height: 0 }}
                       animate={{ opacity: 1, scale: 1, height: 'auto' }}
                       exit={{ opacity: 0, scale: 0.95, height: 0 }}
-                      className="bg-gradient-to-r from-red-50 to-orange-50 dark:from-red-900/20 dark:to-orange-900/20 border border-red-200 dark:border-red-800/50 rounded-xl p-4 text-center overflow-hidden"
+                      className="bg-linear-to-r from-red-50 to-orange-50 dark:from-red-900/20 dark:to-orange-900/20 border border-red-200 dark:border-red-800/50 rounded-xl p-4 text-center overflow-hidden"
                     >
                       <div className="flex items-center justify-center gap-2">
                         <motion.div
@@ -7113,11 +7720,11 @@ export default function NOCActivityApp() {
                     disabled={isLoading || isLocked}
                     whileHover={{ scale: 1.02, y: -1 }}
                     whileTap={{ scale: 0.98 }}
-                    className="w-full h-14 relative overflow-hidden bg-gradient-to-r from-blue-600 via-blue-600 to-cyan-600 hover:from-blue-700 hover:via-blue-700 hover:to-cyan-700 text-white font-semibold text-base shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/30 transition-all duration-300 rounded-xl disabled:opacity-70 disabled:cursor-not-allowed group"
+                    className="w-full h-14 relative overflow-hidden bg-linear-to-r from-blue-600 via-blue-600 to-cyan-600 hover:from-blue-700 hover:via-blue-700 hover:to-cyan-700 text-white font-semibold text-base shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/30 transition-all duration-300 rounded-xl disabled:opacity-70 disabled:cursor-not-allowed group"
                   >
                     {/* Effet de brillance au survol */}
                     <motion.div
-                      className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700"
+                      className="absolute inset-0 bg-linear-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700"
                     />
                     
                     <span className="relative flex items-center justify-center gap-2.5">
@@ -7150,7 +7757,7 @@ export default function NOCActivityApp() {
               </motion.form>
 
               {/* Message d'oubli - AFFICHÉ SEULEMENT APRÈS 3 TENTATIVES */}
-              <AnimatePresence mode="wait">
+              <AnimatePresence>
                 {showForgotMessage && (
                   <motion.div
                     initial={{ opacity: 0, height: 0, marginTop: 0 }}
@@ -7164,7 +7771,7 @@ export default function NOCActivityApp() {
                         initial={{ y: 10, opacity: 0 }}
                         animate={{ y: 0, opacity: 1 }}
                         transition={{ delay: 0.1, duration: 0.3 }}
-                        className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/10 dark:to-orange-900/10 rounded-xl p-4 text-center border border-amber-200/50 dark:border-amber-800/30"
+                        className="bg-linear-to-r from-amber-50 to-orange-50 dark:from-amber-900/10 dark:to-orange-900/10 rounded-xl p-4 text-center border border-amber-200/50 dark:border-amber-800/30"
                       >
                         <Info className="w-5 h-5 text-amber-500 mx-auto mb-2" />
                         <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
@@ -7189,7 +7796,7 @@ export default function NOCActivityApp() {
             className="text-center text-slate-400 dark:text-slate-500 text-xs mt-6 flex items-center justify-center gap-2"
           >
             <span className="w-8 h-[1px] bg-slate-300 dark:bg-slate-700" />
-            <span>Â© {new Date().getFullYear()} Silicone Connect</span>
+            <span>© {new Date().getFullYear()} Silicone Connect</span>
             <span className="w-8 h-[1px] bg-slate-300 dark:bg-slate-700" />
           </motion.p>
         </motion.div>
@@ -7204,11 +7811,11 @@ export default function NOCActivityApp() {
       <div className="min-h-screen bg-background">
         {/* Bannière d'avertissement - Mot de passe à changer */}
         {user?.mustChangePassword && (
-          <div className="sticky top-0 z-[60] w-full bg-gradient-to-r from-amber-500 to-orange-500 text-white px-4 py-2">
+          <div className="sticky top-0 z-60 w-full bg-linear-to-r from-amber-500 to-orange-500 text-white px-4 py-2">
             <div className="flex items-center justify-center gap-3 max-w-7xl mx-auto">
               <AlertTriangle className="w-5 h-5 flex-shrink-0 animate-pulse" />
               <div className="flex-1 text-center">
-                <span className="font-semibold">âš ï¸ SÉCURITÉ REQUISE :</span>{' '}
+                <span className="font-semibold">⚠️ SÉCURITÉ REQUISE :</span>{' '}
                 <span>Vous devez changer votre mot de passe avant de pouvoir utiliser l'application.</span>
               </div>
               <Button
@@ -7340,11 +7947,11 @@ export default function NOCActivityApp() {
                       {user?.avatar ? (
                         <AvatarImage src={user.avatar} alt={user.name} />
                       ) : null}
-                      <AvatarFallback className="bg-gradient-to-br from-blue-500 to-cyan-500 text-white text-sm">
+                      <AvatarFallback className="bg-linear-to-br from-blue-500 to-cyan-500 text-white text-sm">
                         {user?.name?.charAt(0) || 'U'}
                       </AvatarFallback>
                     </Avatar>
-                    <div className="absolute bottom-0 right-0 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="absolute bottom-0 right-0 bg-linear-to-r from-blue-500 to-cyan-500 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <Camera className="w-3 h-3 text-white" />
                     </div>
                   </div>
@@ -7405,7 +8012,7 @@ export default function NOCActivityApp() {
         <div className={`flex ${sidebarPosition === 'right' ? 'lg:flex-row-reverse' : ''}`}>
           {/* Sidebar */}
           <aside
-            className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} fixed lg:sticky top-14 left-0 z-40 w-60 lg:w-auto h-[calc(100vh-3.5rem)] border-r bg-background transition-all duration-300 lg:translate-x-0 relative`}
+            className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} fixed lg:sticky top-14 left-0 z-40 w-60 lg:w-auto h-[calc(100vh-3.5rem)] border-r bg-background transition-all duration-300 lg:translate-x-0`}
             style={{ width: sidebarCollapsed ? 64 : sidebarWidth }}
           >
             {/* Collapse/Expand Toggle - Desktop only */}
@@ -7586,7 +8193,7 @@ export default function NOCActivityApp() {
           
           {/* Main Content */}
           <main className="flex-1 p-4 lg:p-6 min-h-[calc(100vh-3.5rem)] overflow-auto">
-            <AnimatePresence mode="wait">
+            <AnimatePresence>
               {/* Dashboard */}
               {currentTab === 'dashboard' && (
                 <motion.div key="dashboard" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-4">
@@ -7594,7 +8201,7 @@ export default function NOCActivityApp() {
                     <div>
                       <h1 className="text-2xl lg:text-3xl font-bold">Tableau de bord</h1>
                       <p className="text-muted-foreground">
-                        Bienvenue, {user?.firstName && user?.lastName ? `${user.firstName} ${user.lastName}` : user?.name} â€¢ {format(new Date(), 'EEEE d MMMM yyyy', { locale: fr })}
+                        Bienvenue, {user?.firstName && user?.lastName ? `${user.firstName} ${user.lastName}` : user?.name} • {format(new Date(), 'EEEE d MMMM yyyy', { locale: fr })}
                       </p>
                     </div>
                     <Button variant="outline" onClick={() => toast.success('Données actualisées')}>
@@ -7787,7 +8394,7 @@ export default function NOCActivityApp() {
                             </div>
                             <p className="text-xs text-muted-foreground">{shiftData.members.join(', ')}</p>
                             <div className="mt-2 text-xs text-muted-foreground">
-                              Cycle {schedule.cycleNumber} â€¢ Jour {schedule.dayNumber || '-'}
+                              Cycle {schedule.cycleNumber} • Jour {schedule.dayNumber || '-'}
                             </div>
                           </CardContent>
                         </Card>
@@ -8086,7 +8693,7 @@ export default function NOCActivityApp() {
                   <div className="flex h-full border rounded-xl overflow-hidden bg-white dark:bg-slate-900 shadow-lg">
                     {/* Sidebar WhatsApp */}
                     <div className="w-80 border-r bg-white dark:bg-slate-900 flex flex-col">
-                      <div className="p-3 border-b bg-gradient-to-r from-cyan-600 to-cyan-700 text-white">
+                      <div className="p-3 border-b bg-linear-to-r from-cyan-600 to-cyan-700 text-white">
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex items-center gap-2">
                             <Avatar
@@ -8253,7 +8860,7 @@ export default function NOCActivityApp() {
                                       <span className="text-xs text-muted-foreground">{conversation.lastMessage ? format(conversation.lastMessage.createdAt, 'HH:mm') : ''}</span>
                                     </div>
                                     <div className="flex items-center justify-between mt-0.5">
-                                      <p className="text-xs text-muted-foreground truncate max-w-[180px]">{conversation.lastMessage?.deletedForEveryone ? 'Ce message a été supprimé' : conversation.lastMessage?.type === 'voice' ? 'ðŸŽ¤ Message vocal' : conversation.lastMessage?.type === 'image' ? 'ðŸ“· Image' : conversation.lastMessage?.type === 'video' ? 'ðŸŽ¬ Vidéo' : conversation.lastMessage?.type === 'document' ? 'ðŸ“„ Document' : conversation.lastMessage?.content || 'Aucun message'}</p>
+                                      <p className="text-xs text-muted-foreground truncate max-w-[180px]">{conversation.lastMessage?.deletedForEveryone ? 'Ce message a été supprimé' : conversation.lastMessage?.type === 'voice' ? '🎤 Message vocal' : conversation.lastMessage?.type === 'image' ? '📷 Image' : conversation.lastMessage?.type === 'video' ? '🎬 Vidéo' : conversation.lastMessage?.type === 'document' ? '📄 Document' : conversation.lastMessage?.content || 'Aucun message'}</p>
                                       {conversation.unreadCount > 0 && <Badge className={`${isAnnonces ? 'bg-yellow-500' : 'bg-cyan-500'} text-white text-xs rounded-full px-2`}>{conversation.unreadCount}</Badge>}
                                     </div>
                                   </div>
@@ -8303,7 +8910,7 @@ export default function NOCActivityApp() {
                             </>
                           )}
                         </div>
-                        <div className="relative bg-gradient-to-r from-cyan-600 to-cyan-700 text-white p-3 flex items-center justify-between z-10">
+                        <div className="relative bg-linear-to-r from-cyan-600 to-cyan-700 text-white p-3 flex items-center justify-between z-10">
                           <div className="flex items-center gap-3">
                             <Button variant="ghost" size="icon" className="text-white lg:hidden" onClick={() => setSelectedConversation(null)}><ChevronLeft className="w-5 h-5" /></Button>
                             <Avatar
@@ -8605,7 +9212,7 @@ export default function NOCActivityApp() {
                                           }
                                         }}
                                       >
-                                        <div className="h-full bg-gradient-to-r from-cyan-500 to-cyan-400 rounded-full transition-all relative" style={{ width: `${progress}%` }}>
+                                        <div className="h-full bg-linear-to-r from-cyan-500 to-cyan-400 rounded-full transition-all relative" style={{ width: `${progress}%` }}>
                                           <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-md"></div>
                                         </div>
                                       </div>
@@ -8644,7 +9251,7 @@ export default function NOCActivityApp() {
                                         const percent = ((e.clientX - rect.left) / rect.width) * 100;
                                         setAudioProgress(prev => ({...prev, [message.id]: percent}));
                                       }}>
-                                        <div className="h-full bg-gradient-to-r from-cyan-500 to-cyan-400 rounded-full transition-all relative" style={{ width: `${isPlaying ? progress : 0}%` }}>
+                                        <div className="h-full bg-linear-to-r from-cyan-500 to-cyan-400 rounded-full transition-all relative" style={{ width: `${isPlaying ? progress : 0}%` }}>
                                           <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-md"></div>
                                         </div>
                                       </div>
@@ -8900,7 +9507,7 @@ export default function NOCActivityApp() {
                                     const drift = ((index % 3) - 1) * 12;
                                     return (
                                     <motion.div
-                                      key={item.id}
+                                      key={`${item.id}-${new Date(item.createdAt).getTime()}-${index}`}
                                       initial={{ opacity: 0, y: 14, x: 0, scale: 0.7 }}
                                       animate={{ opacity: 1, y: -6, x: drift, scale: 1 }}
                                       exit={{ opacity: 0, y: -36, x: drift * 1.5, scale: 0.65 }}
@@ -9248,7 +9855,7 @@ export default function NOCActivityApp() {
                           
                           <div className="flex items-end gap-2 max-w-3xl mx-auto">
                             <Popover open={showEmojiPicker} onOpenChange={setShowEmojiPicker}>
-                              <PopoverTrigger asChild><Button variant="ghost" size="icon" className="rounded-full text-slate-500 hover:text-cyan-500 text-xl">ðŸ˜€</Button></PopoverTrigger>
+                              <PopoverTrigger asChild><Button variant="ghost" size="icon" className="rounded-full text-slate-500 hover:text-cyan-500 text-xl">😀</Button></PopoverTrigger>
                               <PopoverContent className="w-80 p-0 shadow-xl sm:w-96" align="start" sideOffset={8}>
                                 <EmojiPicker
                                   theme={theme === 'dark' ? EmojiPickerTheme.DARK : EmojiPickerTheme.LIGHT}
@@ -9941,7 +10548,7 @@ export default function NOCActivityApp() {
                       }
                     }}
                   >
-                    <DialogContent className="max-w-md p-0 bg-gradient-to-b from-slate-900 to-slate-800 border-0 text-white">
+                    <DialogContent className="max-w-md p-0 bg-linear-to-b from-slate-900 to-slate-800 border-0 text-white">
                       <div className="text-center py-8 px-6">
                         <div className="flex justify-center mb-4">
                           <Badge variant="outline" className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30">
@@ -9950,7 +10557,7 @@ export default function NOCActivityApp() {
                         </div>
 
                         <Avatar className="w-28 h-28 mx-auto mb-4 ring-4 ring-emerald-500/30 ring-offset-4 ring-offset-slate-900">
-                          <AvatarFallback className="bg-gradient-to-br from-emerald-500 to-cyan-600 text-white text-3xl">
+                          <AvatarFallback className="bg-linear-to-br from-emerald-500 to-cyan-600 text-white text-3xl">
                             {incomingCall?.callerName?.charAt(0)?.toUpperCase()}
                           </AvatarFallback>
                         </Avatar>
@@ -10031,7 +10638,7 @@ export default function NOCActivityApp() {
 
                   {/* Call Dialog - PROFESSIONNEL */}
                   <Dialog open={callDialogOpen} onOpenChange={setCallDialogOpen}>
-                    <DialogContent className="max-w-md p-0 bg-gradient-to-b from-slate-900 to-slate-800 border-0 text-white">
+                    <DialogContent className="max-w-md p-0 bg-linear-to-b from-slate-900 to-slate-800 border-0 text-white">
                       <div className="text-center py-8 px-6">
                         {/* Call type badge */}
                         <div className="flex justify-center mb-4">
@@ -10043,9 +10650,9 @@ export default function NOCActivityApp() {
                         {/* Main avatar */}
                         <Avatar className="w-28 h-28 mx-auto mb-4 ring-4 ring-cyan-500/30 ring-offset-4 ring-offset-slate-900">
                           {activeCall?.calleeName?.includes('Groupe') ? (
-                            <AvatarFallback className="bg-gradient-to-br from-cyan-500 to-cyan-600 text-white text-3xl"><Users className="w-14 h-14" /></AvatarFallback>
+                            <AvatarFallback className="bg-linear-to-br from-cyan-500 to-cyan-600 text-white text-3xl"><Users className="w-14 h-14" /></AvatarFallback>
                           ) : (
-                            <AvatarFallback className="bg-gradient-to-br from-cyan-500 to-cyan-600 text-white text-3xl">{activeCall?.calleeName?.charAt(0)?.toUpperCase()}</AvatarFallback>
+                            <AvatarFallback className="bg-linear-to-br from-cyan-500 to-cyan-600 text-white text-3xl">{activeCall?.calleeName?.charAt(0)?.toUpperCase()}</AvatarFallback>
                           )}
                         </Avatar>
                         
@@ -10082,7 +10689,7 @@ export default function NOCActivityApp() {
                                   const drift = ((index % 3) - 1) * 10;
                                   return (
                                   <motion.div
-                                    key={item.id}
+                                    key={`${item.id}-${new Date(item.createdAt).getTime()}-${index}`}
                                     initial={{ opacity: 0, y: 16, x: 0, scale: 0.8 }}
                                     animate={{ opacity: 1, y: -4, x: drift, scale: 1 }}
                                     exit={{ opacity: 0, y: -30, x: drift * 1.4, scale: 0.72 }}
@@ -10368,7 +10975,7 @@ export default function NOCActivityApp() {
                                     <div className="relative">
                                       <Avatar className="w-12 h-12">
                                         {contact.avatar ? <AvatarImage src={contact.avatar} /> : null}
-                                        <AvatarFallback className="bg-gradient-to-br from-cyan-500 to-cyan-600 text-white">
+                                        <AvatarFallback className="bg-linear-to-br from-cyan-500 to-cyan-600 text-white">
                                           {contact.name.charAt(0).toUpperCase()}
                                         </AvatarFallback>
                                       </Avatar>
@@ -10385,7 +10992,7 @@ export default function NOCActivityApp() {
                                       </div>
                                       <div className="flex items-center gap-2">
                                         <p className="text-xs text-muted-foreground">{contact.role.replace('_', ' ')}</p>
-                                        {isOnline && <span className="text-xs text-green-600">â€¢ En ligne</span>}
+                                        {isOnline && <span className="text-xs text-green-600">• En ligne</span>}
                                       </div>
                                     </div>
                                     {existingConv && (
@@ -11192,7 +11799,7 @@ export default function NOCActivityApp() {
                     <div className="flex items-center gap-2">
                       <Dialog open={taskDialogOpen} onOpenChange={setTaskDialogOpen}>
                         <DialogTrigger asChild>
-                          <Button className="gap-2 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700">
+                          <Button className="gap-2 bg-linear-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700">
                             <Plus className="w-4 h-4" /> Nouvelle tâche
                           </Button>
                         </DialogTrigger>
@@ -11502,7 +12109,7 @@ export default function NOCActivityApp() {
                                       completedAt: checked ? new Date() : undefined,
                                       actualDuration: checked ? calculateActualDuration(t) : undefined
                                     } : t));
-                                    toast.success(checked ? 'Tâche terminée âœ“' : 'Tâche réactivée');
+                                    toast.success(checked ? 'Tâche terminée ✓' : 'Tâche réactivée');
                                   }} 
                                   className="mt-1" 
                                 />
@@ -11530,7 +12137,7 @@ export default function NOCActivityApp() {
                                       {format(task.startTime, 'HH:mm')} - {format(task.estimatedEndTime, 'HH:mm')}
                                     </span>
                                     <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                      â± {formatDuration(task.estimatedDuration)}
+                                      ⏱ {formatDuration(task.estimatedDuration)}
                                     </span>
                                     {task.tags.length > 0 && (
                                       <div className="flex gap-1">
@@ -11615,7 +12222,7 @@ export default function NOCActivityApp() {
 
                   {/* Performance Summary */}
                   {nocTasks.length > 0 && user && (
-                    <Card className="bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border-blue-200 dark:border-blue-800">
+                    <Card className="bg-linear-to-r from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border-blue-200 dark:border-blue-800">
                       <CardHeader className="pb-2 pt-4">
                         <CardTitle className="text-base flex items-center gap-2">
                           <TrendingUp className="w-5 h-5 text-blue-600" />
@@ -11761,8 +12368,1083 @@ export default function NOCActivityApp() {
 
               {/* Gestion Tickets */}
               {currentTab === 'tickets' && (
-                <TicketsSection user={user} usersDirectory={usersDirectory} />
+                <motion.div key="tickets" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-4">
+                  {/* Header avec bouton créer bien visible */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <h1 className="text-2xl lg:text-3xl font-bold text-foreground">Gestion des Tickets</h1>
+                      <p className="text-muted-foreground">Suivi et création de tickets</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8 rounded-md border-2 border-cyan-500 dark:border-cyan-400"
+                            aria-label="Menu tickets"
+                            title="Menu tickets"
+                          >
+                            <MoreVertical className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-60">
+                          <DropdownMenuLabel>Gestion Tickets</DropdownMenuLabel>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onSelect={() => {
+                              setShowArchivedTickets(false);
+                              setShowDeletedTickets(false);
+                            }}
+                          >
+                            <Ticket className="w-4 h-4 mr-2" />
+                            Voir les tickets actifs
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onSelect={() => {
+                              setShowArchivedTickets(true);
+                              setShowDeletedTickets(false);
+                            }}
+                          >
+                            <Archive className="w-4 h-4 mr-2" />
+                            Voir les archives
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onSelect={() => {
+                              setShowDeletedTickets(true);
+                              setShowArchivedTickets(false);
+                            }}
+                          >
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Voir la corbeille
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onSelect={() => {
+                              setTicketSearchQuery('');
+                              setTicketStatusFilter('all');
+                              setTicketPriorityFilter('all');
+                              setTicketSiteFilter('all');
+                              setTicketLocaliteFilter('all');
+                              setTicketTechnicienFilter('all');
+                            }}
+                          >
+                            <RotateCcw className="w-4 h-4 mr-2" />
+                            Réinitialiser les filtres
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => void loadTicketsModuleData()}>
+                            <RefreshCw className="w-4 h-4 mr-2" />
+                            Rafraîchir la liste
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setTicketViewMode(ticketViewMode === 'list' ? 'card' : 'list')}
+                        className="border-2 border-cyan-500 dark:border-cyan-400"
+                        title={ticketViewMode === 'list' ? 'Vue cartes' : 'Vue liste'}
+                      >
+                        {ticketViewMode === 'list' ? <LayoutDashboard className="w-4 h-4" /> : <ClipboardList className="w-4 h-4" />}
+                      </Button>
+                      <Dialog open={quickLocalityDialogOpen} onOpenChange={(open) => {
+                        setQuickLocalityDialogOpen(open);
+                        if (!open) {
+                          setQuickLocalityDraft(DEFAULT_TICKET_LOCALITY_DRAFT);
+                        }
+                      }}>
+                        <DialogTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8 rounded-md border-2 border-cyan-500 dark:border-cyan-400"
+                            aria-label="Créer une localité"
+                            title="Créer une localité"
+                          >
+                            <MapPin className="w-4 h-4" />
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-6xl max-h-[94vh] overflow-y-auto border-2 bg-white dark:border-slate-700 dark:bg-slate-900">
+                          <DialogHeader>
+                            <DialogTitle>Créer une localité</DialogTitle>
+                            <DialogDescription>
+                              Renseignez les informations de localisation. Pour la République du Congo, les départements proviennent des sites enregistrés.
+                            </DialogDescription>
+                          </DialogHeader>
+                          <Tabs value={quickLocalityTab} onValueChange={(value) => setQuickLocalityTab(value as 'create' | 'manage')}>
+                            <TabsList className="grid w-full grid-cols-2">
+                              <TabsTrigger value="create">Créer</TabsTrigger>
+                              <TabsTrigger value="manage">Modifier</TabsTrigger>
+                            </TabsList>
+
+                            <TabsContent value="create" className="space-y-3 py-2 mt-3">
+                            <div className="grid gap-2">
+                              <Label className="text-foreground">Nom du site</Label>
+                              <Input
+                                value={quickLocalityDraft.freeText}
+                                onChange={(e) => setQuickLocalityDraft((prev) => ({ ...prev, freeText: e.target.value }))}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    void handleQuickCreateLocality();
+                                  }
+                                }}
+                                placeholder="Ex: Site NOC Pointe-Noire"
+                                className="border-2 dark:border-slate-600 dark:bg-slate-800"
+                              />
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              <div className="grid gap-2">
+                                <Label className="text-foreground">Pays</Label>
+                                <Select
+                                  value={quickLocalityDraft.countryCode}
+                                  onValueChange={(code) => {
+                                    const country = TICKET_COUNTRIES.find((item) => item.code === code);
+                                    setQuickLocalityDraft((prev) => ({
+                                      ...prev,
+                                      countryCode: code,
+                                      countryName: country?.name ?? prev.countryName,
+                                      departement: code === 'CG' ? prev.departement : '',
+                                    }));
+                                  }}
+                                >
+                                  <SelectTrigger className="border-2 dark:border-slate-600 dark:bg-slate-800">
+                                    {(() => {
+                                      const selectedCountry = TICKET_COUNTRIES.find((item) => item.code === quickLocalityDraft.countryCode);
+                                      if (!selectedCountry) {
+                                        return <span className="text-muted-foreground">Choisir un pays</span>;
+                                      }
+                                      return renderTicketCountryLabel(selectedCountry);
+                                    })()}
+                                  </SelectTrigger>
+                                  <SelectContent className="bg-white dark:bg-slate-800">
+                                    {TICKET_COUNTRIES.map((country) => (
+                                      <SelectItem key={country.code} value={country.code}>{renderTicketCountryLabel(country)}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="grid gap-2">
+                                <Label className="text-foreground">Ville</Label>
+                                <Input
+                                  value={quickLocalityDraft.city}
+                                  onChange={(e) => setQuickLocalityDraft((prev) => ({ ...prev, city: e.target.value }))}
+                                  placeholder="Ex: Brazzaville"
+                                  className="border-2 dark:border-slate-600 dark:bg-slate-800"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              <div className="grid gap-2">
+                                <Label className="text-foreground">Département</Label>
+                                {quickLocalityDraft.countryCode === 'CG' ? (
+                                  <Select
+                                    value={quickLocalityDraft.departement}
+                                    onValueChange={(value) => setQuickLocalityDraft((prev) => ({ ...prev, departement: value }))}
+                                  >
+                                    <SelectTrigger className="border-2 dark:border-slate-600 dark:bg-slate-800">
+                                      <SelectValue placeholder="Choisir un département" />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-white dark:bg-slate-800">
+                                      {ticketCongoDepartments.map((department) => (
+                                        <SelectItem key={department} value={department}>{department}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  <Input
+                                    value={quickLocalityDraft.departement}
+                                    onChange={(e) => setQuickLocalityDraft((prev) => ({ ...prev, departement: e.target.value }))}
+                                    placeholder="Département / Région"
+                                    className="border-2 dark:border-slate-600 dark:bg-slate-800"
+                                  />
+                                )}
+                              </div>
+                              <div className="grid gap-2">
+                                <Label className="text-foreground">Arrondissement</Label>
+                                <Input
+                                  value={quickLocalityDraft.arrondissement}
+                                  onChange={(e) => setQuickLocalityDraft((prev) => ({ ...prev, arrondissement: e.target.value }))}
+                                  placeholder="Ex: Makélékélé"
+                                  className="border-2 dark:border-slate-600 dark:bg-slate-800"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              <div className="grid gap-2">
+                                <Label className="text-foreground">Quartier</Label>
+                                <Input
+                                  value={quickLocalityDraft.quartier}
+                                  onChange={(e) => setQuickLocalityDraft((prev) => ({ ...prev, quartier: e.target.value }))}
+                                  placeholder="Ex: Centre-ville"
+                                  className="border-2 dark:border-slate-600 dark:bg-slate-800"
+                                />
+                              </div>
+                              <div className="grid gap-2">
+                                <Label className="text-foreground">Adresse</Label>
+                                <Input
+                                  value={quickLocalityDraft.address}
+                                  onChange={(e) => setQuickLocalityDraft((prev) => ({ ...prev, address: e.target.value }))}
+                                  placeholder="Ex: Avenue de la Paix, 12"
+                                  className="border-2 dark:border-slate-600 dark:bg-slate-800"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="grid gap-2">
+                              <Label className="text-foreground">Référence (description)</Label>
+                              <Textarea
+                                value={quickLocalityDraft.reference}
+                                onChange={(e) => setQuickLocalityDraft((prev) => ({ ...prev, reference: e.target.value }))}
+                                placeholder="Point de repère, description du lieu..."
+                                rows={2}
+                                className="border-2 dark:border-slate-600 dark:bg-slate-800"
+                              />
+                            </div>
+
+                            </TabsContent>
+
+                            <TabsContent value="manage" className="space-y-3 py-2 mt-3">
+                              <div className="grid gap-2">
+                                <Label className="text-foreground">Recherche localité</Label>
+                                <Input
+                                  value={managedLocalitySearch}
+                                  onChange={(e) => setManagedLocalitySearch(e.target.value)}
+                                  placeholder="Rechercher par nom, ville, département..."
+                                  className="border-2 dark:border-slate-600 dark:bg-slate-800"
+                                />
+                              </div>
+                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                                <div className="grid gap-2">
+                                  <Label className="text-foreground">Localités existantes</Label>
+                                  <Select value={selectedManagedLocalityId} onValueChange={handleSelectManagedLocality}>
+                                    <SelectTrigger className="border-2 dark:border-slate-600 dark:bg-slate-800">
+                                      <SelectValue placeholder="Choisir une localité à modifier" />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-white dark:bg-slate-800">
+                                      {filteredManagedLocalities.map((locality) => (
+                                        <SelectItem key={locality.id} value={locality.id}>{locality.name}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div className="grid gap-2">
+                                  <Label className="text-foreground">Nom du site</Label>
+                                  <Input
+                                    value={managedLocalityName}
+                                    onChange={(e) => setManagedLocalityName(e.target.value)}
+                                    placeholder="Nom du site"
+                                    className="border-2 dark:border-slate-600 dark:bg-slate-800"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div className="grid gap-2">
+                                  <Label className="text-foreground">Pays</Label>
+                                  <Select
+                                    value={managedLocalityDraft.countryCode}
+                                    onValueChange={(code) => {
+                                      const country = TICKET_COUNTRIES.find((item) => item.code === code);
+                                      setManagedLocalityDraft((prev) => ({
+                                        ...prev,
+                                        countryCode: code,
+                                        countryName: country?.name ?? prev.countryName,
+                                      }));
+                                    }}
+                                  >
+                                    <SelectTrigger className="border-2 dark:border-slate-600 dark:bg-slate-800">
+                                      {(() => {
+                                        const selectedCountry = TICKET_COUNTRIES.find((item) => item.code === managedLocalityDraft.countryCode);
+                                        if (!selectedCountry) {
+                                          return <span className="text-muted-foreground">Choisir un pays</span>;
+                                        }
+                                        return renderTicketCountryLabel(selectedCountry);
+                                      })()}
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-white dark:bg-slate-800">
+                                      {TICKET_COUNTRIES.map((country) => (
+                                        <SelectItem key={country.code} value={country.code}>{renderTicketCountryLabel(country)}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div className="grid gap-2">
+                                  <Label className="text-foreground">Ville</Label>
+                                  <Input
+                                    value={managedLocalityDraft.city}
+                                    onChange={(e) => setManagedLocalityDraft((prev) => ({ ...prev, city: e.target.value }))}
+                                    placeholder="Ex: Brazzaville"
+                                    className="border-2 dark:border-slate-600 dark:bg-slate-800"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div className="grid gap-2">
+                                  <Label className="text-foreground">Département</Label>
+                                  {managedLocalityDraft.countryCode === 'CG' ? (
+                                    <Select
+                                      value={managedLocalityDraft.departement}
+                                      onValueChange={(value) => setManagedLocalityDraft((prev) => ({ ...prev, departement: value }))}
+                                    >
+                                      <SelectTrigger className="border-2 dark:border-slate-600 dark:bg-slate-800">
+                                        <SelectValue placeholder="Choisir un département" />
+                                      </SelectTrigger>
+                                      <SelectContent className="bg-white dark:bg-slate-800">
+                                        {ticketCongoDepartments.map((department) => (
+                                          <SelectItem key={department} value={department}>{department}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  ) : (
+                                    <Input
+                                      value={managedLocalityDraft.departement}
+                                      onChange={(e) => setManagedLocalityDraft((prev) => ({ ...prev, departement: e.target.value }))}
+                                      placeholder="Département / Région"
+                                      className="border-2 dark:border-slate-600 dark:bg-slate-800"
+                                    />
+                                  )}
+                                </div>
+                                <div className="grid gap-2">
+                                  <Label className="text-foreground">Arrondissement</Label>
+                                  <Input
+                                    value={managedLocalityDraft.arrondissement}
+                                    onChange={(e) => setManagedLocalityDraft((prev) => ({ ...prev, arrondissement: e.target.value }))}
+                                    placeholder="Ex: Makélékélé"
+                                    className="border-2 dark:border-slate-600 dark:bg-slate-800"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div className="grid gap-2">
+                                  <Label className="text-foreground">Quartier</Label>
+                                  <Input
+                                    value={managedLocalityDraft.quartier}
+                                    onChange={(e) => setManagedLocalityDraft((prev) => ({ ...prev, quartier: e.target.value }))}
+                                    placeholder="Ex: Centre-ville"
+                                    className="border-2 dark:border-slate-600 dark:bg-slate-800"
+                                  />
+                                </div>
+                                <div className="grid gap-2">
+                                  <Label className="text-foreground">Adresse</Label>
+                                  <Input
+                                    value={managedLocalityDraft.address}
+                                    onChange={(e) => setManagedLocalityDraft((prev) => ({ ...prev, address: e.target.value }))}
+                                    placeholder="Ex: Avenue de la Paix, 12"
+                                    className="border-2 dark:border-slate-600 dark:bg-slate-800"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="grid gap-2">
+                                <Label className="text-foreground">Référence (description)</Label>
+                                <Textarea
+                                  value={managedLocalityDraft.reference}
+                                  onChange={(e) => setManagedLocalityDraft((prev) => ({ ...prev, reference: e.target.value }))}
+                                  placeholder="Point de repère, description du lieu..."
+                                  rows={2}
+                                  className="border-2 dark:border-slate-600 dark:bg-slate-800"
+                                />
+                              </div>
+                            </TabsContent>
+                          </Tabs>
+
+                          <DialogFooter>
+                            <DialogClose asChild>
+                              <Button variant="outline" className="border-2">Fermer</Button>
+                            </DialogClose>
+                            {quickLocalityTab === 'create' ? (
+                              <Button
+                                type="button"
+                                onClick={() => void handleQuickCreateLocality()}
+                                disabled={isCreatingLocality}
+                                className="bg-cyan-600 hover:bg-cyan-700 text-white"
+                              >
+                                {isCreatingLocality ? 'Création...' : 'Créer'}
+                              </Button>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  type="button"
+                                  variant="destructive"
+                                  onClick={() => void handleDeleteManagedLocality()}
+                                  disabled={isDeletingLocality || !selectedManagedLocalityId}
+                                >
+                                  {isDeletingLocality ? 'Suppression...' : 'Supprimer'}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  onClick={() => void handleUpdateManagedLocality()}
+                                  disabled={isUpdatingLocality || !selectedManagedLocalityId}
+                                  className="bg-cyan-600 hover:bg-cyan-700 text-white"
+                                >
+                                  {isUpdatingLocality ? 'Enregistrement...' : 'Enregistrer'}
+                                </Button>
+                              </div>
+                            )}
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
+                      <CreateTicketDialog
+                        siteOptions={ticketSiteOptions}
+                        localityOptions={ticketLocalityOptions}
+                        technicianOptions={ticketTechnicianOptions}
+                        user={user ? { id: user.id, name: user.name } : null}
+                        onLocalityCreated={(name) => {
+                          setTicketLocalityOptions((prev) => {
+                            const normalized = normalizeTicketLocality(name);
+                            if (!normalized) return prev;
+                            if (prev.some((item) => normalizeTicketLocality(item).toLowerCase() === normalized.toLowerCase())) {
+                              return prev;
+                            }
+                            return [...prev, normalized].sort((a, b) => a.localeCompare(b, 'fr', { sensitivity: 'base' }));
+                          });
+                        }}
+                        onTicketCreated={(rawTicket) => {
+                          const createdTicket = mapApiTicketToLegacy(rawTicket);
+                          setTickets((prev) => [createdTicket, ...prev.filter((entry) => entry.id !== createdTicket.id)]);
+                        }}
+                        onRefreshTickets={loadTicketsModuleData}
+                      />
+                    </div>
+                  </div>
+
+                  {!showArchivedTickets ? (
+                    <>
+                      {/* Filtres */}
+                      <Card className="border-2 dark:border-slate-700 bg-white dark:bg-slate-900">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-base text-foreground">Filtres</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="flex flex-wrap gap-3">
+                            <div className="flex-1 min-w-[200px]">
+                              <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                <Input placeholder="Rechercher..." value={ticketSearchQuery} onChange={(e) => setTicketSearchQuery(e.target.value)} className="pl-10 border-2 dark:border-slate-600 dark:bg-slate-800" />
+                              </div>
+                            </div>
+                            <Select value={ticketStatusFilter} onValueChange={(v) => setTicketStatusFilter(v as TicketStatus | 'all')}>
+                              <SelectTrigger className="w-[140px] border-2 dark:border-slate-600 dark:bg-slate-800"><SelectValue placeholder="Statut" /></SelectTrigger>
+                              <SelectContent className="bg-white dark:bg-slate-800">
+                                <SelectItem value="all">Tous statuts</SelectItem>
+                                {Object.entries(TICKET_STATUSES).map(([key, val]) => (<SelectItem key={key} value={key}>{val.label}</SelectItem>))}
+                              </SelectContent>
+                            </Select>
+                            <Select value={ticketPriorityFilter} onValueChange={(v) => setTicketPriorityFilter(v as TicketPriority | 'all')}>
+                              <SelectTrigger className="w-[140px] border-2 dark:border-slate-600 dark:bg-slate-800"><SelectValue placeholder="Priorité" /></SelectTrigger>
+                              <SelectContent className="bg-white dark:bg-slate-800">
+                                <SelectItem value="all">Toutes priorités</SelectItem>
+                                {Object.entries(TICKET_PRIORITIES).map(([key, val]) => (<SelectItem key={key} value={key}>{val.label}</SelectItem>))}
+                              </SelectContent>
+                            </Select>
+                            <Select value={ticketSiteFilter} onValueChange={setTicketSiteFilter}>
+                              <SelectTrigger className="w-[140px] border-2 dark:border-slate-600 dark:bg-slate-800"><SelectValue placeholder="Site" /></SelectTrigger>
+                              <SelectContent className="bg-white dark:bg-slate-800">
+                                <SelectItem value="all">Tous sites</SelectItem>
+                                {ticketSiteOptions.map((site) => (<SelectItem key={site.id} value={site.name}>{site.name}</SelectItem>))}
+                              </SelectContent>
+                            </Select>
+                            <Select value={ticketLocaliteFilter} onValueChange={setTicketLocaliteFilter}>
+                              <SelectTrigger className="w-[140px] border-2 dark:border-slate-600 dark:bg-slate-800"><SelectValue placeholder="Localité" /></SelectTrigger>
+                              <SelectContent className="bg-white dark:bg-slate-800">
+                                <SelectItem value="all">Toutes localités</SelectItem>
+                                {ticketLocalityOptions.map((loc) => (<SelectItem key={loc} value={loc}>{loc}</SelectItem>))}
+                              </SelectContent>
+                            </Select>
+                            <Select value={ticketTechnicienFilter} onValueChange={setTicketTechnicienFilter}>
+                              <SelectTrigger className="w-[180px] border-2 dark:border-slate-600 dark:bg-slate-800"><SelectValue placeholder="Technicien" /></SelectTrigger>
+                              <SelectContent className="bg-white dark:bg-slate-800">
+                                <SelectItem value="all">Tous techniciens</SelectItem>
+                                {ticketTechnicianOptions.map((technician) => (<SelectItem key={technician.id} value={technician.name}>{technician.name}</SelectItem>))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      {/* Liste des tickets */}
+                      {ticketViewMode === 'list' ? (
+                        <Card className="border-2 dark:border-slate-700 bg-white dark:bg-slate-900">
+                          <CardContent className="p-0">
+                            <div className="overflow-x-auto">
+                              <table className="w-full">
+                                <thead>
+                                  <tr className="border-b-2 dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
+                                    <th className="text-left p-3 font-semibold text-foreground">ID du Ticket</th>
+                                    <th className="text-left p-3 font-semibold text-foreground">Objet</th>
+                                    <th className="text-left p-3 font-semibold text-foreground">Nom de Contact</th>
+                                    <th className="text-left p-3 font-semibold text-foreground">Nom de Compte</th>
+                                    <th className="text-left p-3 font-semibold text-foreground">Fil récent</th>
+                                    <th className="text-left p-3 font-semibold text-foreground">Date d'échéance</th>
+                                    <th className="text-left p-3 font-semibold text-foreground">État</th>
+                                    <th className="text-left p-3 font-semibold text-foreground">Propriétaire du Ticket</th>
+                                    <th className="text-left p-3 font-semibold text-foreground">Canal</th>
+                                    <th className="text-left p-3 font-semibold text-foreground">Actions</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {visibleTickets.map(ticket => (
+                                      (() => {
+                                        const isDeletingToTrash = isTicketActionBusy('delete', ticket.id);
+                                        const isDeletingPermanent = isTicketActionBusy('permanent', ticket.id);
+                                        const isRestoring = isTicketActionBusy('restore', ticket.id);
+                                        return (
+                                      <tr
+                                        key={ticket.id}
+                                        className="group border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer"
+                                        onMouseEnter={() => router.prefetch(`/tickets/${ticket.id}`)}
+                                        onClick={() => openTicketDetailPage(ticket.id)}
+                                        onContextMenu={(event) => {
+                                          if (!showDeletedTickets) return;
+                                          openTrashTicketContextMenu(event, ticket);
+                                        }}
+                                      >
+                                        <td className="p-3 font-mono font-semibold text-cyan-600 dark:text-cyan-400">{ticket.numero}</td>
+                                        <td className="p-3 max-w-[200px] truncate text-foreground">{ticket.objet}</td>
+                                        <td className="p-3 text-foreground">{ticket.contactName || '-'}</td>
+                                        <td className="p-3 text-foreground">{ticket.accountName || '-'}</td>
+                                        <td className="p-3 max-w-[220px] truncate text-muted-foreground text-sm">{ticket.recentThread || '-'}</td>
+                                        <td className="p-3 text-muted-foreground text-sm">{ticket.dueDate ? format(ticket.dueDate, 'dd/MM/yyyy HH:mm') : '-'}</td>
+                                        <td className="p-3"><Badge className={`${TICKET_STATUSES[ticket.status].bgColor} ${TICKET_STATUSES[ticket.status].color} border ${TICKET_STATUSES[ticket.status].borderColor} font-semibold`}>{TICKET_STATUSES[ticket.status].label}</Badge></td>
+                                        <td className="p-3 text-foreground">{ticket.technicien || '-'}</td>
+                                        <td className="p-3 text-foreground">{ticket.channel || '-'}</td>
+                                        <td className="p-3">
+                                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-blue-100 dark:hover:bg-blue-900/40" onClick={() => openTicketDetailPage(ticket.id)}><Eye className="w-4 h-4 text-blue-600 dark:text-blue-400" /></Button>
+                                            {showDeletedTickets ? (
+                                              <>
+                                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-emerald-100 dark:hover:bg-emerald-900/40" onClick={() => { void handleRestoreTicket(ticket); }} disabled={isRestoring || isDeletingPermanent} title={isRestoring ? 'Restauration en cours' : 'Restaurer'}><RotateCcw className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /></Button>
+                                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-red-100 dark:hover:bg-red-900/40" onClick={() => { requestDeleteTicket(ticket, true); }} disabled={isDeletingPermanent || isRestoring} title={isDeletingPermanent ? 'Suppression en cours' : 'Supprimer définitivement'}><Trash2 className="w-4 h-4 text-red-600 dark:text-red-400" /></Button>
+                                              </>
+                                            ) : (
+                                              <>
+                                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-yellow-100 dark:hover:bg-yellow-900/40" onClick={() => { setEditingTicket(ticket); setEditTicketOpen(true); }} disabled={isDeletingToTrash}><Edit className="w-4 h-4 text-yellow-600 dark:text-yellow-400" /></Button>
+                                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-red-100 dark:hover:bg-red-900/40" onClick={() => { requestDeleteTicket(ticket, false); }} disabled={isDeletingToTrash} title={isDeletingToTrash ? 'Suppression en cours' : 'Supprimer'}><Trash2 className="w-4 h-4 text-red-600 dark:text-red-400" /></Button>
+                                              </>
+                                            )}
+                                          </div>
+                                        </td>
+                                      </tr>
+                                        );
+                                      })()
+                                    ))}
+                                  {currentStorageTickets.length === 0 && (
+                                    <tr><td colSpan={10} className="p-8 text-center text-muted-foreground">{showDeletedTickets ? 'La corbeille est vide' : 'Aucun ticket. Cliquez sur "Créer un ticket" pour commencer.'}</td></tr>
+                                  )}
+                                </tbody>
+                              </table>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {visibleTickets.map((ticket) => (
+                            (() => {
+                              const isDeletingToTrash = isTicketActionBusy('delete', ticket.id);
+                              const isDeletingPermanent = isTicketActionBusy('permanent', ticket.id);
+                              const isRestoring = isTicketActionBusy('restore', ticket.id);
+                              return (
+                            <Card
+                              key={ticket.id}
+                              className={`border-2 ${TICKET_STATUSES[ticket.status].borderColor} bg-white dark:bg-slate-900 hover:shadow-lg transition-all duration-200 cursor-pointer ${isDeletingToTrash || isDeletingPermanent || isRestoring ? 'opacity-60' : ''}`}
+                              onMouseEnter={() => router.prefetch(`/tickets/${ticket.id}`)}
+                              onClick={() => openTicketDetailPage(ticket.id)}
+                              onContextMenu={(event) => {
+                                if (!showDeletedTickets) return;
+                                openTrashTicketContextMenu(event, ticket);
+                              }}
+                            >
+                              <CardHeader className="pb-2">
+                                <div className="flex items-center justify-between">
+                                  <span className="font-mono font-semibold text-cyan-600 dark:text-cyan-400">{ticket.numero}</span>
+                                  <Badge className={`${TICKET_STATUSES[ticket.status].bgColor} ${TICKET_STATUSES[ticket.status].color} font-semibold`}>
+                                    {TICKET_STATUSES[ticket.status].label}
+                                  </Badge>
+                                </div>
+                                <CardTitle className="text-base text-foreground line-clamp-2">{ticket.objet}</CardTitle>
+                              </CardHeader>
+                              <CardContent className="pb-3">
+                                <div className="space-y-2 text-sm">
+                                  <div className="flex items-center gap-2">
+                                    <Badge className={`${TICKET_PRIORITIES[ticket.priority].bgColor} ${TICKET_PRIORITIES[ticket.priority].color} text-xs`}>
+                                      {TICKET_PRIORITIES[ticket.priority].label}
+                                    </Badge>
+                                    <span className="text-muted-foreground flex items-center gap-1">
+                                      {(() => {
+                                        const CatIcon = TICKET_CATEGORIES[ticket.category].icon;
+                                        return <CatIcon className="w-4 h-4" />;
+                                      })()}
+                                      {TICKET_CATEGORIES[ticket.category].label}
+                                    </span>
+                                  </div>
+                                  {ticket.site && <p className="text-muted-foreground flex items-center gap-1"><MapPin className="w-4 h-4" /> {ticket.site}</p>}
+                                  {ticket.technicien && <p className="text-muted-foreground flex items-center gap-1"><User className="w-4 h-4" /> {ticket.technicien}</p>}
+                                  <p className="text-muted-foreground text-xs">{format(ticket.createdAt, 'dd/MM/yyyy HH:mm')}</p>
+                                </div>
+                                <div className="flex items-center gap-1 mt-3 pt-3 border-t dark:border-slate-700" onClick={(e) => e.stopPropagation()}>
+                                  <Button variant="ghost" size="sm" className="h-8 px-2 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-blue-600 dark:text-blue-400" onClick={() => openTicketDetailPage(ticket.id)}>
+                                    <Eye className="w-4 h-4 mr-1" /> Voir
+                                  </Button>
+                                  {showDeletedTickets ? (
+                                    <>
+                                      <Button variant="ghost" size="sm" className="h-8 px-2 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400" onClick={() => { void handleRestoreTicket(ticket); }} disabled={isRestoring || isDeletingPermanent}>
+                                        <RotateCcw className="w-4 h-4 mr-1" /> {isRestoring ? 'Restauration...' : 'Restaurer'}
+                                      </Button>
+                                      <Button variant="ghost" size="sm" className="h-8 px-2 hover:bg-red-100 dark:hover:bg-red-900/40 text-red-600 dark:text-red-400" onClick={() => { requestDeleteTicket(ticket, true); }} disabled={isDeletingPermanent || isRestoring}>
+                                        <Trash2 className="w-4 h-4 mr-1" /> {isDeletingPermanent ? 'Suppression...' : 'Définitif'}
+                                      </Button>
+                                    </>
+                                  ) : (
+                                    <Button variant="ghost" size="sm" className="h-8 px-2 hover:bg-yellow-100 dark:hover:bg-yellow-900/40 text-yellow-600 dark:text-yellow-400" onClick={() => { setEditingTicket(ticket); setEditTicketOpen(true); }} disabled={isDeletingToTrash}>
+                                      <Edit className="w-4 h-4 mr-1" /> Modifier
+                                    </Button>
+                                  )}
+                                </div>
+                              </CardContent>
+                            </Card>
+                              );
+                            })()
+                          ))}
+                        </div>
+                      )}
+
+                      {showDeletedTickets && showTrashContextMenu && trashContextTicket && (
+                        <div
+                          className="fixed z-50 min-w-48 rounded-lg border bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900"
+                          style={{ left: `${trashContextMenuPosition.x}px`, top: `${trashContextMenuPosition.y}px` }}
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <button
+                            type="button"
+                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+                            onClick={() => {
+                              void handleRestoreTicket(trashContextTicket);
+                            }}
+                            disabled={isTicketActionBusy('restore', trashContextTicket.id) || isTicketActionBusy('permanent', trashContextTicket.id)}
+                          >
+                            <RotateCcw className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> {isTicketActionBusy('restore', trashContextTicket.id) ? 'Restauration...' : 'Restaurer'}
+                          </button>
+                          <button
+                            type="button"
+                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+                            onClick={() => {
+                              requestDeleteTicket(trashContextTicket, true);
+                            }}
+                            disabled={isTicketActionBusy('permanent', trashContextTicket.id) || isTicketActionBusy('restore', trashContextTicket.id)}
+                          >
+                            <Trash2 className="h-4 w-4" /> {isTicketActionBusy('permanent', trashContextTicket.id) ? 'Suppression...' : 'Supprimer définitivement'}
+                          </button>
+                        </div>
+                      )}
+
+                      <Dialog
+                        open={deleteTicketDialogOpen}
+                        onOpenChange={(open) => {
+                          setDeleteTicketDialogOpen(open);
+                          if (!open) {
+                            setDeleteTicketTarget(null);
+                            setDeleteTicketPermanent(false);
+                          }
+                        }}
+                      >
+                        <DialogContent className="max-w-xl border-2 bg-white dark:border-slate-700 dark:bg-slate-900">
+                          <DialogHeader>
+                            <DialogTitle>
+                              {deleteTicketPermanent ? 'Supprimer définitivement ce ticket ?' : 'Déplacer ce ticket dans la corbeille ?'}
+                            </DialogTitle>
+                            <DialogDescription>
+                              {deleteTicketPermanent
+                                ? 'Cette action est irréversible.'
+                                : 'Le ticket sera déplacé dans la corbeille et restera restaurable pendant la durée de rétention.'}
+                            </DialogDescription>
+                          </DialogHeader>
+
+                          {deleteTicketTarget ? (
+                            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+                              Ticket concerné: <span className="font-semibold">{deleteTicketTarget.numero}</span> — {deleteTicketTarget.objet}
+                            </div>
+                          ) : null}
+
+                          <DialogFooter>
+                            <Button
+                              variant="outline"
+                              onClick={() => {
+                                setDeleteTicketDialogOpen(false);
+                                setDeleteTicketTarget(null);
+                                setDeleteTicketPermanent(false);
+                              }}
+                              disabled={deleteTicketTarget ? isTicketActionBusy(deleteTicketPermanent ? 'permanent' : 'delete', deleteTicketTarget.id) : false}
+                            >
+                              Annuler
+                            </Button>
+                            <Button
+                              variant="destructive"
+                              onClick={() => {
+                                if (!deleteTicketTarget) return;
+                                void handleDeleteTicket(deleteTicketTarget, deleteTicketPermanent);
+                                setDeleteTicketDialogOpen(false);
+                                setDeleteTicketTarget(null);
+                                setDeleteTicketPermanent(false);
+                              }}
+                              disabled={deleteTicketTarget ? isTicketActionBusy(deleteTicketPermanent ? 'permanent' : 'delete', deleteTicketTarget.id) : true}
+                            >
+                              {deleteTicketTarget && isTicketActionBusy(deleteTicketPermanent ? 'permanent' : 'delete', deleteTicketTarget.id)
+                                ? 'Suppression...'
+                                : 'Confirmer'}
+                            </Button>
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
+                    </>
+                  ) : (
+                    <TicketArchiveDashboard
+                      archiveYears={archiveYears}
+                      archiveYearFilter={archiveYearFilter}
+                      archiveYearBuckets={archiveYearBuckets}
+                      archiveReport={archiveReport}
+                      onArchiveYearChange={setArchiveYearFilter}
+                      onBackToActive={() => {
+                        setShowArchivedTickets(false);
+                        setShowDeletedTickets(false);
+                      }}
+                      onViewTicket={openTicketDetailPage}
+                      onUnarchiveTicket={(ticketId) => {
+                        const ticket = tickets.find((entry) => entry.id === ticketId);
+                        if (ticket) void handleUnarchiveTicket(ticket);
+                      }}
+                      statusBadge={(status) => TICKET_STATUSES[status as TicketStatus]}
+                      statusOptions={Object.entries(TICKET_STATUSES).map(([key, value]) => ({ key, label: value.label }))}
+                      ticketSiteOptions={Array.from(new Set(archiveYearBuckets.flatMap((bucket) => bucket.items.map((t) => t.site).filter(Boolean)))).map((name) => ({ id: name, name }))}
+                      ticketLocalityOptions={Array.from(new Set(archiveYearBuckets.flatMap((bucket) => bucket.items.map((t) => t.localite).filter(Boolean))))}
+                      ticketTechnicianOptions={Array.from(new Set(archiveYearBuckets.flatMap((bucket) => bucket.items.map((t) => t.technicien).filter(Boolean)))).map((name) => ({ id: name, name }))}
+                      priorityOptions={Object.entries(TICKET_PRIORITIES).map(([key, value]) => ({ key, label: value.label }))}
+                    />
+                  )}
+                </motion.div>
               )}
+
+              {/* Dialog Modifier Ticket */}
+              {editTicketOpen && (
+              <Dialog key="edit-ticket-dialog" open={editTicketOpen} onOpenChange={(open) => {
+                setEditTicketOpen(open);
+                if (!open) {
+                  setIsEditLocalityCreationEnabled(false);
+                }
+              }}>
+                <DialogContent className="max-w-2xl bg-white dark:bg-slate-900 border-2 dark:border-slate-700">
+                  <DialogHeader>
+                    <DialogTitle className="text-foreground">Modifier le ticket</DialogTitle>
+                  </DialogHeader>
+                  {editingTicket ? (
+                    <div className="grid gap-4 py-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="grid gap-2">
+                          <Label className="text-foreground font-medium">Objet</Label>
+                          <Input
+                            value={editingTicket.objet}
+                            onChange={(e) => setEditingTicket({ ...editingTicket, objet: e.target.value })}
+                            className="border-2 dark:border-slate-600 dark:bg-slate-800"
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label className="text-foreground font-medium">Statut</Label>
+                          <Select value={editingTicket.status} onValueChange={(v: TicketStatus) => setEditingTicket({ ...editingTicket, status: v })}>
+                            <SelectTrigger className="border-2 dark:border-slate-600 dark:bg-slate-800">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="bg-white dark:bg-slate-800">
+                              {Object.entries(TICKET_STATUSES).map(([key, val]) => (
+                                <SelectItem key={key} value={key}>{val.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-4 gap-4">
+                        <div className="grid gap-2">
+                          <Label className="text-foreground font-medium">Priorité</Label>
+                          <Select value={editingTicket.priority} onValueChange={(v: TicketPriority) => setEditingTicket({ ...editingTicket, priority: v })}>
+                            <SelectTrigger className="border-2 dark:border-slate-600 dark:bg-slate-800">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="bg-white dark:bg-slate-800">
+                              {Object.entries(TICKET_PRIORITIES).map(([key, val]) => (
+                                <SelectItem key={key} value={key}>{val.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="grid gap-2">
+                          <Label className="text-foreground font-medium">Site</Label>
+                          <Select value={editingTicket.site} onValueChange={(v) => setEditingTicket({ ...editingTicket, site: v })}>
+                            <SelectTrigger className="border-2 dark:border-slate-600 dark:bg-slate-800">
+                              <SelectValue placeholder="Sélectionner" />
+                            </SelectTrigger>
+                            <SelectContent className="bg-white dark:bg-slate-800">
+                              {ticketSiteOptions.map((site) => (
+                                <SelectItem key={site.id} value={site.name}>{site.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="grid gap-2">
+                          <Label className="text-foreground font-medium">Localité</Label>
+                          <Select value={editingTicket.localite} onValueChange={(v) => {
+                            setEditingTicket({ ...editingTicket, localite: v });
+                            setEditTicketLocalityDraft((prev) => ({ ...prev, freeText: v }));
+                          }}>
+                            <SelectTrigger className="border-2 dark:border-slate-600 dark:bg-slate-800">
+                              <SelectValue placeholder="Sélectionner ou saisir" />
+                            </SelectTrigger>
+                            <SelectContent className="bg-white dark:bg-slate-800">
+                              {ticketLocalityOptions.map((locality) => (
+                                <SelectItem key={locality} value={locality}>{locality}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Input
+                            value={editTicketLocalityDraft.freeText}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              setEditTicketLocalityDraft((prev) => ({ ...prev, freeText: value }));
+                              setEditingTicket((prev) => prev ? { ...prev, localite: value } : prev);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key !== 'Enter') return;
+                              if (!isEditLocalityCreationEnabled) return;
+                              e.preventDefault();
+                              void createTicketLocality(editTicketLocalityDraft, 'edit');
+                            }}
+                            placeholder={isEditLocalityCreationEnabled ? 'Ou tapez directement la localité puis Entrée' : 'Saisie libre (activez le switch pour enregistrer en base)'}
+                            className="border-2 dark:border-slate-600 dark:bg-slate-800"
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label className="text-foreground font-medium">Technicien</Label>
+                          <Select value={editingTicket.technicien} onValueChange={(v) => setEditingTicket({ ...editingTicket, technicien: v })}>
+                            <SelectTrigger className="border-2 dark:border-slate-600 dark:bg-slate-800">
+                              <SelectValue placeholder="Sélectionner un technicien" />
+                            </SelectTrigger>
+                            <SelectContent className="bg-white dark:bg-slate-800">
+                              {ticketTechnicianOptions.map((technician) => (
+                                <SelectItem key={technician.id} value={technician.name}>{technician.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div className="grid gap-2">
+                        <Label className="text-foreground font-medium">Description</Label>
+                        <Textarea
+                          value={editingTicket.description}
+                          onChange={(e) => setEditingTicket({ ...editingTicket, description: e.target.value })}
+                          rows={3}
+                          className="border-2 dark:border-slate-600 dark:bg-slate-800"
+                        />
+                      </div>
+                      <div className="flex items-center justify-between rounded-lg border border-slate-300/70 bg-slate-50/70 px-3 py-2 dark:border-slate-700 dark:bg-slate-800/60">
+                        <div>
+                          <p className="text-sm font-medium text-foreground">Créer une localité dans la base</p>
+                          <p className="text-xs text-muted-foreground">Activez pour afficher le formulaire structuré</p>
+                        </div>
+                        <Switch checked={isEditLocalityCreationEnabled} onCheckedChange={setIsEditLocalityCreationEnabled} />
+                      </div>
+                      {isEditLocalityCreationEnabled && (
+                      <Card className="border border-dashed border-cyan-300/70 bg-cyan-50/40 dark:border-cyan-700/70 dark:bg-slate-800/40">
+                        <CardHeader className="pb-3">
+                          <CardTitle className="text-sm text-foreground">Créer une nouvelle localité</CardTitle>
+                          <CardDescription>Ajout rapide avec nom du site, pays et détails d'adresse</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <div className="grid gap-2">
+                            <Label className="text-foreground text-xs">Nom du site</Label>
+                            <Input
+                              value={editTicketLocalityDraft.freeText}
+                              onChange={(e) => setEditTicketLocalityDraft((prev) => ({ ...prev, freeText: e.target.value }))}
+                              placeholder="Ex: Site NOC Ouenzé"
+                              className="border dark:border-slate-600 dark:bg-slate-800"
+                            />
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div className="grid gap-2">
+                              <Label className="text-foreground text-xs">Pays</Label>
+                              <Select
+                                value={editTicketLocalityDraft.countryCode}
+                                onValueChange={(code) => {
+                                  const country = TICKET_COUNTRIES.find((item) => item.code === code);
+                                  setEditTicketLocalityDraft((prev) => ({
+                                    ...prev,
+                                    countryCode: code,
+                                    countryName: country?.name ?? prev.countryName,
+                                    departement: code === 'CG' ? prev.departement : '',
+                                  }));
+                                }}
+                              >
+                                <SelectTrigger className="border dark:border-slate-600 dark:bg-slate-800">
+                                  {(() => {
+                                    const selectedCountry = TICKET_COUNTRIES.find((item) => item.code === editTicketLocalityDraft.countryCode);
+                                    if (!selectedCountry) {
+                                      return <span className="text-muted-foreground">Choisir un pays</span>;
+                                    }
+                                    return renderTicketCountryLabel(selectedCountry);
+                                  })()}
+                                </SelectTrigger>
+                                <SelectContent className="bg-white dark:bg-slate-800">
+                                  {TICKET_COUNTRIES.map((country) => (
+                                    <SelectItem key={country.code} value={country.code}>{renderTicketCountryLabel(country)}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="grid gap-2">
+                              <Label className="text-foreground text-xs">Département</Label>
+                              {editTicketLocalityDraft.countryCode === 'CG' ? (
+                                <Select
+                                  value={editTicketLocalityDraft.departement}
+                                  onValueChange={(value) => setEditTicketLocalityDraft((prev) => ({ ...prev, departement: value }))}
+                                >
+                                  <SelectTrigger className="border dark:border-slate-600 dark:bg-slate-800">
+                                    <SelectValue placeholder="Choisir un département" />
+                                  </SelectTrigger>
+                                  <SelectContent className="bg-white dark:bg-slate-800">
+                                    {ticketCongoDepartments.map((department) => (
+                                      <SelectItem key={department} value={department}>{department}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              ) : (
+                                <Input
+                                  value={editTicketLocalityDraft.departement}
+                                  onChange={(e) => setEditTicketLocalityDraft((prev) => ({ ...prev, departement: e.target.value }))}
+                                  placeholder="Département / Région"
+                                  className="border dark:border-slate-600 dark:bg-slate-800"
+                                />
+                              )}
+                            </div>
+                            <div className="grid gap-2">
+                              <Label className="text-foreground text-xs">Ville</Label>
+                              <Input
+                                value={editTicketLocalityDraft.city}
+                                onChange={(e) => setEditTicketLocalityDraft((prev) => ({ ...prev, city: e.target.value }))}
+                                placeholder="Ex: Brazzaville"
+                                className="border dark:border-slate-600 dark:bg-slate-800"
+                              />
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div className="grid gap-2">
+                              <Label className="text-foreground text-xs">Arrondissement</Label>
+                              <Input
+                                value={editTicketLocalityDraft.arrondissement}
+                                onChange={(e) => setEditTicketLocalityDraft((prev) => ({ ...prev, arrondissement: e.target.value }))}
+                                placeholder="Ex: Gombe"
+                                className="border dark:border-slate-600 dark:bg-slate-800"
+                              />
+                            </div>
+                            <div className="grid gap-2">
+                              <Label className="text-foreground text-xs">Quartier</Label>
+                              <Input
+                                value={editTicketLocalityDraft.quartier}
+                                onChange={(e) => setEditTicketLocalityDraft((prev) => ({ ...prev, quartier: e.target.value }))}
+                                placeholder="Ex: Basoko"
+                                className="border dark:border-slate-600 dark:bg-slate-800"
+                              />
+                            </div>
+                          </div>
+                          <div className="grid gap-2">
+                            <Label className="text-foreground text-xs">Adresse</Label>
+                            <Input
+                              value={editTicketLocalityDraft.address}
+                              onChange={(e) => setEditTicketLocalityDraft((prev) => ({ ...prev, address: e.target.value }))}
+                              placeholder="Ex: Avenue Colonel Mondjiba, n°12"
+                              className="border dark:border-slate-600 dark:bg-slate-800"
+                            />
+                          </div>
+                          <div className="grid gap-2">
+                            <Label className="text-foreground text-xs">Référence (description)</Label>
+                            <Textarea
+                              value={editTicketLocalityDraft.reference}
+                              onChange={(e) => setEditTicketLocalityDraft((prev) => ({ ...prev, reference: e.target.value }))}
+                              placeholder="Point de repère ou description détaillée"
+                              rows={2}
+                              className="border dark:border-slate-600 dark:bg-slate-800"
+                            />
+                          </div>
+                          <div className="flex justify-end">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              disabled={isCreatingLocality}
+                              onClick={() => void createTicketLocality(editTicketLocalityDraft, 'edit')}
+                              className="border-cyan-300 text-cyan-700 hover:bg-cyan-100 dark:border-cyan-700 dark:text-cyan-300 dark:hover:bg-cyan-900/40"
+                            >
+                              {isCreatingLocality ? 'Enregistrement...' : 'Ajouter cette localité'}
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                      )}
+                    </div>
+                  ) : null}
+                  <DialogFooter>
+                    <Button variant="outline" className="border-2" onClick={() => setEditTicketOpen(false)}>Annuler</Button>
+                    <Button className="bg-linear-to-r from-cyan-500 to-blue-600 text-white" onClick={async () => {
+                      if (editingTicket) {
+                        try {
+                          const selectedSites = resolveTicketSiteSelection(editingTicket.site);
+                          const selectedTechnicians = resolveTicketTechnicians(editingTicket.technicien);
+                          const response = await fetch(`/api/tickets/${editingTicket.id}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              objet: editingTicket.objet,
+                              description: editingTicket.description,
+                              status: mapLegacyTicketStatusToApi(editingTicket.status),
+                              priority: mapLegacyTicketPriorityToApi(editingTicket.priority),
+                              siteIds: selectedSites.map((site) => site.id),
+                              siteNames: selectedSites.map((site) => site.name),
+                              localities: splitTicketValues(editingTicket.localite),
+                              technicianIds: selectedTechnicians.map((technician) => technician.id),
+                              technicianNames: selectedTechnicians.map((technician) => ({ id: technician.id, name: technician.name })),
+                              updatedBy: user?.name,
+                              updatedById: user?.id,
+                            }),
+                          });
+
+                          if (!response.ok) {
+                            const err = await response.json().catch(() => ({}));
+                            if (response.status === 409 || err?.error === 'technician_capacity_exceeded') {
+                              toast.error(err?.message ?? 'Un technicien a deja 3 tickets actifs cette semaine.');
+                              return;
+                            }
+                            throw new Error('ticket_update_failed');
+                          }
+
+                          const updatedTicket = mapApiTicketToLegacy(await response.json());
+                          setTickets((prev) => prev.map((ticket) => ticket.id === updatedTicket.id ? updatedTicket : ticket));
+                          setSelectedTicket((prev) => prev?.id === updatedTicket.id ? updatedTicket : prev);
+                          setEditTicketOpen(false);
+                          toast.success('Ticket modifié');
+                        } catch (error) {
+                          console.error('[tickets page] update ticket', error);
+                          toast.error('Impossible de modifier le ticket');
+                        }
+                      }
+                    }}>
+                      Sauvegarder
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+              )}
+
               {/* Gmail Clone - Messagerie Interne */}
               {currentTab === 'messagerie' && (
                 <motion.div key="messagerie" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="h-[calc(100vh-7rem)]">
@@ -11783,7 +13465,7 @@ export default function NOCActivityApp() {
                       {/* Compose Button */}
                       <div className="p-3">
                         <Button 
-                          className={`w-full justify-start gap-2 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700 text-white shadow-md ${sidebarCollapsed ? 'lg:px-2' : ''}`}
+                          className={`w-full justify-start gap-2 bg-linear-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700 text-white shadow-md ${sidebarCollapsed ? 'lg:px-2' : ''}`}
                           onClick={() => {
                             setComposeOpen(true);
                             setReplyToMessage(null);
@@ -11927,7 +13609,7 @@ export default function NOCActivityApp() {
                         <div className="p-3 border-t">
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <span>{messages.filter(m => m.folder === 'inbox').length} messages</span>
-                            <span>â€¢</span>
+                            <span>•</span>
                             <span>{messages.filter(m => m.folder === 'inbox' && !m.isRead).length} non lus</span>
                           </div>
                         </div>
@@ -12177,7 +13859,7 @@ export default function NOCActivityApp() {
                                   {user?.avatar ? (
                                     <AvatarImage src={user.avatar} alt={user.name} />
                                   ) : null}
-                                  <AvatarFallback className="text-xs bg-gradient-to-br from-cyan-500 to-blue-500 text-white">
+                                  <AvatarFallback className="text-xs bg-linear-to-br from-cyan-500 to-blue-500 text-white">
                                     {user?.name?.charAt(0) || 'U'}
                                   </AvatarFallback>
                                 </Avatar>
@@ -12306,7 +13988,7 @@ export default function NOCActivityApp() {
                                 <CardTitle className="text-xl">{selectedMessage.subject || '(Sans objet)'}</CardTitle>
                                 <div className="flex items-start gap-3 mt-3">
                                   <Avatar className="w-10 h-10">
-                                    <AvatarFallback className="bg-gradient-to-br from-cyan-500 to-blue-500 text-white">
+                                    <AvatarFallback className="bg-linear-to-br from-cyan-500 to-blue-500 text-white">
                                       {selectedMessage.from.name.charAt(0).toUpperCase()}
                                     </AvatarFallback>
                                   </Avatar>
@@ -12477,7 +14159,7 @@ export default function NOCActivityApp() {
                                     >
                                       {/* Avatar */}
                                       <Avatar className="w-8 h-8 flex-shrink-0 hidden lg:flex">
-                                        <AvatarFallback className="bg-gradient-to-br from-cyan-500 to-blue-500 text-white text-xs">
+                                        <AvatarFallback className="bg-linear-to-br from-cyan-500 to-blue-500 text-white text-xs">
                                           {msg.from.name.charAt(0).toUpperCase()}
                                         </AvatarFallback>
                                       </Avatar>
@@ -13542,6 +15224,153 @@ export default function NOCActivityApp() {
                       </Button>
                     </CardContent>
                   </Card>
+
+                  <Card>
+                    <CardHeader className="pb-2 pt-4">
+                      <CardTitle className="text-base">Paramètres Tickets</CardTitle>
+                      <CardDescription>Personnalisez le format de numéro, les emails de notification et les SLA par catégorie.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4 pb-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="space-y-2">
+                          <Label htmlFor="ticket-number-format">Format numéro ticket</Label>
+                          <Input
+                            id="ticket-number-format"
+                            value={ticketAdminSettings.numberFormat}
+                            onChange={(event) =>
+                              setTicketAdminSettings((prev) => ({
+                                ...prev,
+                                numberFormat: event.target.value,
+                              }))
+                            }
+                            placeholder="#SC{date}-{seq}"
+                            disabled={ticketAdminSettingsLoading || ticketAdminSettingsSaving}
+                          />
+                          <p className="text-xs text-muted-foreground">Variables supportées: {'{date}'} (jjmmaaaa), {'{seq}'} (compteur), {'{type}'}.</p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="ticket-number-seed">Valeur initiale du compteur</Label>
+                          <Input
+                            id="ticket-number-seed"
+                            type="number"
+                            min={1}
+                            value={ticketAdminSettings.numberSeed}
+                            onChange={(event) =>
+                              setTicketAdminSettings((prev) => ({
+                                ...prev,
+                                numberSeed: Math.max(1, Number(event.target.value || 1)),
+                              }))
+                            }
+                            disabled={ticketAdminSettingsLoading || ticketAdminSettingsSaving}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="ticket-notification-emails">Emails de notification création/fermeture</Label>
+                        <Input
+                          id="ticket-notification-emails"
+                          value={ticketAdminEmailsInput}
+                          onChange={(event) => setTicketAdminEmailsInput(event.target.value)}
+                          placeholder="ange.bata@siliconeconnect.com, supervision@siliconeconnect.com"
+                          disabled={ticketAdminSettingsLoading || ticketAdminSettingsSaving}
+                        />
+                        <p className="text-xs text-muted-foreground">Séparez plusieurs adresses par une virgule.</p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="ticket-default-sla">SLA par défaut (heures)</Label>
+                        <Input
+                          id="ticket-default-sla"
+                          type="number"
+                          min={1}
+                          value={ticketAdminSettings.defaultSlaHours}
+                          onChange={(event) =>
+                            setTicketAdminSettings((prev) => ({
+                              ...prev,
+                              defaultSlaHours: Math.max(1, Number(event.target.value || 1)),
+                            }))
+                          }
+                          disabled={ticketAdminSettingsLoading || ticketAdminSettingsSaving}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="ticket-trash-retention-days">Durée de garde en corbeille (jours)</Label>
+                        <Input
+                          id="ticket-trash-retention-days"
+                          type="number"
+                          min={1}
+                          max={365}
+                          value={ticketAdminSettings.trashRetentionDays}
+                          onChange={(event) =>
+                            setTicketAdminSettings((prev) => ({
+                              ...prev,
+                              trashRetentionDays: Math.min(365, Math.max(1, Number(event.target.value || 1))),
+                            }))
+                          }
+                          disabled={ticketAdminSettingsLoading || ticketAdminSettingsSaving}
+                        />
+                        <p className="text-xs text-muted-foreground">Après cette durée, le ticket est supprimé automatiquement par le système.</p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>SLA par catégorie (heures)</Label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                          {TICKET_ADMIN_CATEGORY_KEYS.map((categoryKey) => {
+                            const categoryLabels: Record<string, string> = {
+                              deployment: 'Déploiement',
+                              supervision: 'Supervision',
+                              ravitaillement: 'Ravitaillement',
+                              routine_visit: 'Visite de routine',
+                              security: 'Sécurité',
+                              maintenance: 'Maintenance',
+                              incident: 'Incident',
+                              survey: 'Survey',
+                            };
+                            return (
+                              <div key={categoryKey} className="space-y-1">
+                                <Label htmlFor={`sla-${categoryKey}`} className="text-xs text-muted-foreground">{categoryLabels[categoryKey]}</Label>
+                                <Input
+                                  id={`sla-${categoryKey}`}
+                                  type="number"
+                                  min={1}
+                                  value={ticketAdminSettings.slaByCategory[categoryKey] ?? ticketAdminSettings.defaultSlaHours}
+                                  onChange={(event) =>
+                                    setTicketAdminSettings((prev) => ({
+                                      ...prev,
+                                      slaByCategory: {
+                                        ...prev.slaByCategory,
+                                        [categoryKey]: Math.max(1, Number(event.target.value || 1)),
+                                      },
+                                    }))
+                                  }
+                                  disabled={ticketAdminSettingsLoading || ticketAdminSettingsSaving}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <Button
+                          variant="outline"
+                          onClick={() => void loadTicketAdminSettings()}
+                          disabled={ticketAdminSettingsLoading || ticketAdminSettingsSaving}
+                        >
+                          <RefreshCw className={`w-4 h-4 mr-2 ${ticketAdminSettingsLoading ? 'animate-spin' : ''}`} />
+                          Recharger
+                        </Button>
+                        <Button
+                          onClick={() => void saveTicketAdminSettings()}
+                          disabled={ticketAdminSettingsLoading || ticketAdminSettingsSaving}
+                        >
+                          {ticketAdminSettingsSaving ? 'Enregistrement...' : 'Enregistrer les paramètres tickets'}
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
                   
                   <Card>
                     <CardHeader className="pb-2 pt-4">
@@ -13693,7 +15522,7 @@ export default function NOCActivityApp() {
                 {user?.avatar ? (
                   <AvatarImage src={user.avatar} alt={user.name} />
                 ) : null}
-                <AvatarFallback className="bg-gradient-to-br from-blue-500 to-cyan-500 text-white text-2xl">
+                <AvatarFallback className="bg-linear-to-br from-blue-500 to-cyan-500 text-white text-2xl">
                   {user?.name?.charAt(0) || 'U'}
                 </AvatarFallback>
               </Avatar>
@@ -13833,7 +15662,7 @@ export default function NOCActivityApp() {
                   type="password"
                   value={editPassword}
                   onChange={(e) => setEditPassword(e.target.value)}
-                  placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
+                  placeholder="••••••••"
                 />
                 {editPassword && (
                   <div className="text-xs space-y-1 mt-2">
@@ -13891,7 +15720,7 @@ export default function NOCActivityApp() {
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
+                  placeholder="••••••••"
                 />
                 {confirmPassword && editPassword !== confirmPassword && (
                   <p className="text-xs text-red-500">Les mots de passe ne correspondent pas</p>
@@ -14384,7 +16213,7 @@ export default function NOCActivityApp() {
 
                 <div className="bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 p-3 rounded-lg">
                   <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                    âš ï¸ La suppression est définitive. Toutes les données associées seront perdues.
+                    ⚠️ La suppression est définitive. Toutes les données associées seront perdues.
                   </p>
                 </div>
               </div>

@@ -94,6 +94,8 @@ export async function POST(request: NextRequest) {
       dueDate
     } = body;
 
+    const DEFAULT_DUE_DAYS = 3;
+
     if (!reporterId || !objet) {
       return NextResponse.json(
         { success: false, error: 'Reporter et objet requis' },
@@ -156,7 +158,9 @@ export async function POST(request: NextRequest) {
         assigneeId: assignee?.id || null,
         assigneeName: assignee?.name || null,
         tags: tags ? JSON.stringify(tags) : null,
-        dueDate: dueDate ? new Date(dueDate) : null
+        dueDate: dueDate
+          ? new Date(dueDate)
+          : new Date(Date.now() + DEFAULT_DUE_DAYS * 24 * 60 * 60 * 1000)
       },
       include: {
         reporter: {

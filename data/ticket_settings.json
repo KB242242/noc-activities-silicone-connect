@@ -1,0 +1,19 @@
+{
+  "numberFormat": "#SC{date}-{seq}",
+  "numberSeed": 100000000,
+  "notificationEmails": [
+    "ange.bata@siliconeconnect.com"
+  ],
+  "defaultSlaHours": 24,
+  "trashRetentionDays": 30,
+  "slaByCategory": {
+    "deployment": 24,
+    "supervision": 8,
+    "ravitaillement": 24,
+    "routine_visit": 48,
+    "security": 4,
+    "maintenance": 12,
+    "incident": 4,
+    "survey": 72
+  }
+}
