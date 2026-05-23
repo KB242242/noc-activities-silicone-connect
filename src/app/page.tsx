@@ -101,6 +101,7 @@ import {
   sortTasksByPriority,
 } from '@/features/app-shell/task-utils';
 import {
+  buildMonthlyPlanning,
   getAgentRestInfo,
   getIndividualRestAgent,
   getShiftScheduleForDate,
@@ -4316,37 +4317,7 @@ export default function NOCActivityApp() {
   }, [currentMonth]);
 
   // Planning generation
-  const planning = useCallback(() => {
-    const monthStart = startOfMonth(currentMonth);
-    const monthEnd = endOfMonth(monthStart);
-    const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
-    
-    return days.map(d => {
-      const shifts = Object.keys(SHIFTS_DATA).map(shiftName => {
-        const shiftData = SHIFTS_DATA[shiftName];
-        const schedule = getShiftScheduleForDate(shiftName, d);
-        const restInfo = getIndividualRestAgent(shiftName, d);
-        
-        const agents = shiftData.members.map(memberName => {
-          const isResting = restInfo?.agentName === memberName;
-          let responsibility: ResponsibilityType | undefined;
-          
-          if (schedule.isWorking && !isResting) {
-            const activeAgents = shiftData.members.filter(m => m !== restInfo?.agentName);
-            const activeIdx = activeAgents.indexOf(memberName);
-            const responsibilities: ResponsibilityType[] = ['CALL_CENTER', 'MONITORING', 'REPORTING_1', 'REPORTING_2'];
-            responsibility = responsibilities[activeIdx] || undefined;
-          }
-          
-          return { name: memberName, isResting, responsibility };
-        });
-        
-        return { shiftName, ...shiftData, schedule, agents, restInfo };
-      });
-      
-      return { date: d, shifts };
-    });
-  }, [currentMonth])();
+  const planning = useMemo(() => buildMonthlyPlanning(currentMonth), [currentMonth]);
 
   // Search filter
   const filteredTasks = tasks.filter(t => 

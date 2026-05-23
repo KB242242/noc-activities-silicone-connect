@@ -1,7 +1,7 @@
-import { addDays } from 'date-fns';
+import { addDays, eachDayOfInterval, endOfMonth, startOfMonth } from 'date-fns';
 
 import { CYCLE_TOTAL_DAYS, SHIFT_CYCLE_START, SHIFTS_DATA } from '@/features/app-shell/shifts';
-import type { DayType } from '@/features/app-shell/types';
+import type { DayType, ResponsibilityType } from '@/features/app-shell/types';
 
 type ShiftSchedule = {
   dayType: DayType;
@@ -109,4 +109,36 @@ export function getAgentRestInfo(agentName: string, shiftName: string, targetDat
     nextIndividualRest,
     nextCollectiveRestStart,
   };
+}
+
+export function buildMonthlyPlanning(currentMonth: Date) {
+  const monthStart = startOfMonth(currentMonth);
+  const monthEnd = endOfMonth(monthStart);
+  const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
+
+  return days.map((targetDate) => {
+    const shifts = Object.keys(SHIFTS_DATA).map((shiftName) => {
+      const shiftData = SHIFTS_DATA[shiftName];
+      const schedule = getShiftScheduleForDate(shiftName, targetDate);
+      const restInfo = getIndividualRestAgent(shiftName, targetDate);
+
+      const agents = shiftData.members.map((memberName) => {
+        const isResting = restInfo?.agentName === memberName;
+        let responsibility: ResponsibilityType | undefined;
+
+        if (schedule.isWorking && !isResting) {
+          const activeAgents = shiftData.members.filter((member) => member !== restInfo?.agentName);
+          const activeIdx = activeAgents.indexOf(memberName);
+          const responsibilities: ResponsibilityType[] = ['CALL_CENTER', 'MONITORING', 'REPORTING_1', 'REPORTING_2'];
+          responsibility = responsibilities[activeIdx] || undefined;
+        }
+
+        return { name: memberName, isResting, responsibility };
+      });
+
+      return { shiftName, ...shiftData, schedule, agents, restInfo };
+    });
+
+    return { date: targetDate, shifts };
+  });
 }
