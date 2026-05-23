@@ -196,6 +196,15 @@ import {
   updateTicketLocalityRequest,
 } from '@/features/app-shell/ticket-locality-api';
 import {
+  deleteTicketRequest,
+  restoreTicketRequest,
+} from '@/features/app-shell/ticket-api';
+import {
+  applyOptimisticDelete,
+  applyOptimisticRestore,
+  resolveTicketRetentionDays,
+} from '@/features/app-shell/ticket-actions';
+import {
   CreateTicketDialog,
   TicketArchiveDashboard,
 } from '@/features/app-shell/lazy-components';
@@ -2486,35 +2495,19 @@ export default function NOCActivityApp() {
     setTicketActionBusy(actionKey, true);
     setShowTrashContextMenu(false);
     setTrashContextTicket(null);
-    setTickets((prev) => {
-      if (permanent) {
-        return prev.filter((entry) => entry.id !== ticket.id);
-      }
-      return prev.map((entry) => (
-        entry.id === ticket.id
-          ? {
-              ...entry,
-              isDeleted: true,
-              deletedAt: new Date(),
-              deletedBy: user?.id ?? entry.deletedBy,
-            }
-          : entry
-      ));
-    });
+    setTickets((prev) => applyOptimisticDelete(prev, ticket, permanent, user?.id));
 
     try {
-      const response = await fetch(`/api/tickets/${ticket.id}`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ permanent, deletedBy: user?.id, deletedByName: user?.name }),
+      const payload = await deleteTicketRequest({
+        ticketId: ticket.id,
+        permanent,
+        deletedBy: user?.id,
+        deletedByName: user?.name,
       });
-
-      if (!response.ok) {
-        throw new Error('delete_failed');
-      }
-
-      const payload = await response.json().catch(() => ({}));
-      const retentionDays = Number(payload?.retentionDays ?? ticketAdminSettings.trashRetentionDays ?? 30);
+      const retentionDays = resolveTicketRetentionDays(
+        payload,
+        ticketAdminSettings.trashRetentionDays ?? 30
+      );
 
       void loadTicketsModuleData();
       if (selectedTicket?.id === ticket.id) {
@@ -2552,27 +2545,14 @@ export default function NOCActivityApp() {
     setTicketActionBusy(actionKey, true);
     setShowTrashContextMenu(false);
     setTrashContextTicket(null);
-    setTickets((prev) => prev.map((entry) => (
-      entry.id === ticket.id
-        ? {
-            ...entry,
-            isDeleted: false,
-            deletedAt: undefined,
-            deletedBy: undefined,
-          }
-        : entry
-    )));
+    setTickets((prev) => applyOptimisticRestore(prev, ticket));
 
     try {
-      const response = await fetch(`/api/tickets/${ticket.id}/restore`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ restoredBy: user?.id, restoredByName: user?.name }),
+      await restoreTicketRequest({
+        ticketId: ticket.id,
+        restoredBy: user?.id,
+        restoredByName: user?.name,
       });
-
-      if (!response.ok) {
-        throw new Error('restore_failed');
-      }
 
       void loadTicketsModuleData();
       toast.success('Ticket restauré depuis la corbeille');
