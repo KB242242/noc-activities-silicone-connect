@@ -157,6 +157,7 @@ import {
   getIncomingCallRequest,
   getIncomingCallResponse,
 } from '@/features/app-shell/chat-call-signals';
+import { resetConversationUnreadCount } from '@/features/app-shell/chat-conversations';
 import {
   markAllNotificationsAsRead,
   markNotificationAsRead,
@@ -3117,7 +3118,7 @@ export default function NOCActivityApp() {
       const isSameConversation = selectedConversationRef.current?.id === conversation.id;
 
       setConversations((prev) =>
-        prev.map((item) => (item.id === conversation.id ? { ...item, unreadCount: 0 } : item))
+        resetConversationUnreadCount(prev, conversation.id)
       );
       setNotifications((prev) =>
         markNotificationsReadForConversation(prev, conversation.id)
@@ -3948,11 +3949,7 @@ export default function NOCActivityApp() {
       if (targetConversation) {
         setSelectedConversation(targetConversation);
         setConversations((prev) =>
-          prev.map((conversation) =>
-            conversation.id === notification.conversationId
-              ? { ...conversation, unreadCount: 0 }
-              : conversation
-          )
+          resetConversationUnreadCount(prev, notification.conversationId)
         );
       }
 
@@ -8897,9 +8894,9 @@ export default function NOCActivityApp() {
                                     onClick={async () => {
                                       if (existingConv) {
                                         setSelectedConversation(existingConv);
-                                        setConversations(prev => prev.map(c => 
-                                          c.id === existingConv.id ? {...c, unreadCount: 0} : c
-                                        ));
+                                        setConversations((prev) =>
+                                          resetConversationUnreadCount(prev, existingConv.id)
+                                        );
                                       } else {
                                         const createdConversation = await createConversationInDb({
                                           type: 'individual',
