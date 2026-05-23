@@ -157,7 +157,13 @@ import {
   getIncomingCallRequest,
   getIncomingCallResponse,
 } from '@/features/app-shell/chat-call-signals';
-import { parseStoredNotifications } from '@/features/app-shell/chat-notifications';
+import {
+  markAllNotificationsAsRead,
+  markNotificationAsRead,
+  parseStoredNotifications,
+  prependNotification,
+  prependNotificationIfMissingMessage,
+} from '@/features/app-shell/chat-notifications';
 import {
   CreateTicketDialog,
   TicketArchiveDashboard,
@@ -1227,7 +1233,7 @@ export default function NOCActivityApp() {
         createdAt: new Date(),
         conversationId,
       };
-      setNotifications((prev) => [notif, ...prev]);
+      setNotifications((prev) => prependNotification(prev, notif));
     },
     []
   );
@@ -1249,18 +1255,7 @@ export default function NOCActivityApp() {
       };
 
       setNotifications((prev) => {
-        if (options?.messageId) {
-          const alreadyExists = prev.some(
-            (notification) =>
-              notification.messageId === options.messageId &&
-              notification.conversationId === options.conversationId
-          );
-          if (alreadyExists) {
-            return prev;
-          }
-        }
-
-        return [notif, ...prev];
+        return prependNotificationIfMissingMessage(prev, notif, options);
       });
     },
     []
@@ -3125,9 +3120,7 @@ export default function NOCActivityApp() {
         prev.map((item) => (item.id === conversation.id ? { ...item, unreadCount: 0 } : item))
       );
       setNotifications((prev) =>
-        prev.map((notification) =>
-          notification.conversationId === conversation.id ? { ...notification, read: true } : notification
-        )
+        markNotificationsReadForConversation(prev, conversation.id)
       );
 
       if (isSameConversation) return;
@@ -3942,7 +3935,7 @@ export default function NOCActivityApp() {
   };
 
   const markNotificationRead = (id: string) => {
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+    setNotifications((prev) => markNotificationAsRead(prev, id));
   };
 
   const handleNotificationClick = async (notification: NotificationItem) => {
@@ -3981,7 +3974,7 @@ export default function NOCActivityApp() {
 
   useEffect(() => {
     if (!notificationsOpen) return;
-    setNotifications((prev) => prev.map((notification) => ({ ...notification, read: true })));
+    setNotifications((prev) => markAllNotificationsAsRead(prev));
   }, [notificationsOpen]);
 
   // ============================================
