@@ -172,6 +172,7 @@ import {
   buildInitialActivities,
   buildInitialTasks,
 } from '@/features/app-shell/demo-seed';
+import { readBootstrapLocalData } from '@/features/app-shell/storage-bootstrap';
 import {
   CreateTicketDialog,
   TicketArchiveDashboard,
@@ -2055,44 +2056,30 @@ export default function NOCActivityApp() {
   // Charger les utilisateurs, logs et tickets depuis localStorage
   useEffect(() => {
     const loadData = () => {
-      const storedUsers = localStorage.getItem('noc_all_users');
-      if (storedUsers) {
-        try {
-          const parsed = JSON.parse(storedUsers);
-          if (parsed.length > 0) {
-            setAllUsers(parsed);
-          }
-        } catch { /* ignore */ }
-      } else {
-        // Initialiser avec les utilisateurs de démo
-        const initialUsers = Object.values(DEMO_USERS);
-        setAllUsers(initialUsers);
-        localStorage.setItem('noc_all_users', JSON.stringify(initialUsers));
-      }
-      
-      const storedLogs = localStorage.getItem('noc_audit_logs');
-      if (storedLogs) {
-        try {
-          const parsed = JSON.parse(storedLogs);
-          if (parsed.length > 0) {
-            setAuditLogs(parsed);
-          }
-        } catch { /* ignore */ }
+      const bootstrapData = readBootstrapLocalData({
+        storage: localStorage,
+        defaultSectionAccess: DEFAULT_SECTION_ACCESS,
+        demoUsers: Object.values(DEMO_USERS),
+      });
+
+      if (bootstrapData.allUsers) {
+        setAllUsers(bootstrapData.allUsers);
       }
 
-      const storedSectionAccess = localStorage.getItem('noc_section_access');
-      if (storedSectionAccess) {
-        try {
-          const parsed = JSON.parse(storedSectionAccess);
-          setSectionAccess({ ...DEFAULT_SECTION_ACCESS, ...(parsed || {}) });
-        } catch {
-          setSectionAccess({ ...DEFAULT_SECTION_ACCESS });
-        }
+      if (bootstrapData.usersToPersist) {
+        localStorage.setItem('noc_all_users', JSON.stringify(bootstrapData.usersToPersist));
       }
 
-      const storedAnnouncementAvatar = localStorage.getItem('noc_announcements_avatar');
-      if (storedAnnouncementAvatar) {
-        setAnnouncementAvatar(storedAnnouncementAvatar);
+      if (bootstrapData.auditLogs) {
+        setAuditLogs(bootstrapData.auditLogs);
+      }
+
+      if (bootstrapData.sectionAccess) {
+        setSectionAccess(bootstrapData.sectionAccess);
+      }
+
+      if (bootstrapData.announcementAvatar) {
+        setAnnouncementAvatar(bootstrapData.announcementAvatar);
       }
 
     };
