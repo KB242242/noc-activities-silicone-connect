@@ -144,6 +144,11 @@ import {
   updateConversationsWithIncomingMessage,
 } from '@/features/app-shell/chat-stream-updates';
 import {
+  applyIncomingTypingSignal,
+  cleanupStaleTypingIndicators,
+  getIncomingTypingSignal,
+} from '@/features/app-shell/chat-typing';
+import {
   CreateTicketDialog,
   TicketArchiveDashboard,
 } from '@/features/app-shell/lazy-components';
@@ -1857,39 +1862,10 @@ export default function NOCActivityApp() {
     }
 
     const applyTypingSignal = (signal: any) => {
-      if (!signal || signal.signalType !== 'typing') return;
-      if (signal.fromUserId === user.id) return;
+      const incomingSignal = getIncomingTypingSignal(signal, user.id);
+      if (!incomingSignal) return;
 
-      const targets = Array.isArray(signal.toUserIds)
-        ? signal.toUserIds.filter((id: unknown) => typeof id === 'string')
-        : [];
-      if (!targets.includes(user.id)) return;
-
-      const conversationId = String(signal.conversationId || '');
-      const senderId = String(signal.fromUserId || '');
-      const senderName = String(signal.fromUserName || 'Utilisateur');
-      const nextTyping = Boolean(signal.isTyping);
-      const nextRecording = Boolean(signal.isRecording);
-
-      setTypingIndicators((prev) => {
-        const filtered = prev.filter(
-          (item) => !(item.conversationId === conversationId && item.userId === senderId)
-        );
-
-        if (!nextTyping) return filtered;
-
-        return [
-          ...filtered,
-          {
-            conversationId,
-            userId: senderId,
-            userName: senderName,
-            isTyping: true,
-            isRecording: nextRecording,
-            timestamp: new Date(),
-          },
-        ];
-      });
+      setTypingIndicators((prev) => applyIncomingTypingSignal(prev, incomingSignal));
     };
 
     const onStorage = (event: StorageEvent) => {
@@ -1916,9 +1892,7 @@ export default function NOCActivityApp() {
 
     const staleCleanup = setInterval(() => {
       const now = Date.now();
-      setTypingIndicators((prev) =>
-        prev.filter((item) => now - new Date(item.timestamp).getTime() < 4500)
-      );
+      setTypingIndicators((prev) => cleanupStaleTypingIndicators(prev, now));
     }, 1500);
 
     window.addEventListener('storage', onStorage);
