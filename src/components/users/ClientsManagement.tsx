@@ -237,8 +237,7 @@ export default function ClientsManagement({ userRole }: ClientsManagementProps) 
     }
   };
 
-  // Client Form Component
-  const ClientForm = () => (
+  const clientFormContent = (
     <div className="space-y-4">
       {/* Basic Info */}
       <div className="grid grid-cols-2 gap-4">
@@ -578,7 +577,7 @@ export default function ClientsManagement({ userRole }: ClientsManagementProps) 
             <DialogTitle>Nouveau Client</DialogTitle>
             <DialogDescription>Créez un nouveau client Silicone Connect</DialogDescription>
           </DialogHeader>
-          <ClientForm />
+          {clientFormContent}
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>Annuler</Button>
             <Button onClick={handleCreate}>Créer le client</Button>
@@ -593,7 +592,7 @@ export default function ClientsManagement({ userRole }: ClientsManagementProps) 
             <DialogTitle>Modifier le Client</DialogTitle>
             <DialogDescription>Modifiez les informations du client</DialogDescription>
           </DialogHeader>
-          <ClientForm />
+          {clientFormContent}
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditDialogOpen(false)}>Annuler</Button>
             <Button onClick={handleUpdate}>Enregistrer</Button>

@@ -200,8 +200,7 @@ export default function AgentsManagement({ userRole }: AgentsManagementProps) {
     setEditDialogOpen(true);
   };
 
-  // Agent Form Component
-  const AgentForm = () => (
+  const agentFormContent = (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
@@ -490,7 +489,7 @@ export default function AgentsManagement({ userRole }: AgentsManagementProps) {
             <DialogTitle>Nouvel Agent</DialogTitle>
             <DialogDescription>Ajoutez un nouvel agent ou utilisateur</DialogDescription>
           </DialogHeader>
-          <AgentForm />
+          {agentFormContent}
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>Annuler</Button>
             <Button onClick={handleCreate}>Créer l'agent</Button>
@@ -505,7 +504,7 @@ export default function AgentsManagement({ userRole }: AgentsManagementProps) {
             <DialogTitle>Modifier l'Agent</DialogTitle>
             <DialogDescription>Modifiez les informations de l'agent</DialogDescription>
           </DialogHeader>
-          <AgentForm />
+          {agentFormContent}
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditDialogOpen(false)}>Annuler</Button>
             <Button onClick={handleUpdate}>Enregistrer</Button>

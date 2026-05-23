@@ -131,6 +131,49 @@ function sanitizeItem(raw: Partial<GenericItem>, idx: number): GenericItem {
   };
 }
 
+function readStoredItems(sectionKey: string): GenericItem[] {
+  if (typeof window === 'undefined') return [];
+
+  try {
+    const raw = localStorage.getItem(storageKey(sectionKey));
+    if (!raw) return [];
+
+    const parsed = JSON.parse(raw) as Partial<GenericItem>[];
+    if (!Array.isArray(parsed)) return [];
+
+    const sanitized = parsed.map((item, idx) => sanitizeItem(item, idx));
+    const seen = new Set<string>();
+
+    return [...sanitized].reverse().filter((item) => {
+      if (seen.has(item.id)) return false;
+      seen.add(item.id);
+      return true;
+    }).reverse();
+  } catch {
+    return [];
+  }
+}
+
+function getDefaultDialogLayout() {
+  if (typeof window === 'undefined') {
+    return {
+      pos: { x: 12, y: 12 },
+      size: { width: 960, height: 700 },
+    };
+  }
+
+  const width = Math.min(window.innerWidth - 24, 960);
+  const height = Math.min(window.innerHeight - 24, 700);
+
+  return {
+    size: { width, height },
+    pos: {
+      x: Math.max(12, Math.round((window.innerWidth - width) / 2)),
+      y: Math.max(12, Math.round((window.innerHeight - height) / 2)),
+    },
+  };
+}
+
 /** Returns a professional subtitle for the dialog form based on section type. */
 function formSubtitle(kind: SectionKind, editingId: string | null): string {
   const action = editingId ? 'Modification' : 'Enregistrement';
@@ -143,23 +186,15 @@ function formSubtitle(kind: SectionKind, editingId: string | null): string {
   return `${action} d'un élément de suivi — statut, priorité et responsable.`;
 }
 
-/** Hook providing drag state and style for a Dialog. Position resets on each open. */
-function useDraggableDialog(isOpen: boolean) {
-  const [pos, setPos] = useState({ x: 0, y: 0 });
-  const [size, setSize] = useState({ width: 960, height: 700 });
+/** Hook providing drag state and style for a Dialog. */
+function useDraggableDialog() {
+  const [layout, setLayout] = useState(() => getDefaultDialogLayout());
   const drag = useRef({ active: false, startX: 0, startY: 0, originX: 0, originY: 0 });
+  const { pos, size } = layout;
 
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const width = Math.min(window.innerWidth - 24, 960);
-    const height = Math.min(window.innerHeight - 24, 700);
-    setSize({ width, height });
-    setPos({
-      x: Math.max(12, Math.round((window.innerWidth - width) / 2)),
-      y: Math.max(12, Math.round((window.innerHeight - height) / 2)),
-    });
-  }, [isOpen]);
+  const resetDialog = () => {
+    setLayout(getDefaultDialogLayout());
+  };
 
   const onHandleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -171,10 +206,13 @@ function useDraggableDialog(isOpen: boolean) {
       const maxY = Math.max(12, window.innerHeight - 80);
       const nextX = drag.current.originX + ev.clientX - drag.current.startX;
       const nextY = drag.current.originY + ev.clientY - drag.current.startY;
-      setPos({
-        x: Math.min(maxX, Math.max(12, nextX)),
-        y: Math.min(maxY, Math.max(12, nextY)),
-      });
+      setLayout((currentLayout) => ({
+        ...currentLayout,
+        pos: {
+          x: Math.min(maxX, Math.max(12, nextX)),
+          y: Math.min(maxY, Math.max(12, nextY)),
+        },
+      }));
     };
     const onUp = () => {
       drag.current.active = false;
@@ -197,13 +235,13 @@ function useDraggableDialog(isOpen: boolean) {
     overflow: 'auto',
   };
 
-  return { style, onHandleMouseDown };
+  return { style, onHandleMouseDown, resetDialog };
 }
 
 export function NocGenericSectionPanel({ sectionKey, title, subtitle }: Props) {
   const sectionKind = resolveSectionKind(sectionKey);
 
-  const [items, setItems] = useState<GenericItem[]>([]);
+  const [items, setItems] = useState<GenericItem[]>(() => readStoredItems(sectionKey));
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('table');
@@ -212,29 +250,7 @@ export function NocGenericSectionPanel({ sectionKey, title, subtitle }: Props) {
   const [priorityFilter, setPriorityFilter] = useState<'ALL' | ItemPriority>('ALL');
   const [form, setForm] = useState({ ...defaultItem });
 
-  const { style: dialogStyle, onHandleMouseDown } = useDraggableDialog(showForm);
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(storageKey(sectionKey));
-      if (raw) {
-        const parsed = JSON.parse(raw) as Partial<GenericItem>[];
-        if (Array.isArray(parsed)) {
-          const sanitized = parsed.map((item, idx) => sanitizeItem(item, idx));
-          // Deduplicate by id keeping last occurrence
-          const seen = new Set<string>();
-          const unique = [...sanitized].reverse().filter((item) => {
-            if (seen.has(item.id)) return false;
-            seen.add(item.id);
-            return true;
-          }).reverse();
-          setItems(unique);
-        }
-      }
-    } catch {
-      setItems([]);
-    }
-  }, [sectionKey]);
+  const { style: dialogStyle, onHandleMouseDown, resetDialog } = useDraggableDialog();
 
   useEffect(() => {
     localStorage.setItem(storageKey(sectionKey), JSON.stringify(items));
@@ -256,6 +272,7 @@ export function NocGenericSectionPanel({ sectionKey, title, subtitle }: Props) {
   const beginCreate = () => {
     setEditingId(null);
     setForm({ ...defaultItem });
+    resetDialog();
     setShowForm(true);
   };
 
@@ -285,6 +302,7 @@ export function NocGenericSectionPanel({ sectionKey, title, subtitle }: Props) {
       priority: safe.priority,
       notes: safe.notes,
     });
+    resetDialog();
     setShowForm(true);
   };
 

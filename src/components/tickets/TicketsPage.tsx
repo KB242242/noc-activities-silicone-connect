@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   LayoutDashboard, Plus, Ticket, BarChart3, Users, ChevronDown,
   ChevronRight, Trash2, Menu, X, Moon, Sun, Settings,
@@ -45,36 +45,37 @@ export default function TicketsPage({ user, initialSearch = '', initialTab = 'li
   const isSuperAdmin = user.email === SUPER_ADMIN_EMAIL || user.role === 'SUPER_ADMIN';
 
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
+  const changeTab = useCallback((nextTab: Tab) => {
+    setTab(nextTab);
+    setSidebarOpen(false);
+  }, []);
 
   const handleViewTicket = useCallback((ticket: NocTicket) => {
     setSelectedTicket(ticket);
-    setTab('list');
-  }, []);
+    changeTab('list');
+  }, [changeTab]);
 
   const handleEditTicket = useCallback((ticket: NocTicket) => {
     setEditingTicket(ticket);
-    setTab('new');
-  }, []);
+    changeTab('new');
+  }, [changeTab]);
 
   const handleFormClose = useCallback(() => {
     setEditingTicket(null);
-    setTab('list');
+    changeTab('list');
     refresh();
-  }, [refresh]);
+  }, [changeTab, refresh]);
 
   const handleDetailClose = useCallback(() => {
     setSelectedTicket(null);
     refresh();
   }, [refresh]);
 
-  // Close sidebar on route change
-  useEffect(() => { setSidebarOpen(false); }, [tab]);
-
   const navBtn = (current: Tab, icon: React.ReactNode, label: string) => (
     <Button
       variant={tab === current ? 'secondary' : 'ghost'}
       className={`w-full justify-start gap-3 h-10 ${tab === current ? 'bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/25' : ''}`}
-      onClick={() => { setTab(current); setSelectedTicket(null); setEditingTicket(null); }}
+      onClick={() => { changeTab(current); setSelectedTicket(null); setEditingTicket(null); }}
     >
       {icon}
       {label}
@@ -212,7 +213,7 @@ export default function TicketsPage({ user, initialSearch = '', initialTab = 'li
               refreshKey={refreshKey}
               onView={handleViewTicket}
               onEdit={handleEditTicket}
-              onNew={() => { setEditingTicket(null); setTab('new'); }}
+              onNew={() => { setEditingTicket(null); changeTab('new'); }}
               onRefresh={refresh}
               isTrash={false}
             />

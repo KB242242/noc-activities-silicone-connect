@@ -263,10 +263,16 @@ export function RichTextEditor({
     underline: false,
   });
   const [isFocused, setIsFocused] = useState(false);
-  const [selectedImage, setSelectedImage] = useState<HTMLElement | null>(null);
+  const selectedImageRef = useRef<HTMLElement | null>(null);
+  const [hasSelectedImage, setHasSelectedImage] = useState(false);
   const [isCropMode, setIsCropMode] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [expandedImageSrc, setExpandedImageSrc] = useState<string | null>(null);
+
+  const setSelectedImage = useCallback((image: HTMLElement | null) => {
+    selectedImageRef.current = image;
+    setHasSelectedImage(Boolean(image));
+  }, []);
 
   const readImageAsDataUrl = useCallback((file: File) => new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -854,28 +860,28 @@ export function RichTextEditor({
   }, [handleInput, insertImageBlockAtCaret, optimizeImageDataUrl, restoreSelection, uploadEditorFile, uploadEditorImage]);
 
   const resizeSelectedImage = useCallback(() => {
-    if (!selectedImage || !selectedImage.isConnected) return;
-    const currentWidth = Math.round(selectedImage.getBoundingClientRect().width || selectedImage.clientWidth || 420);
+    const imageWrapper = selectedImageRef.current;
+    if (!imageWrapper || !imageWrapper.isConnected) return;
+    const currentWidth = Math.round(imageWrapper.getBoundingClientRect().width || imageWrapper.clientWidth || 420);
     const widthInput = prompt("Largeur de l'image en px (ex: 420)", String(currentWidth));
     if (!widthInput) return;
     const nextWidth = Number(widthInput);
     if (!Number.isFinite(nextWidth) || nextWidth < 40) return;
 
-    selectedImage.style.width = `${Math.round(nextWidth)}px`;
-    selectedImage.style.maxWidth = '100%';
-    selectedImage.style.height = 'auto';
-    selectedImage.style.display = 'inline-block';
-    selectedImage.style.position = 'relative';
-    selectedImage.style.overflow = 'visible';
+    imageWrapper.style.width = `${Math.round(nextWidth)}px`;
+    imageWrapper.style.maxWidth = '100%';
+    imageWrapper.style.height = 'auto';
+    imageWrapper.style.display = 'inline-block';
+    imageWrapper.style.position = 'relative';
+    imageWrapper.style.overflow = 'visible';
     editorRef.current?.focus();
-    placeCaretAfter(selectedImage);
+    placeCaretAfter(imageWrapper);
     handleInput();
-  }, [handleInput, placeCaretAfter, selectedImage]);
+  }, [handleInput, placeCaretAfter]);
 
   const cropSelectedImage = useCallback(() => {
-    if (!selectedImage || !selectedImage.isConnected) return;
-
-    const wrapper = selectedImage;
+    const wrapper = selectedImageRef.current;
+    if (!wrapper || !wrapper.isConnected) return;
     const img = wrapper.querySelector('img') as HTMLImageElement | null;
     if (!img) return;
 
@@ -910,11 +916,11 @@ export function RichTextEditor({
     editorRef.current?.focus();
     placeCaretAfter(wrapper);
     handleInput();
-  }, [handleInput, placeCaretAfter, selectedImage]);
+  }, [handleInput, placeCaretAfter]);
 
   const resetSelectedImageCrop = useCallback(() => {
-    if (!selectedImage || !selectedImage.isConnected) return;
-    const wrapper = selectedImage;
+    const wrapper = selectedImageRef.current;
+    if (!wrapper || !wrapper.isConnected) return;
     const img = wrapper.querySelector('img') as HTMLImageElement | null;
     if (!img) return;
 
@@ -931,52 +937,55 @@ export function RichTextEditor({
     editorRef.current?.focus();
     placeCaretAfter(wrapper);
     handleInput();
-  }, [handleInput, placeCaretAfter, selectedImage]);
+  }, [handleInput, placeCaretAfter]);
 
   const centerSelectedImage = useCallback(() => {
-    if (!selectedImage || !selectedImage.isConnected) {
+    const imageWrapper = selectedImageRef.current;
+    if (!imageWrapper || !imageWrapper.isConnected) {
       execCommand('justifyCenter');
       return;
     }
-    selectedImage.style.display = 'inline-block';
-    selectedImage.style.margin = '8px auto';
-    selectedImage.style.float = 'none';
-    selectedImage.style.position = 'relative';
-    selectedImage.style.overflow = 'visible';
+    imageWrapper.style.display = 'inline-block';
+    imageWrapper.style.margin = '8px auto';
+    imageWrapper.style.float = 'none';
+    imageWrapper.style.position = 'relative';
+    imageWrapper.style.overflow = 'visible';
     editorRef.current?.focus();
-    placeCaretAfter(selectedImage);
+    placeCaretAfter(imageWrapper);
     handleInput();
-  }, [execCommand, handleInput, placeCaretAfter, selectedImage]);
+  }, [execCommand, handleInput, placeCaretAfter]);
 
   const alignImageRight = useCallback(() => {
-    if (!selectedImage || !selectedImage.isConnected) {
+    const imageWrapper = selectedImageRef.current;
+    if (!imageWrapper || !imageWrapper.isConnected) {
       execCommand('justifyRight');
       return;
     }
-    selectedImage.style.display = 'inline-block';
-    selectedImage.style.margin = '8px 0 8px auto';
-    selectedImage.style.float = 'none';
-    selectedImage.style.position = 'relative';
-    selectedImage.style.overflow = 'visible';
+    imageWrapper.style.display = 'inline-block';
+    imageWrapper.style.margin = '8px 0 8px auto';
+    imageWrapper.style.float = 'none';
+    imageWrapper.style.position = 'relative';
+    imageWrapper.style.overflow = 'visible';
     editorRef.current?.focus();
-    placeCaretAfter(selectedImage);
+    placeCaretAfter(imageWrapper);
     handleInput();
-  }, [execCommand, handleInput, placeCaretAfter, selectedImage]);
+  }, [execCommand, handleInput, placeCaretAfter]);
 
   const alignImageLeft = useCallback(() => {
-    if (!selectedImage || !selectedImage.isConnected) {
+    const imageWrapper = selectedImageRef.current;
+    if (!imageWrapper || !imageWrapper.isConnected) {
       execCommand('justifyLeft');
       return;
     }
-    selectedImage.style.display = 'inline-block';
-    selectedImage.style.margin = '8px 0';
-    selectedImage.style.float = 'none';
-    selectedImage.style.position = 'relative';
-    selectedImage.style.overflow = 'visible';
+    imageWrapper.style.display = 'inline-block';
+    imageWrapper.style.margin = '8px 0';
+    imageWrapper.style.float = 'none';
+    imageWrapper.style.position = 'relative';
+    imageWrapper.style.overflow = 'visible';
     editorRef.current?.focus();
-    placeCaretAfter(selectedImage);
+    placeCaretAfter(imageWrapper);
     handleInput();
-  }, [execCommand, handleInput, placeCaretAfter, selectedImage]);
+  }, [execCommand, handleInput, placeCaretAfter]);
 
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
     e.preventDefault();
@@ -1011,7 +1020,7 @@ export function RichTextEditor({
       setSelectedImage(null);
       setIsCropMode(false);
     }
-  }, []);
+  }, [setSelectedImage]);
 
   const startMoveDrag = useCallback((wrapper: HTMLElement, event: React.MouseEvent) => {
     event.preventDefault();
@@ -1563,21 +1572,22 @@ export function RichTextEditor({
   }, [handleInput, selectImageWrapper]);
 
   const deleteSelectedImage = useCallback(() => {
-    if (!selectedImage || !selectedImage.isConnected) return false;
-    const parent = selectedImage.parentNode instanceof HTMLElement ? selectedImage.parentNode : null;
+    const imageWrapper = selectedImageRef.current;
+    if (!imageWrapper || !imageWrapper.isConnected) return false;
+    const parent = imageWrapper.parentNode instanceof HTMLElement ? imageWrapper.parentNode : null;
     if (!parent) return false;
 
     deletedImageSnapshotRef.current = {
-      html: selectedImage.outerHTML,
+      html: imageWrapper.outerHTML,
       parent,
-      nextSibling: selectedImage.nextSibling,
+      nextSibling: imageWrapper.nextSibling,
     };
 
-    selectedImage.remove();
+    imageWrapper.remove();
     setSelectedImage(null);
     handleInput();
     return true;
-  }, [handleInput, selectedImage]);
+  }, [handleInput, setSelectedImage]);
 
   const handleEditorKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
@@ -1588,11 +1598,11 @@ export function RichTextEditor({
     }
 
     if (e.key !== 'Backspace' && e.key !== 'Delete') return;
-    if (!selectedImage) return;
+    if (!selectedImageRef.current) return;
 
     e.preventDefault();
     deleteSelectedImage();
-  }, [deleteSelectedImage, restoreDeletedImage, selectedImage]);
+  }, [deleteSelectedImage, restoreDeletedImage]);
 
   useEffect(() => {
     const onGlobalKeyDown = (event: KeyboardEvent) => {
@@ -1616,7 +1626,7 @@ export function RichTextEditor({
       }
 
       if (event.key !== 'Backspace' && event.key !== 'Delete') return;
-      if (!selectedImage || !selectedImage.isConnected) return;
+      if (!selectedImageRef.current || !selectedImageRef.current.isConnected) return;
 
       event.preventDefault();
       deleteSelectedImage();
@@ -1626,7 +1636,7 @@ export function RichTextEditor({
     return () => {
       window.removeEventListener('keydown', onGlobalKeyDown, { capture: true });
     };
-  }, [deleteSelectedImage, restoreDeletedImage, selectedImage, expandedImageSrc]);
+  }, [deleteSelectedImage, restoreDeletedImage, expandedImageSrc]);
 
   const handleEditorDoubleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement;
@@ -1687,13 +1697,13 @@ export function RichTextEditor({
 
         <Separator orientation="vertical" className="h-6 mx-1" />
 
-        <Toggle size="sm" onPressedChange={() => (selectedImage ? alignImageLeft() : execCommand('justifyLeft'))} onMouseDown={keepSelectionMouseDown} className="h-8 w-8">
+        <Toggle size="sm" onPressedChange={() => (hasSelectedImage ? alignImageLeft() : execCommand('justifyLeft'))} onMouseDown={keepSelectionMouseDown} className="h-8 w-8">
           <AlignLeft className="w-4 h-4" />
         </Toggle>
-        <Toggle size="sm" onPressedChange={() => (selectedImage ? centerSelectedImage() : execCommand('justifyCenter'))} onMouseDown={keepSelectionMouseDown} className="h-8 w-8">
+        <Toggle size="sm" onPressedChange={() => (hasSelectedImage ? centerSelectedImage() : execCommand('justifyCenter'))} onMouseDown={keepSelectionMouseDown} className="h-8 w-8">
           <AlignCenter className="w-4 h-4" />
         </Toggle>
-        <Toggle size="sm" onPressedChange={() => (selectedImage ? alignImageRight() : execCommand('justifyRight'))} onMouseDown={keepSelectionMouseDown} className="h-8 w-8">
+        <Toggle size="sm" onPressedChange={() => (hasSelectedImage ? alignImageRight() : execCommand('justifyRight'))} onMouseDown={keepSelectionMouseDown} className="h-8 w-8">
           <AlignRight className="w-4 h-4" />
         </Toggle>
 

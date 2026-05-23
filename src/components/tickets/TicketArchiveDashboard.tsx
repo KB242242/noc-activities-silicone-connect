@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Archive, Ticket, Eye, Folder, List, LayoutGrid, ArrowLeft, FolderOpen } from 'lucide-react';
 import { format, getDate, getMonth } from 'date-fns';
 
@@ -87,7 +87,26 @@ export default function TicketArchiveDashboard({
   const [technicianFilter, setTechnicianFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [priorityFilter, setPriorityFilter] = useState('all');
-  const [navigationPath, setNavigationPath] = useState<string[]>([]);
+  const navigationFilterKey = useMemo(
+    () => [archiveYearFilter, searchQuery, siteFilter, localityFilter, technicianFilter, statusFilter, priorityFilter].join('|'),
+    [archiveYearFilter, searchQuery, siteFilter, localityFilter, technicianFilter, statusFilter, priorityFilter]
+  );
+  const [navigationState, setNavigationState] = useState<{ filterKey: string; path: string[] }>({
+    filterKey: '',
+    path: [],
+  });
+  const navigationPath = navigationState.filterKey === navigationFilterKey ? navigationState.path : [];
+
+  const setNavigationPath = (nextPath: string[] | ((currentPath: string[]) => string[])) => {
+    setNavigationState((currentState) => {
+      const currentPath = currentState.filterKey === navigationFilterKey ? currentState.path : [];
+
+      return {
+        filterKey: navigationFilterKey,
+        path: typeof nextPath === 'function' ? nextPath(currentPath) : nextPath,
+      };
+    });
+  };
 
   // Filtrer les tickets
   const filteredBuckets = useMemo(() => {
@@ -108,10 +127,6 @@ export default function TicketArchiveDashboard({
   }, [archiveYearBuckets, searchQuery, siteFilter, localityFilter, technicianFilter, statusFilter, priorityFilter]);
 
   const visibleYearBuckets = useMemo(() => filteredBuckets.filter((bucket) => bucket.items.length > 0), [filteredBuckets]);
-
-  useEffect(() => {
-    setNavigationPath([]);
-  }, [archiveYearFilter, searchQuery, siteFilter, localityFilter, technicianFilter, statusFilter, priorityFilter]);
 
   // Obtenir les données du niveau actuel (années, mois, jours, tickets)
   const getCurrentLevelData = useMemo(() => {
@@ -204,11 +219,11 @@ export default function TicketArchiveDashboard({
   }, [navigationPath, visibleYearBuckets]);
 
   const openFolder = (folderId: string) => {
-    setNavigationPath([...navigationPath, folderId]);
+    setNavigationPath((currentPath) => [...currentPath, folderId]);
   };
 
   const goBack = () => {
-    setNavigationPath(navigationPath.slice(0, -1));
+    setNavigationPath((currentPath) => currentPath.slice(0, -1));
   };
 
   const renderTicketRow = (ticket: ArchiveDashboardTicket) => {
