@@ -165,6 +165,7 @@ import {
   prependNotification,
   prependNotificationIfMissingMessage,
 } from '@/features/app-shell/chat-notifications';
+import { parseStoredUser } from '@/features/app-shell/user-storage';
 import {
   CreateTicketDialog,
   TicketArchiveDashboard,
@@ -2022,13 +2023,13 @@ export default function NOCActivityApp() {
       initializedRef.current = true;
       const storedUser = localStorage.getItem('noc_user');
       if (storedUser) {
-        try {
-          const parsed = JSON.parse(storedUser);
+        const parsedUser = parseStoredUser(storedUser);
+        if (parsedUser) {
           void Promise.resolve().then(() => {
-            setUser(parsed);
+            setUser(parsedUser);
             setIsAuthenticated(true);
           });
-        } catch { /* ignore */ }
+        }
       }
     }
   }, []);
