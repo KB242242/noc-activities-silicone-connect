@@ -168,6 +168,11 @@ import {
 import { parseStoredUser } from '@/features/app-shell/user-storage';
 import { getStoredRecentEmojis, mergeRecentEmojis } from '@/features/app-shell/chat-emojis';
 import {
+  buildDefaultNotifications,
+  buildInitialActivities,
+  buildInitialTasks,
+} from '@/features/app-shell/demo-seed';
+import {
   CreateTicketDialog,
   TicketArchiveDashboard,
 } from '@/features/app-shell/lazy-components';
@@ -2027,85 +2032,10 @@ export default function NOCActivityApp() {
   useEffect(() => {
     if (isAuthenticated && tasks.length === 0 && notificationsHydrated) {
       const timer = setTimeout(() => {
-        setTasks([
-          {
-            id: 't1',
-            userId: 'agent-a1',
-            userName: 'Alaine',
-            title: 'Vérifier alarmes Zabbix',
-            description: 'Monitoring alerts',
-            status: 'in_progress',
-            category: 'surveillance',
-            priority: 'medium',
-            startTime: new Date(),
-            estimatedEndTime: new Date(Date.now() + 60 * 60 * 1000),
-            estimatedDuration: 60,
-            comments: [],
-            alerts: [],
-            history: [],
-            tags: [],
-            isOverdue: false,
-            isNotified: false,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          },
-          {
-            id: 't2',
-            userId: 'agent-a1',
-            userName: 'Alaine',
-            title: 'Envoyer graphes 09h',
-            description: 'Graphes trafic',
-            status: 'completed',
-            category: 'administrative',
-            priority: 'low',
-            startTime: new Date(Date.now() - 90 * 60 * 1000),
-            estimatedEndTime: new Date(Date.now() - 30 * 60 * 1000),
-            estimatedDuration: 60,
-            actualEndTime: new Date(),
-            actualDuration: 60,
-            comments: [],
-            alerts: [],
-            history: [],
-            tags: [],
-            isOverdue: false,
-            isNotified: true,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-            completedAt: new Date(),
-          },
-          {
-            id: 't3',
-            userId: 'agent-c2',
-            userName: 'Lapreuve',
-            title: 'Appel client ACME',
-            description: 'Suivi incident',
-            status: 'pending',
-            category: 'incident',
-            priority: 'high',
-            startTime: new Date(),
-            estimatedEndTime: new Date(Date.now() + 45 * 60 * 1000),
-            estimatedDuration: 45,
-            comments: [],
-            alerts: [],
-            history: [],
-            tags: [],
-            isOverdue: false,
-            isNotified: false,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          },
-        ]);
-        setActivities([
-          { id: 'a1', userId: 'agent-c2', userName: 'Lapreuve', type: 'CLIENT_DOWN', category: 'Monitoring', description: 'Client ACME - Connexion perdue', createdAt: new Date(Date.now() - 3600000) },
-          { id: 'a2', userId: 'agent-b1', userName: 'Sahra', type: 'TICKET_CREATED', category: 'Call Center', description: 'Ticket #1234 créé', createdAt: new Date(Date.now() - 7200000) },
-          { id: 'a3', userId: 'agent-c1', userName: 'Audrey', type: 'GRAPH_SENT', category: 'Reporting 1', description: 'Graphes 09h envoyés', createdAt: new Date(Date.now() - 10800000) },
-        ]);
+        setTasks(buildInitialTasks());
+        setActivities(buildInitialActivities());
         if (notifications.length === 0) {
-          setNotifications([
-            { id: '1', message: 'Incident critique détecté', type: 'warning', read: false, createdAt: new Date() },
-            { id: '2', message: 'Nouveau ticket assigné', type: 'info', read: false, createdAt: new Date() },
-            { id: '3', message: 'Handover validé', type: 'success', read: true, createdAt: new Date() },
-          ]);
+          setNotifications(buildDefaultNotifications());
         }
       }, 0);
       return () => clearTimeout(timer);

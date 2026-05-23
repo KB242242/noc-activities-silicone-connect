@@ -1,0 +1,130 @@
+import type { ActivityLog, NotificationItem, Task } from '@/features/app-shell/types';
+
+export function buildInitialTasks(nowMs = Date.now()): Task[] {
+  return [
+    {
+      id: 't1',
+      userId: 'agent-a1',
+      userName: 'Alaine',
+      title: 'Vérifier alarmes Zabbix',
+      description: 'Monitoring alerts',
+      status: 'in_progress',
+      category: 'surveillance',
+      priority: 'medium',
+      startTime: new Date(nowMs),
+      estimatedEndTime: new Date(nowMs + 60 * 60 * 1000),
+      estimatedDuration: 60,
+      comments: [],
+      alerts: [],
+      history: [],
+      tags: [],
+      isOverdue: false,
+      isNotified: false,
+      createdAt: new Date(nowMs),
+      updatedAt: new Date(nowMs),
+    },
+    {
+      id: 't2',
+      userId: 'agent-a1',
+      userName: 'Alaine',
+      title: 'Envoyer graphes 09h',
+      description: 'Graphes trafic',
+      status: 'completed',
+      category: 'administrative',
+      priority: 'low',
+      startTime: new Date(nowMs - 90 * 60 * 1000),
+      estimatedEndTime: new Date(nowMs - 30 * 60 * 1000),
+      estimatedDuration: 60,
+      actualEndTime: new Date(nowMs),
+      actualDuration: 60,
+      comments: [],
+      alerts: [],
+      history: [],
+      tags: [],
+      isOverdue: false,
+      isNotified: true,
+      createdAt: new Date(nowMs),
+      updatedAt: new Date(nowMs),
+      completedAt: new Date(nowMs),
+    },
+    {
+      id: 't3',
+      userId: 'agent-c2',
+      userName: 'Lapreuve',
+      title: 'Appel client ACME',
+      description: 'Suivi incident',
+      status: 'pending',
+      category: 'incident',
+      priority: 'high',
+      startTime: new Date(nowMs),
+      estimatedEndTime: new Date(nowMs + 45 * 60 * 1000),
+      estimatedDuration: 45,
+      comments: [],
+      alerts: [],
+      history: [],
+      tags: [],
+      isOverdue: false,
+      isNotified: false,
+      createdAt: new Date(nowMs),
+      updatedAt: new Date(nowMs),
+    },
+  ];
+}
+
+export function buildInitialActivities(nowMs = Date.now()): ActivityLog[] {
+  return [
+    {
+      id: 'a1',
+      userId: 'agent-c2',
+      userName: 'Lapreuve',
+      type: 'CLIENT_DOWN',
+      category: 'Monitoring',
+      description: 'Client ACME - Connexion perdue',
+      createdAt: new Date(nowMs - 3600000),
+    },
+    {
+      id: 'a2',
+      userId: 'agent-b1',
+      userName: 'Sahra',
+      type: 'TICKET_CREATED',
+      category: 'Call Center',
+      description: 'Ticket #1234 créé',
+      createdAt: new Date(nowMs - 7200000),
+    },
+    {
+      id: 'a3',
+      userId: 'agent-c1',
+      userName: 'Audrey',
+      type: 'GRAPH_SENT',
+      category: 'Reporting 1',
+      description: 'Graphes 09h envoyés',
+      createdAt: new Date(nowMs - 10800000),
+    },
+  ];
+}
+
+export function buildDefaultNotifications(nowMs = Date.now()): NotificationItem[] {
+  return [
+    {
+      id: '1',
+      message: 'Incident critique détecté',
+      type: 'warning',
+      read: false,
+      createdAt: new Date(nowMs),
+    },
+    {
+      id: '2',
+      message: 'Nouveau ticket assigné',
+      type: 'info',
+      read: false,
+      createdAt: new Date(nowMs),
+    },
+    {
+      id: '3',
+      message: 'Handover validé',
+      type: 'success',
+      read: true,
+      createdAt: new Date(nowMs),
+    },
+  ];
+}
