@@ -299,7 +299,6 @@ export function TicketsSection({ user, usersDirectory }: TicketsSectionProps) {
       x: clamp(Math.round((window.innerWidth - w) / 2), vp, maxW),
       y: clamp(Math.round((window.innerHeight - h) / 2), vp, maxH),
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [createOpen]);
 
   useEffect(() => {

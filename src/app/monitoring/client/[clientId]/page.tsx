@@ -1114,13 +1114,11 @@ export default function MonitoringClientDetailPage() {
     void loadTrafficData();
     const interval = setInterval(() => void loadTrafficData(), 30_000);
     return () => clearInterval(interval);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client?.zabbix_hostid, analysisPeriod, rangeStart, rangeEnd]);
 
   useEffect(() => {
     if (!client?.client_ref) return;
     void loadClientInterventions();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client?.client_ref]);
 
   useEffect(() => {
@@ -1132,7 +1130,6 @@ export default function MonitoringClientDetailPage() {
     void loadConnectivity();
     const interval = setInterval(() => void loadConnectivity(), 8_000);
     return () => clearInterval(interval);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [continuousPingEnabled, client?.ip_client]);
 
   const chartSeries = useMemo(() => {

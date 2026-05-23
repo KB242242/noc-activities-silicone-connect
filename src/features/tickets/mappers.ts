@@ -69,7 +69,6 @@ export function mapLegacyTicketCategoryToApiType(category?: TicketCategory): str
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function mapApiTicketToLegacy(ticket: any): TicketItem {
   const technicianNames = Array.isArray(ticket.technicians)
     ? ticket.technicians.map((t: { name?: string }) => t.name).filter(Boolean)
