@@ -1,5 +1,15 @@
 {
   "npm.packageManager": "npm",
+  "editor.largeFileOptimizations": true,
+  "files.maxMemoryForLargeFilesMB": 4096,
+  "typescript.tsserver.maxTsServerMemory": 4096,
+  "typescript.disableAutomaticTypeAcquisition": true,
+  "typescript.tsserver.experimental.enableProjectDiagnostics": false,
+  "typescript.tsserver.watchOptions": {
+    "watchFile": "useFsEventsOnParentDirectory",
+    "watchDirectory": "useFsEvents",
+    "fallbackPolling": "dynamicPriority"
+  },
   "files.watcherExclude": {
     "**/.git/**": true,
     "**/.next/**": true,
