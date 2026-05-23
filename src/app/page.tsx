@@ -132,6 +132,12 @@ import {
   mapFetchedConversation,
 } from '@/features/app-shell/chat-conversation-mappers';
 import {
+  applyProfileUpdateToChatMessages,
+  applyProfileUpdateToConversations,
+  applyProfileUpdateToUsers,
+  getProfileUpdateFromPayload,
+} from '@/features/app-shell/chat-realtime';
+import {
   CreateTicketDialog,
   TicketArchiveDashboard,
 } from '@/features/app-shell/lazy-components';
@@ -752,60 +758,19 @@ export default function NOCActivityApp() {
         const payload = JSON.parse(event.data || '{}');
         if (!payload?.type) return;
 
-        if (payload.type === 'profile-updated' && payload.user?.id) {
-          const updatedUserId = String(payload.user.id);
-          const updatedAvatar =
-            typeof payload.user.avatar === 'string' && payload.user.avatar.trim().length > 0
-              ? payload.user.avatar
-              : undefined;
-          const updatedName =
-            typeof payload.user.name === 'string' && payload.user.name.trim().length > 0
-              ? payload.user.name
-              : undefined;
-
+        const profileUpdate = getProfileUpdateFromPayload(payload);
+        if (profileUpdate) {
           setAllUsers((prev) => {
-            const exists = prev.some((entry) => entry.id === updatedUserId);
-            if (!exists) return prev;
-
-            const updated = prev.map((entry) =>
-              entry.id === updatedUserId
-                ? {
-                    ...entry,
-                    ...(updatedAvatar !== undefined ? { avatar: updatedAvatar } : {}),
-                    ...(updatedName ? { name: updatedName } : {}),
-                  }
-                : entry
-            );
-            localStorage.setItem('noc_all_users', JSON.stringify(updated));
-            return updated;
+            const { nextUsers, changed } = applyProfileUpdateToUsers(prev, profileUpdate);
+            if (changed) {
+              localStorage.setItem('noc_all_users', JSON.stringify(nextUsers));
+            }
+            return changed ? nextUsers : prev;
           });
 
-          setConversations((prev) =>
-            prev.map((conversation) => ({
-              ...conversation,
-              participants: conversation.participants.map((participant) =>
-                participant.id === updatedUserId
-                  ? {
-                      ...participant,
-                      ...(updatedAvatar !== undefined ? { avatar: updatedAvatar } : {}),
-                      ...(updatedName ? { name: updatedName } : {}),
-                    }
-                  : participant
-              ),
-            }))
-          );
+          setConversations((prev) => applyProfileUpdateToConversations(prev, profileUpdate));
 
-          setChatMessages((prev) =>
-            prev.map((message) =>
-              message.senderId === updatedUserId
-                ? {
-                    ...message,
-                    ...(updatedAvatar !== undefined ? { senderAvatar: updatedAvatar } : {}),
-                    ...(updatedName ? { senderName: updatedName } : {}),
-                  }
-                : message
-            )
-          );
+          setChatMessages((prev) => applyProfileUpdateToChatMessages(prev, profileUpdate));
 
           return;
         }
