@@ -149,6 +149,10 @@ import {
   getIncomingTypingSignal,
 } from '@/features/app-shell/chat-typing';
 import {
+  cleanupStaleLiveReactions,
+  getIncomingReactionSignal,
+} from '@/features/app-shell/chat-reactions';
+import {
   CreateTicketDialog,
   TicketArchiveDashboard,
 } from '@/features/app-shell/lazy-components';
@@ -1918,24 +1922,10 @@ export default function NOCActivityApp() {
     }
 
     const applyReactionSignal = (signal: any) => {
-      if (!signal || signal.signalType !== 'live_reaction') return;
-      if (signal.fromUserId === user.id) return;
+      const incomingSignal = getIncomingReactionSignal(signal, user.id);
+      if (!incomingSignal) return;
 
-      const targets = Array.isArray(signal.toUserIds)
-        ? signal.toUserIds.filter((id: unknown) => typeof id === 'string')
-        : [];
-      if (!targets.includes(user.id)) return;
-
-      const emoji = String(signal.emoji || '').trim();
-      if (!emoji) return;
-
-      pushLiveReaction({
-        emoji,
-        conversationId: String(signal.conversationId || ''),
-        callId: signal.callId ? String(signal.callId) : undefined,
-        userId: String(signal.fromUserId || ''),
-        userName: String(signal.fromUserName || 'Utilisateur'),
-      });
+      pushLiveReaction(incomingSignal);
     };
 
     const onStorage = (event: StorageEvent) => {
@@ -1962,9 +1952,7 @@ export default function NOCActivityApp() {
 
     const staleCleanup = setInterval(() => {
       const now = Date.now();
-      setLiveReactions((prev) =>
-        prev.filter((item) => now - new Date(item.createdAt).getTime() < 8000)
-      );
+      setLiveReactions((prev) => cleanupStaleLiveReactions(prev, now));
     }, 1000);
 
     window.addEventListener('storage', onStorage);
