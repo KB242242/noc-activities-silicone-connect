@@ -195,3 +195,84 @@ export function parseManagedLocalitiesPayload(localitiesData: unknown): {
 
   return { managedEntries, localities: Array.from(localitySet) };
 }
+
+export function buildManagedLocalityDraftFromSelection(
+  locality: TicketManagedLocality | undefined,
+  defaultDraft: TicketLocalityDraft
+): { managedLocalityName: string; managedLocalityDraft: TicketLocalityDraft } {
+  if (!locality) {
+    return {
+      managedLocalityName: '',
+      managedLocalityDraft: defaultDraft,
+    };
+  }
+
+  return {
+    managedLocalityName: locality.name,
+    managedLocalityDraft: {
+      countryCode: locality.countryCode ?? defaultDraft.countryCode,
+      countryName: locality.countryName ?? defaultDraft.countryName,
+      departement: locality.departement ?? '',
+      city: locality.city ?? '',
+      arrondissement: locality.arrondissement ?? '',
+      quartier: locality.quartier ?? '',
+      address: locality.address ?? '',
+      reference: locality.reference ?? '',
+      freeText: locality.name,
+    },
+  };
+}
+
+export function applyManagedLocalityUpdate(
+  managedLocalities: TicketManagedLocality[],
+  selectedManagedLocalityId: string,
+  updated: any,
+  managedLocalityDraft: TicketLocalityDraft,
+  managedLocalityName: string
+): { nextManagedLocalities: TicketManagedLocality[]; updatedName: string } {
+  const updatedName = normalizeTicketLocality(String(updated?.name ?? managedLocalityName));
+
+  const nextManagedLocalities = managedLocalities
+    .map((entry) =>
+      entry.id === selectedManagedLocalityId
+        ? {
+            ...entry,
+            name: updatedName,
+            countryCode: String(updated?.countryCode ?? managedLocalityDraft.countryCode ?? ''),
+            countryName: String(updated?.countryName ?? managedLocalityDraft.countryName ?? ''),
+            departement: normalizeTicketLocality(
+              String(updated?.departement ?? managedLocalityDraft.departement ?? '')
+            ),
+            city: normalizeTicketLocality(String(updated?.city ?? managedLocalityDraft.city ?? '')),
+            arrondissement: normalizeTicketLocality(
+              String(updated?.arrondissement ?? managedLocalityDraft.arrondissement ?? '')
+            ),
+            quartier: normalizeTicketLocality(
+              String(updated?.quartier ?? managedLocalityDraft.quartier ?? '')
+            ),
+            address: String(updated?.address ?? managedLocalityDraft.address ?? ''),
+            reference: String(updated?.reference ?? managedLocalityDraft.reference ?? ''),
+          }
+        : entry
+    )
+    .sort((left, right) => left.name.localeCompare(right.name, 'fr'));
+
+  return { nextManagedLocalities, updatedName };
+}
+
+export function removeManagedLocalityById(
+  managedLocalities: TicketManagedLocality[],
+  selectedManagedLocalityId: string
+): TicketManagedLocality[] {
+  return managedLocalities.filter((entry) => entry.id !== selectedManagedLocalityId);
+}
+
+export function removeLocalityOptionByName(
+  ticketLocalityOptions: string[],
+  managedLocalityName: string
+): string[] {
+  const normalizedName = normalizeTicketLocality(managedLocalityName);
+  return ticketLocalityOptions.filter(
+    (entry) => normalizeTicketLocality(entry) !== normalizedName
+  );
+}

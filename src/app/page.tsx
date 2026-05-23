@@ -179,10 +179,14 @@ import {
   parseNotificationEmailsInput,
 } from '@/features/app-shell/ticket-admin-settings';
 import {
+  applyManagedLocalityUpdate,
+  buildManagedLocalityDraftFromSelection,
   normalizeTicketLocality,
   parseManagedLocalitiesPayload,
   parseTicketSitePayload,
   prepareCreateLocality,
+  removeLocalityOptionByName,
+  removeManagedLocalityById,
   resolveCreatedLocalityName,
   splitTicketValues,
 } from '@/features/app-shell/ticket-locality-utils';
@@ -2286,24 +2290,9 @@ export default function NOCActivityApp() {
   const handleSelectManagedLocality = useCallback((id: string) => {
     setSelectedManagedLocalityId(id);
     const locality = managedLocalities.find((item) => item.id === id);
-    if (!locality) {
-      setManagedLocalityName('');
-      setManagedLocalityDraft(DEFAULT_TICKET_LOCALITY_DRAFT);
-      return;
-    }
-
-    setManagedLocalityName(locality.name);
-    setManagedLocalityDraft({
-      countryCode: locality.countryCode ?? DEFAULT_TICKET_LOCALITY_DRAFT.countryCode,
-      countryName: locality.countryName ?? DEFAULT_TICKET_LOCALITY_DRAFT.countryName,
-      departement: locality.departement ?? '',
-      city: locality.city ?? '',
-      arrondissement: locality.arrondissement ?? '',
-      quartier: locality.quartier ?? '',
-      address: locality.address ?? '',
-      reference: locality.reference ?? '',
-      freeText: locality.name,
-    });
+    const selection = buildManagedLocalityDraftFromSelection(locality, DEFAULT_TICKET_LOCALITY_DRAFT);
+    setManagedLocalityName(selection.managedLocalityName);
+    setManagedLocalityDraft(selection.managedLocalityDraft);
   }, [managedLocalities]);
 
   const handleUpdateManagedLocality = useCallback(async () => {
@@ -2332,28 +2321,18 @@ export default function NOCActivityApp() {
         address: managedLocalityDraft.address,
         reference: managedLocalityDraft.reference,
       });
-      const updatedName = normalizeTicketLocality(String(updated?.name ?? managedLocalityName));
-
-      setManagedLocalities((prev) => prev
-        .map((entry) => entry.id === selectedManagedLocalityId
-          ? {
-              ...entry,
-              name: updatedName,
-              countryCode: String(updated?.countryCode ?? managedLocalityDraft.countryCode ?? ''),
-              countryName: String(updated?.countryName ?? managedLocalityDraft.countryName ?? ''),
-              departement: normalizeTicketLocality(String(updated?.departement ?? managedLocalityDraft.departement ?? '')),
-              city: normalizeTicketLocality(String(updated?.city ?? managedLocalityDraft.city ?? '')),
-              arrondissement: normalizeTicketLocality(String(updated?.arrondissement ?? managedLocalityDraft.arrondissement ?? '')),
-              quartier: normalizeTicketLocality(String(updated?.quartier ?? managedLocalityDraft.quartier ?? '')),
-              address: String(updated?.address ?? managedLocalityDraft.address ?? ''),
-              reference: String(updated?.reference ?? managedLocalityDraft.reference ?? ''),
-            }
-          : entry)
-        .sort((left, right) => left.name.localeCompare(right.name, 'fr'))
+      const managedUpdate = applyManagedLocalityUpdate(
+        managedLocalities,
+        selectedManagedLocalityId,
+        updated,
+        managedLocalityDraft,
+        managedLocalityName
       );
 
-      upsertLocalityOption(updatedName);
-      setManagedLocalityName(updatedName);
+      setManagedLocalities(managedUpdate.nextManagedLocalities);
+
+      upsertLocalityOption(managedUpdate.updatedName);
+      setManagedLocalityName(managedUpdate.updatedName);
 
       toast.success('Localité mise à jour');
     } catch (error) {
@@ -2362,7 +2341,7 @@ export default function NOCActivityApp() {
     } finally {
       setIsUpdatingLocality(false);
     }
-  }, [managedLocalityDraft, managedLocalityName, selectedManagedLocalityId, upsertLocalityOption]);
+  }, [managedLocalities, managedLocalityDraft, managedLocalityName, selectedManagedLocalityId, upsertLocalityOption]);
 
   const handleDeleteManagedLocality = useCallback(async () => {
     if (!selectedManagedLocalityId) {
@@ -2382,8 +2361,8 @@ export default function NOCActivityApp() {
       setSelectedManagedLocalityId('');
       setManagedLocalityName('');
       setManagedLocalityDraft(DEFAULT_TICKET_LOCALITY_DRAFT);
-      setManagedLocalities((prev) => prev.filter((entry) => entry.id !== selectedManagedLocalityId));
-      setTicketLocalityOptions((prev) => prev.filter((entry) => normalizeTicketLocality(entry) !== normalizeTicketLocality(managedLocalityName)));
+      setManagedLocalities((prev) => removeManagedLocalityById(prev, selectedManagedLocalityId));
+      setTicketLocalityOptions((prev) => removeLocalityOptionByName(prev, managedLocalityName));
       toast.success('Localité supprimée');
     } catch (error) {
       console.error('[tickets page] delete locality', error);
