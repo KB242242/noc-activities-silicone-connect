@@ -186,6 +186,11 @@ import {
   splitTicketValues,
 } from '@/features/app-shell/ticket-locality-utils';
 import {
+  createTicketLocalityRequest,
+  deleteTicketLocalityRequest,
+  updateTicketLocalityRequest,
+} from '@/features/app-shell/ticket-locality-api';
+import {
   CreateTicketDialog,
   TicketArchiveDashboard,
 } from '@/features/app-shell/lazy-components';
@@ -2226,18 +2231,7 @@ export default function NOCActivityApp() {
 
     setIsCreatingLocality(true);
     try {
-      const response = await fetch('/api/tickets/localities', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(prepared.requestBody),
-      });
-
-      if (!response.ok) {
-        const errorPayload = await response.json().catch(() => ({}));
-        throw new Error(String(errorPayload?.error ?? 'locality_create_failed'));
-      }
-
-      const created = await response.json();
+      const created = await createTicketLocalityRequest(prepared.requestBody);
       const localityName = resolveCreatedLocalityName(created, prepared.fallbackName);
       if (!localityName) {
         throw new Error('locality_name_empty');
@@ -2325,29 +2319,18 @@ export default function NOCActivityApp() {
 
     setIsUpdatingLocality(true);
     try {
-      const response = await fetch('/api/tickets/localities', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: selectedManagedLocalityId,
-          name: normalizedName,
-          countryCode: managedLocalityDraft.countryCode,
-          countryName: managedLocalityDraft.countryName,
-          departement: managedLocalityDraft.departement,
-          city: managedLocalityDraft.city,
-          arrondissement: managedLocalityDraft.arrondissement,
-          quartier: managedLocalityDraft.quartier,
-          address: managedLocalityDraft.address,
-          reference: managedLocalityDraft.reference,
-        }),
+      const updated = await updateTicketLocalityRequest({
+        id: selectedManagedLocalityId,
+        name: normalizedName,
+        countryCode: managedLocalityDraft.countryCode,
+        countryName: managedLocalityDraft.countryName,
+        departement: managedLocalityDraft.departement,
+        city: managedLocalityDraft.city,
+        arrondissement: managedLocalityDraft.arrondissement,
+        quartier: managedLocalityDraft.quartier,
+        address: managedLocalityDraft.address,
+        reference: managedLocalityDraft.reference,
       });
-
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(String(payload?.error ?? 'update_locality_failed'));
-      }
-
-      const updated = await response.json().catch(() => ({}));
       const updatedName = normalizeTicketLocality(String(updated?.name ?? managedLocalityName));
 
       setManagedLocalities((prev) => prev
@@ -2393,16 +2376,7 @@ export default function NOCActivityApp() {
 
     setIsDeletingLocality(true);
     try {
-      const response = await fetch('/api/tickets/localities', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: selectedManagedLocalityId }),
-      });
-
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(String(payload?.error ?? 'delete_locality_failed'));
-      }
+      await deleteTicketLocalityRequest(selectedManagedLocalityId);
 
       setSelectedManagedLocalityId('');
       setManagedLocalityName('');
