@@ -110,3 +110,30 @@ export async function deleteUserRequest(params: {
 
   return result;
 }
+
+export async function fetchUsersListRequest(): Promise<any[] | null> {
+  const response = await fetch('/api/users', { cache: 'no-store' });
+  if (!response.ok) {
+    return null;
+  }
+
+  const data = await response.json().catch(() => ({}));
+  if (!data?.success || !Array.isArray(data.users)) {
+    return null;
+  }
+
+  return data.users;
+}
+
+export async function updateOwnProfileRequest(params: {
+  userId: string;
+  actorId: string;
+  firstName?: string;
+  lastName?: string;
+  name?: string;
+  email?: string;
+  username?: string;
+  avatar?: string | null;
+}): Promise<any> {
+  return requestUsersApi('PATCH', params);
+}

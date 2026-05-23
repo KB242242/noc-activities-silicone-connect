@@ -207,14 +207,22 @@ import {
   updateTicketStatusRequest,
 } from '@/features/app-shell/ticket-api';
 import {
+  attemptLoginRequest,
+} from '@/features/app-shell/auth-api';
+import {
   changeOwnPasswordRequest,
   createUserRequest,
   deleteUserRequest,
+  fetchUsersListRequest,
   resetUserPasswordRequest,
   toggleUserBlockRequest,
+  updateOwnProfileRequest,
   updateUserRequest,
   updateUserRoleRequest,
 } from '@/features/app-shell/user-admin-api';
+import {
+  fetchAuditLogRequest,
+} from '@/features/app-shell/system-api';
 import {
   applyOptimisticDelete,
   applyOptimisticRestore,
@@ -2141,13 +2149,11 @@ export default function NOCActivityApp() {
 
     setIsUsersSyncing(true);
     try {
-      const response = await fetch('/api/users', { cache: 'no-store' });
-      if (!response.ok) return;
-      const data = await response.json();
-      if (!data?.success || !Array.isArray(data.users)) return;
+      const usersFromApi = await fetchUsersListRequest();
+      if (!usersFromApi) return;
 
-      setAllUsers(data.users);
-      localStorage.setItem('noc_all_users', JSON.stringify(data.users));
+      setAllUsers(usersFromApi);
+      localStorage.setItem('noc_all_users', JSON.stringify(usersFromApi));
     } catch {
       // fallback to current local cache
     } finally {
@@ -2997,17 +3003,13 @@ export default function NOCActivityApp() {
     };
 
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          login: loginIdentifier,
-          password,
-        }),
+      const loginResponse = await attemptLoginRequest({
+        login: loginIdentifier,
+        password,
       });
+      const result = loginResponse.result;
 
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok || !result?.success || !result?.user) {
+      if (!loginResponse.ok || !result?.success || !result?.user) {
         const apiError = typeof result?.error === 'string' ? result.error : undefined;
         handleFailedLogin(apiError);
         return;
@@ -3406,16 +3408,11 @@ export default function NOCActivityApp() {
     }) => {
       if (!user?.id) return null;
 
-      const response = await fetch('/api/users', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, actorId: user.id, ...payload }),
+      const result = await updateOwnProfileRequest({
+        userId: user.id,
+        actorId: user.id,
+        ...payload,
       });
-
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok || !result?.success || !result?.user) {
-        throw new Error(result?.error || 'Erreur lors de la mise à jour du profil');
-      }
 
       const updatedUser = { ...user, ...result.user };
       setUser(updatedUser);
@@ -4274,14 +4271,9 @@ export default function NOCActivityApp() {
   const refreshAuditLog = async () => {
     setAuditLogRefreshing(true);
     try {
-      const response = await fetch('/api/system?action=getAuditLog', {
-        method: 'GET',
-      });
-      if (response.ok) {
-        const result = await response.json();
-        setAuditLogs(result.logs || []);
-        toast.success('Journal d\'activité rafraîchi');
-      }
+      const logs = await fetchAuditLogRequest();
+      setAuditLogs(logs);
+      toast.success('Journal d\'activité rafraîchi');
     } catch (error) {
       toast.error('Erreur lors du rafraîchissement', {
         description: 'Impossible de récupérer le journal d\'activité'
