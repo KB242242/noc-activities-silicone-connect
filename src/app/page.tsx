@@ -166,6 +166,7 @@ import {
   prependNotificationIfMissingMessage,
 } from '@/features/app-shell/chat-notifications';
 import { parseStoredUser } from '@/features/app-shell/user-storage';
+import { getStoredRecentEmojis, mergeRecentEmojis } from '@/features/app-shell/chat-emojis';
 import {
   CreateTicketDialog,
   TicketArchiveDashboard,
@@ -919,18 +920,7 @@ export default function NOCActivityApp() {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showLiveReactionPicker, setShowLiveReactionPicker] = useState(false);
   const [showCallReactionPicker, setShowCallReactionPicker] = useState(false);
-  const [recentEmojis, setRecentEmojis] = useState<string[]>(() => {
-    if (typeof window === 'undefined') return [];
-    try {
-      const raw = localStorage.getItem('noc_recent_emojis');
-      const parsed = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed)
-        ? parsed.filter((item): item is string => typeof item === 'string').slice(0, 24)
-        : [];
-    } catch {
-      return [];
-    }
-  });
+  const [recentEmojis, setRecentEmojis] = useState<string[]>(() => getStoredRecentEmojis());
   const [isCompactEmojiLayout, setIsCompactEmojiLayout] = useState(false);
   const [liveReactions, setLiveReactions] = useState<LiveReaction[]>([]);
   
@@ -1393,7 +1383,7 @@ export default function NOCActivityApp() {
 
   const registerRecentEmoji = useCallback((emoji: string) => {
     setRecentEmojis((prev) => {
-      const next = [emoji, ...prev.filter((item) => item !== emoji)].slice(0, 24);
+      const next = mergeRecentEmojis(prev, emoji);
       if (typeof window !== 'undefined') {
         localStorage.setItem('noc_recent_emojis', JSON.stringify(next));
       }
