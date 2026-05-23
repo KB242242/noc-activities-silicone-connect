@@ -153,6 +153,11 @@ import {
   getIncomingReactionSignal,
 } from '@/features/app-shell/chat-reactions';
 import {
+  buildIncomingCallFromRequest,
+  getIncomingCallRequest,
+  getIncomingCallResponse,
+} from '@/features/app-shell/chat-call-signals';
+import {
   CreateTicketDialog,
   TicketArchiveDashboard,
 } from '@/features/app-shell/lazy-components';
@@ -1736,40 +1741,28 @@ export default function NOCActivityApp() {
     }
 
     const handleSignalEnvelope = (signal: any) => {
-      if (!signal || typeof signal !== 'object') return;
-
-      if (signal.signalType === 'call_request') {
-        const targets = Array.isArray(signal.toUserIds)
-          ? signal.toUserIds.filter((id: unknown) => typeof id === 'string')
-          : [];
-
-        if (!targets.includes(user.id)) return;
-        if (signal.fromUserId === user.id) return;
-
+      const incomingRequest = getIncomingCallRequest(signal, user.id);
+      if (incomingRequest) {
         if (activeCall || callDialogOpen || busyUsers[user.id]) {
           emitCallSignal({
             signalType: 'call_response',
-            callId: signal.callId,
+            callId: incomingRequest.callId,
             fromUserId: user.id,
             fromUserName: user.name,
-            toUserId: signal.fromUserId,
-            conversationId: signal.conversationId,
+            toUserId: incomingRequest.fromUserId,
+            conversationId: incomingRequest.conversationId,
             response: 'busy',
           });
           return;
         }
 
-        const incoming: CallHistory = {
-          id: String(signal.callId || generateId()),
-          conversationId: String(signal.conversationId || selectedConversation?.id || ''),
-          callerId: String(signal.fromUserId || ''),
-          callerName: String(signal.fromUserName || 'Inconnu'),
-          calleeId: user.id,
-          calleeName: user.name || 'Vous',
-          type: signal.callMediaType === 'video' ? 'video' : 'audio',
-          status: 'ongoing',
-          startedAt: new Date(),
-        };
+        const incoming = buildIncomingCallFromRequest(
+          incomingRequest,
+          user.id,
+          user.name || 'Vous',
+          selectedConversation?.id || '',
+          generateId()
+        );
 
         setIncomingCall(incoming);
         addNotification(
@@ -1780,12 +1773,12 @@ export default function NOCActivityApp() {
         return;
       }
 
-      if (signal.signalType === 'call_response') {
-        if (signal.toUserId !== user.id) return;
-        if (!activeCall || signal.callId !== activeCall.id) return;
+      if (activeCall) {
+        const incomingResponse = getIncomingCallResponse(signal, user.id, activeCall.id);
+        if (!incomingResponse) return;
 
-        const response = String(signal.response || 'ignored');
-        const fromName = String(signal.fromUserName || activeCall.calleeName || 'Correspondant');
+        const response = incomingResponse.response;
+        const fromName = incomingResponse.fromName || activeCall.calleeName || 'Correspondant';
 
         if (response === 'accepted') {
           setCallState('connected');
