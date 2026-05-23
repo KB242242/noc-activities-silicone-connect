@@ -56,6 +56,7 @@ import {
   verifyPassword,
 } from '@/features/app-shell/utils';
 import {
+  mapCombinedApiTickets,
   mapApiTicketPriorityToLegacy,
   mapApiTicketStatusToLegacy,
   mapApiTicketToLegacy,
@@ -2422,10 +2423,7 @@ export default function NOCActivityApp() {
       }
 
       if (activeRes.ok || trashRes.ok) {
-        const mergedTickets = [...(Array.isArray(activeData) ? activeData : []), ...(Array.isArray(trashData) ? trashData : [])]
-          .map(mapApiTicketToLegacy)
-          .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
-        setTickets(mergedTickets);
+        setTickets(mapCombinedApiTickets(activeData, trashData));
       }
 
       const mergedLocalities = new Set<string>();

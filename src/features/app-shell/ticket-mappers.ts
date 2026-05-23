@@ -190,3 +190,12 @@ export function mapApiTicketToLegacy(ticket: any): TicketItem {
     deletedBy: ticket.deletedBy ?? undefined,
   };
 }
+
+export function mapCombinedApiTickets(activeData: unknown, trashData: unknown): TicketItem[] {
+  const activeItems = Array.isArray(activeData) ? activeData : [];
+  const trashItems = Array.isArray(trashData) ? trashData : [];
+
+  return [...activeItems, ...trashItems]
+    .map(mapApiTicketToLegacy)
+    .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
+}
