@@ -56,4 +56,5 @@ server.log
 2
 tmp/
 public/upload/tickets/
+debug-avatars.ts
 
