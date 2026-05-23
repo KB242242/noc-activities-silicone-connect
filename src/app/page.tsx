@@ -179,6 +179,8 @@ import {
 } from '@/features/app-shell/ticket-admin-settings';
 import {
   normalizeTicketLocality,
+  parseManagedLocalitiesPayload,
+  parseTicketSitePayload,
   prepareCreateLocality,
   resolveCreatedLocalityName,
   splitTicketValues,
@@ -2456,71 +2458,19 @@ export default function NOCActivityApp() {
 
       if (sitesRes.ok) {
         const sitesData = await sitesRes.json();
-        if (Array.isArray(sitesData) && sitesData.length > 0) {
-          const normalizedSites = sitesData
-            .map((site: { id?: string; name?: string; localite?: string | null; locality?: string | null; departement?: string | null }) => ({
-              id: String(site.id ?? site.name ?? ''),
-              name: String(site.name ?? '').trim(),
-              localite: site.localite ?? site.locality ?? null,
-              departement: site.departement ?? null,
-            }))
-            .filter((site: TicketOptionItem) => Boolean(site.id) && Boolean(site.name));
-
-          setTicketSiteOptions(normalizedSites);
-
-          const departments = new Set<string>();
-          CONGO_DEPARTMENTS.forEach((department) => departments.add(department));
-          normalizedSites.forEach((site) => {
-            const department = normalizeTicketLocality(site.departement ?? '');
-            if (department) departments.add(department);
-          });
-          setTicketCongoDepartments(Array.from(departments).sort((left, right) => left.localeCompare(right, 'fr')));
-
-          normalizedSites.forEach((site) => {
-            const siteLocality = normalizeTicketLocality(site.localite ?? '');
-            if (!siteLocality) return;
-            siteLocality
-              .split(',')
-              .map((part) => normalizeTicketLocality(part))
-              .filter(Boolean)
-              .forEach((locality) => mergedLocalities.add(locality));
-          });
+        const normalizedSites = parseTicketSitePayload(sitesData, CONGO_DEPARTMENTS);
+        if (normalizedSites.siteOptions.length > 0) {
+          setTicketSiteOptions(normalizedSites.siteOptions);
+          setTicketCongoDepartments(normalizedSites.departments);
+          normalizedSites.localities.forEach((locality) => mergedLocalities.add(locality));
         }
       }
 
       if (localitiesRes.ok) {
         const localitiesData = await localitiesRes.json();
-        if (Array.isArray(localitiesData)) {
-          const managedEntries = localitiesData
-            .filter((locality: unknown): locality is { id?: string | number; name?: string; countryCode?: string; countryName?: string; departement?: string; city?: string; arrondissement?: string; quartier?: string; address?: string; reference?: string } => typeof locality === 'object' && locality !== null && 'id' in locality)
-            .map((locality) => ({
-              id: String(locality.id ?? '').trim(),
-              name: normalizeTicketLocality(String(locality.name ?? '')),
-              countryCode: locality.countryCode,
-              countryName: locality.countryName,
-              departement: normalizeTicketLocality(String(locality.departement ?? '')),
-              city: normalizeTicketLocality(String(locality.city ?? '')),
-              arrondissement: normalizeTicketLocality(String(locality.arrondissement ?? '')),
-              quartier: normalizeTicketLocality(String(locality.quartier ?? '')),
-              address: String(locality.address ?? '').trim(),
-              reference: String(locality.reference ?? '').trim(),
-            }))
-            .filter((locality) => Boolean(locality.id))
-            .filter((locality) => Boolean(locality.name))
-            .sort((left, right) => left.name.localeCompare(right.name, 'fr'));
-
-          setManagedLocalities(managedEntries);
-
-          localitiesData
-            .map((locality: { name?: string; value?: string; label?: string } | string) => {
-              if (typeof locality === 'string') {
-                return normalizeTicketLocality(locality);
-              }
-              return normalizeTicketLocality(String(locality.name ?? locality.value ?? locality.label ?? ''));
-            })
-            .filter(Boolean)
-            .forEach((locality) => mergedLocalities.add(locality));
-        }
+        const managedPayload = parseManagedLocalitiesPayload(localitiesData);
+        setManagedLocalities(managedPayload.managedEntries);
+        managedPayload.localities.forEach((locality) => mergedLocalities.add(locality));
       }
 
       if (mergedLocalities.size > 0) {
