@@ -90,6 +90,11 @@ import {
   TASK_STATUSES,
 } from '@/features/app-shell/noc-config';
 import {
+  filterAuditLogs,
+  filterUsers,
+  getUniqueAuditActionTypes,
+} from '@/features/app-shell/admin-selectors';
+import {
   calculateActualDuration,
   calculateAgentPerformance,
   checkInactivity,
@@ -4239,48 +4244,21 @@ export default function NOCActivityApp() {
     }
   };
 
-  // Filtrer le journal d'activité
-  const filteredAuditLogs = auditLogs.filter(log => {
-    // Filtre par date
-    const logDate = new Date(log.createdAt);
-    if (auditLogDateFrom) {
-      const fromDate = new Date(auditLogDateFrom);
-      if (logDate < fromDate) return false;
-    }
-    if (auditLogDateTo) {
-      const toDate = new Date(auditLogDateTo);
-      toDate.setHours(23, 59, 59, 999);
-      if (logDate > toDate) return false;
-    }
-    
-    // Filtre par type d'action
-    if (auditLogActionType !== 'all' && log.action !== auditLogActionType) {
-      return false;
-    }
-    
-    // Filtre par statut
-    if (auditLogStatusFilter !== 'all' && log.status !== auditLogStatusFilter) {
-      return false;
-    }
-    
-    // Filtre par utilisateur
-    if (auditLogUserFilter && !log.userName.toLowerCase().includes(auditLogUserFilter.toLowerCase())) {
-      return false;
-    }
-    
-    return true;
+  const filteredAuditLogs = filterAuditLogs({
+    auditLogs,
+    dateFrom: auditLogDateFrom,
+    dateTo: auditLogDateTo,
+    actionType: auditLogActionType,
+    statusFilter: auditLogStatusFilter,
+    userFilter: auditLogUserFilter,
   });
 
-  // Obtenir les types d'actions uniques
-  const uniqueActionTypes = Array.from(new Set(auditLogs.map(log => log.action))).sort();
+  const uniqueActionTypes = getUniqueAuditActionTypes(auditLogs);
 
-  // Filtrer les utilisateurs
-  const filteredUsers = allUsers.filter(u => {
-    const matchesSearch = u.name.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
-                          u.email.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
-                          (u.username && u.username.toLowerCase().includes(userSearchQuery.toLowerCase()));
-    const matchesRole = roleFilter === 'all' || u.role === roleFilter;
-    return matchesSearch && matchesRole;
+  const filteredUsers = filterUsers({
+    users: allUsers,
+    searchQuery: userSearchQuery,
+    roleFilter,
   });
 
   // PDF Generation
