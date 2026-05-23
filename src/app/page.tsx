@@ -198,6 +198,9 @@ import {
 import {
   deleteTicketRequest,
   restoreTicketRequest,
+  TicketApiRequestError,
+  unarchiveTicketRequest,
+  updateTicketStatusRequest,
 } from '@/features/app-shell/ticket-api';
 import {
   applyOptimisticDelete,
@@ -2575,21 +2578,11 @@ export default function NOCActivityApp() {
 
   const handleUnarchiveTicket = useCallback(async (ticket: TicketItem) => {
     try {
-      const response = await fetch(`/api/tickets/${ticket.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          isArchived: false,
-          archivedAt: null,
-          archivedYear: null,
-          updatedBy: user?.name,
-          updatedById: user?.id,
-        }),
+      await unarchiveTicketRequest({
+        ticketId: ticket.id,
+        updatedBy: user?.name,
+        updatedById: user?.id,
       });
-
-      if (!response.ok) {
-        throw new Error('unarchive_failed');
-      }
 
       await loadTicketsModuleData();
       toast.success('Ticket désarchivé');
@@ -2601,30 +2594,25 @@ export default function NOCActivityApp() {
 
   const handleUpdateTicketStatus = useCallback(async (ticket: TicketItem, status: TicketStatus) => {
     try {
-      const response = await fetch(`/api/tickets/${ticket.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          status: mapLegacyTicketStatusToApi(status),
-          updatedBy: user?.name,
-          updatedById: user?.id,
-        }),
+      const updatedPayload = await updateTicketStatusRequest({
+        ticketId: ticket.id,
+        status: mapLegacyTicketStatusToApi(status),
+        updatedBy: user?.name,
+        updatedById: user?.id,
       });
 
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        if (response.status === 409 || err?.error === 'technician_capacity_exceeded') {
-          toast.error(err?.message ?? 'Un technicien a deja 3 tickets actifs cette semaine.');
-          return;
-        }
-        throw new Error('status_update_failed');
-      }
-
-      const updatedTicket = mapApiTicketToLegacy(await response.json());
+      const updatedTicket = mapApiTicketToLegacy(updatedPayload);
       setTickets((prev) => prev.map((entry) => entry.id === updatedTicket.id ? updatedTicket : entry));
       setSelectedTicket(updatedTicket);
       toast.success(status === 'resolved' ? 'Ticket marqué comme résolu' : 'Ticket fermé');
     } catch (error) {
+      if (error instanceof TicketApiRequestError) {
+        const err = error.payload;
+        if (error.status === 409 || err?.error === 'technician_capacity_exceeded') {
+          toast.error(err?.message ?? 'Un technicien a deja 3 tickets actifs cette semaine.');
+          return;
+        }
+      }
       console.error('[tickets page] handleUpdateTicketStatus', error);
       toast.error('Impossible de mettre à jour le ticket');
     }
