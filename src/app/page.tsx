@@ -157,6 +157,7 @@ import {
   getIncomingCallRequest,
   getIncomingCallResponse,
 } from '@/features/app-shell/chat-call-signals';
+import { parseStoredNotifications } from '@/features/app-shell/chat-notifications';
 import {
   CreateTicketDialog,
   TicketArchiveDashboard,
@@ -2012,23 +2013,7 @@ export default function NOCActivityApp() {
     }
 
     try {
-      const parsed = JSON.parse(raw) as Array<NotificationItem & { createdAt: string }>;
-      setNotifications(
-        parsed.map((notification) => {
-          const rawRead = (notification as { read?: unknown }).read;
-          return {
-            id: String(notification.id),
-            message: notification.message || 'Notification',
-            type: ['success', 'error', 'warning', 'info'].includes(notification.type)
-              ? notification.type
-              : 'info',
-            read: rawRead === true || rawRead === 'true' || rawRead === 1,
-            createdAt: new Date(notification.createdAt),
-            conversationId: notification.conversationId,
-            messageId: notification.messageId,
-          };
-        })
-      );
+      setNotifications(parseStoredNotifications(raw));
     } catch {
       setNotifications([]);
     } finally {
