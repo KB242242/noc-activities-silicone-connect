@@ -109,6 +109,20 @@ import {
 import { renderTicketCountryLabel } from '@/features/app-shell/ticket-ui';
 import { DEMO_USERS } from '@/features/app-shell/demo-users';
 import {
+  filterManagedLocalities,
+  filterVisibleTickets,
+  getArchivedTickets,
+  getArchiveReport,
+  getTicketActionKey,
+  getArchiveYearBuckets,
+  getArchiveYears,
+  getSelectedArchiveTickets,
+  getTicketTechnicianOptions,
+  isTicketActionBusy as isTicketActionBusyKey,
+  matchesTicketStorageView,
+  updateTicketActionBusyKeys,
+} from '@/features/app-shell/ticket-selectors';
+import {
   CreateTicketDialog,
   TicketArchiveDashboard,
 } from '@/features/app-shell/lazy-components';
@@ -1206,115 +1220,43 @@ export default function NOCActivityApp() {
   const [isCreatingLocality, setIsCreatingLocality] = useState(false);
   const [isEditLocalityCreationEnabled, setIsEditLocalityCreationEnabled] = useState(false);
   const [editTicketLocalityDraft, setEditTicketLocalityDraft] = useState<TicketLocalityDraft>(DEFAULT_TICKET_LOCALITY_DRAFT);
-  const getTicketActionKey = useCallback((action: 'delete' | 'restore' | 'permanent', ticketId: string) => `${action}:${ticketId}`, []);
   const isTicketActionBusy = useCallback((action: 'delete' | 'restore' | 'permanent', ticketId: string) => (
-    ticketActionBusyKeys.includes(getTicketActionKey(action, ticketId))
-  ), [getTicketActionKey, ticketActionBusyKeys]);
+    isTicketActionBusyKey(ticketActionBusyKeys, action, ticketId)
+  ), [ticketActionBusyKeys]);
   const setTicketActionBusy = useCallback((actionKey: string, busy: boolean) => {
-    setTicketActionBusyKeys((prev) => {
-      if (busy) {
-        return prev.includes(actionKey) ? prev : [...prev, actionKey];
-      }
-      return prev.filter((key) => key !== actionKey);
-    });
+    setTicketActionBusyKeys((prev) => updateTicketActionBusyKeys(prev, actionKey, busy));
   }, []);
-  const matchesTicketStorageView = useCallback((ticket: TicketItem) => {
-    if (showDeletedTickets) return ticket.isDeleted;
-    if (showArchivedTickets) return !ticket.isDeleted && Boolean(ticket.isArchived);
-    return !ticket.isDeleted && !Boolean(ticket.isArchived);
-  }, [showArchivedTickets, showDeletedTickets]);
-  const currentStorageTickets = useMemo(() => tickets.filter((ticket) => matchesTicketStorageView(ticket)), [matchesTicketStorageView, tickets]);
+  const currentStorageTickets = useMemo(
+    () => tickets.filter((ticket) => matchesTicketStorageView(ticket, showDeletedTickets, showArchivedTickets)),
+    [showArchivedTickets, showDeletedTickets, tickets]
+  );
   const visibleTickets = useMemo(() => {
-    return currentStorageTickets.filter((ticket) => {
-      if (ticketSearchQuery) {
-        const query = ticketSearchQuery.toLowerCase();
-        const haystack = [ticket.numero, ticket.objet, ticket.contactName, ticket.accountName, ticket.recentThread, ticket.technicien, ticket.site, ticket.localite, ticket.channel].join(' ').toLowerCase();
-        if (!haystack.includes(query)) return false;
-      }
-      if (ticketStatusFilter !== 'all' && ticket.status !== ticketStatusFilter) return false;
-      if (ticketPriorityFilter !== 'all' && ticket.priority !== ticketPriorityFilter) return false;
-      if (ticketSiteFilter !== 'all' && !ticket.site.toLowerCase().includes(ticketSiteFilter.toLowerCase())) return false;
-      if (ticketLocaliteFilter !== 'all' && !ticket.localite.toLowerCase().includes(ticketLocaliteFilter.toLowerCase())) return false;
-      if (ticketTechnicienFilter !== 'all' && !ticket.technicien.toLowerCase().includes(ticketTechnicienFilter.toLowerCase())) return false;
-      return true;
+    return filterVisibleTickets(currentStorageTickets, {
+      ticketSearchQuery,
+      ticketStatusFilter,
+      ticketPriorityFilter,
+      ticketSiteFilter,
+      ticketLocaliteFilter,
+      ticketTechnicienFilter,
     });
   }, [currentStorageTickets, ticketLocaliteFilter, ticketPriorityFilter, ticketSearchQuery, ticketSiteFilter, ticketStatusFilter, ticketTechnicienFilter]);
-  const archivedTickets = useMemo(() => tickets.filter((ticket) => !ticket.isDeleted && Boolean(ticket.isArchived)), [tickets]);
-  const archiveYears = useMemo(() => {
-    const years = Array.from(new Set(
-      archivedTickets
-        .map((ticket) => ticket.archivedYear ?? ticket.archivedAt?.getFullYear() ?? ticket.closedAt?.getFullYear() ?? ticket.createdAt.getFullYear())
-        .filter((year) => Number.isFinite(year))
-    ));
-    return years.sort((a, b) => Number(b) - Number(a));
-  }, [archivedTickets]);
-  const selectedArchiveTickets = useMemo(() => {
-    if (archiveYearFilter === 'all') return archivedTickets;
-    const selectedYear = Number(archiveYearFilter);
-    return archivedTickets.filter((ticket) => {
-      const year = ticket.archivedYear ?? ticket.archivedAt?.getFullYear() ?? ticket.closedAt?.getFullYear() ?? ticket.createdAt.getFullYear();
-      return year === selectedYear;
-    });
-  }, [archiveYearFilter, archivedTickets]);
-  const archiveReport = useMemo(() => {
-    const totalArchived = selectedArchiveTickets.length;
-    const slaSatisfied = selectedArchiveTickets.filter((ticket) => {
-      if (!ticket.dueDate) return false;
-      const archivedMoment = ticket.archivedAt ?? ticket.closedAt ?? ticket.updatedAt;
-      return archivedMoment.getTime() <= ticket.dueDate.getTime();
-    }).length;
-    const openInSelectedYear = tickets.filter((ticket) => {
-      const ticketYear = ticket.createdAt.getFullYear();
-      const selectedYear = archiveYearFilter === 'all' ? null : Number(archiveYearFilter);
-      const matchesYear = selectedYear ? ticketYear === selectedYear : true;
-      const ticketStatus = String(ticket.status ?? '').toUpperCase();
-      return matchesYear && !ticket.isDeleted && !ticket.isArchived && ticketStatus !== 'CLOSED' && ticketStatus !== 'RESOLVED';
-    }).length;
-    const slaRate = totalArchived > 0 ? Math.round((slaSatisfied / totalArchived) * 100) : 0;
-    return { totalArchived, slaSatisfied, slaRate, openInSelectedYear };
-  }, [archiveYearFilter, selectedArchiveTickets, tickets]);
-  const archiveYearBuckets = useMemo(() => {
-    const groups = new Map<number, TicketItem[]>();
-    selectedArchiveTickets.forEach((ticket) => {
-      const year = ticket.archivedYear ?? ticket.archivedAt?.getFullYear() ?? ticket.closedAt?.getFullYear() ?? ticket.createdAt.getFullYear();
-      const current = groups.get(year) ?? [];
-      current.push(ticket);
-      groups.set(year, current);
-    });
-
-    return Array.from(groups.entries())
-      .sort((left, right) => right[0] - left[0])
-      .map(([year, items]) => ({
-        year,
-        items: items.sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime()),
-      }));
-  }, [selectedArchiveTickets]);
-  const ticketTechnicianOptions = useMemo(
-    () => usersDirectory
-      .filter((profile) => profile.isActive && (profile.role === 'TECHNICIEN' || profile.role === 'TECHNICIEN_NO'))
-      .map((profile) => ({ id: profile.id, name: profile.name }))
-      .sort((left, right) => left.name.localeCompare(right.name, 'fr', { sensitivity: 'base' })),
-    [usersDirectory]
+  const archivedTickets = useMemo(() => getArchivedTickets(tickets), [tickets]);
+  const archiveYears = useMemo(() => getArchiveYears(archivedTickets), [archivedTickets]);
+  const selectedArchiveTickets = useMemo(
+    () => getSelectedArchiveTickets(archivedTickets, archiveYearFilter),
+    [archiveYearFilter, archivedTickets]
   );
+  const archiveReport = useMemo(
+    () => getArchiveReport(selectedArchiveTickets, tickets, archiveYearFilter),
+    [archiveYearFilter, selectedArchiveTickets, tickets]
+  );
+  const archiveYearBuckets = useMemo(() => getArchiveYearBuckets(selectedArchiveTickets), [selectedArchiveTickets]);
+  const ticketTechnicianOptions = useMemo(() => getTicketTechnicianOptions(usersDirectory), [usersDirectory]);
 
-  const filteredManagedLocalities = useMemo(() => {
-    const query = managedLocalitySearch.trim().toLowerCase();
-    if (!query) return managedLocalities;
-    return managedLocalities.filter((locality) => {
-      const haystack = [
-        locality.name,
-        locality.countryName,
-        locality.departement,
-        locality.city,
-        locality.arrondissement,
-        locality.quartier,
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-      return haystack.includes(query);
-    });
-  }, [managedLocalities, managedLocalitySearch]);
+  const filteredManagedLocalities = useMemo(
+    () => filterManagedLocalities(managedLocalities, managedLocalitySearch),
+    [managedLocalities, managedLocalitySearch]
+  );
 
   // Typing indicator simulation
   const [simulatedTyping, setSimulatedTyping] = useState<{ userId: string; userName: string; isRecording: boolean } | null>(null);
