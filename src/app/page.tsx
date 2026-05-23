@@ -174,6 +174,10 @@ import {
 } from '@/features/app-shell/demo-seed';
 import { readBootstrapLocalData } from '@/features/app-shell/storage-bootstrap';
 import {
+  normalizeTicketAdminSettings,
+  parseNotificationEmailsInput,
+} from '@/features/app-shell/ticket-admin-settings';
+import {
   CreateTicketDialog,
   TicketArchiveDashboard,
 } from '@/features/app-shell/lazy-components';
@@ -2121,19 +2125,7 @@ export default function NOCActivityApp() {
         throw new Error('ticket_settings_load_failed');
       }
       const payload = await response.json();
-      const nextSettings: TicketAdminSettings = {
-        numberFormat: String(payload?.numberFormat ?? DEFAULT_TICKET_ADMIN_SETTINGS.numberFormat),
-        numberSeed: Number(payload?.numberSeed ?? DEFAULT_TICKET_ADMIN_SETTINGS.numberSeed),
-        notificationEmails: Array.isArray(payload?.notificationEmails)
-          ? payload.notificationEmails.map((item: unknown) => String(item).trim()).filter(Boolean)
-          : DEFAULT_TICKET_ADMIN_SETTINGS.notificationEmails,
-        defaultSlaHours: Number(payload?.defaultSlaHours ?? DEFAULT_TICKET_ADMIN_SETTINGS.defaultSlaHours),
-        trashRetentionDays: Number(payload?.trashRetentionDays ?? DEFAULT_TICKET_ADMIN_SETTINGS.trashRetentionDays),
-        slaByCategory: {
-          ...DEFAULT_TICKET_ADMIN_SETTINGS.slaByCategory,
-          ...(payload?.slaByCategory && typeof payload.slaByCategory === 'object' ? payload.slaByCategory : {}),
-        },
-      };
+      const nextSettings: TicketAdminSettings = normalizeTicketAdminSettings(payload);
       setTicketAdminSettings(nextSettings);
       setTicketAdminEmailsInput(nextSettings.notificationEmails.join(', '));
     } catch {
@@ -2153,10 +2145,7 @@ export default function NOCActivityApp() {
   const saveTicketAdminSettings = useCallback(async () => {
     if (!canManageUsers || !user) return;
 
-    const parsedEmails = ticketAdminEmailsInput
-      .split(',')
-      .map((item) => item.trim())
-      .filter(Boolean);
+    const parsedEmails = parseNotificationEmailsInput(ticketAdminEmailsInput);
 
     if (parsedEmails.length === 0) {
       toast.error('Emails requis', {
