@@ -140,3 +140,71 @@ export async function updateTicketDetailsRequest(params: {
     errorMessage: 'ticket_update_failed',
   });
 }
+
+export async function fetchTicketAdminSettingsRequest(): Promise<any> {
+  const response = await fetch('/api/tickets/settings', { cache: 'no-store' });
+  if (!response.ok) {
+    throw new Error('ticket_settings_load_failed');
+  }
+  return response.json();
+}
+
+export async function saveTicketAdminSettingsRequest(params: {
+  role: string;
+  numberFormat: string;
+  numberSeed: number;
+  notificationEmails: string[];
+  defaultSlaHours: number;
+  trashRetentionDays: number;
+  slaByCategory: Record<string, number>;
+}): Promise<any> {
+  const response = await fetch('/api/tickets/settings', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+
+  if (!response.ok) {
+    throw new Error('ticket_settings_save_failed');
+  }
+
+  return response.json();
+}
+
+export async function fetchTicketsModuleDataRequest(): Promise<{
+  activeOk: boolean;
+  activeStatus: number;
+  activeData: any;
+  trashOk: boolean;
+  trashStatus: number;
+  trashData: any;
+  sitesOk: boolean;
+  sitesData: any;
+  localitiesOk: boolean;
+  localitiesData: any;
+}> {
+  const [activeRes, trashRes, sitesRes, localitiesRes] = await Promise.all([
+    fetch('/api/tickets/list?trash=false', { cache: 'no-store' }),
+    fetch('/api/tickets/list?trash=true', { cache: 'no-store' }),
+    fetch('/api/tickets/sites', { cache: 'no-store' }),
+    fetch('/api/tickets/localities', { cache: 'no-store' }),
+  ]);
+
+  const activeData = activeRes.ok ? await activeRes.json() : [];
+  const trashData = trashRes.ok ? await trashRes.json() : [];
+  const sitesData = sitesRes.ok ? await sitesRes.json() : [];
+  const localitiesData = localitiesRes.ok ? await localitiesRes.json() : [];
+
+  return {
+    activeOk: activeRes.ok,
+    activeStatus: activeRes.status,
+    activeData,
+    trashOk: trashRes.ok,
+    trashStatus: trashRes.status,
+    trashData,
+    sitesOk: sitesRes.ok,
+    sitesData,
+    localitiesOk: localitiesRes.ok,
+    localitiesData,
+  };
+}

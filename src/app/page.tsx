@@ -197,7 +197,10 @@ import {
 } from '@/features/app-shell/ticket-locality-api';
 import {
   deleteTicketRequest,
+  fetchTicketAdminSettingsRequest,
+  fetchTicketsModuleDataRequest,
   restoreTicketRequest,
+  saveTicketAdminSettingsRequest,
   TicketApiRequestError,
   unarchiveTicketRequest,
   updateTicketDetailsRequest,
@@ -2151,11 +2154,7 @@ export default function NOCActivityApp() {
     if (!canManageUsers) return;
     setTicketAdminSettingsLoading(true);
     try {
-      const response = await fetch('/api/tickets/settings', { cache: 'no-store' });
-      if (!response.ok) {
-        throw new Error('ticket_settings_load_failed');
-      }
-      const payload = await response.json();
+      const payload = await fetchTicketAdminSettingsRequest();
       const nextSettings: TicketAdminSettings = normalizeTicketAdminSettings(payload);
       setTicketAdminSettings(nextSettings);
       setTicketAdminEmailsInput(nextSettings.notificationEmails.join(', '));
@@ -2187,25 +2186,15 @@ export default function NOCActivityApp() {
 
     setTicketAdminSettingsSaving(true);
     try {
-      const response = await fetch('/api/tickets/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          role: user.role,
-          numberFormat: ticketAdminSettings.numberFormat,
-          numberSeed: ticketAdminSettings.numberSeed,
-          notificationEmails: parsedEmails,
-          defaultSlaHours: ticketAdminSettings.defaultSlaHours,
-          trashRetentionDays: ticketAdminSettings.trashRetentionDays,
-          slaByCategory: ticketAdminSettings.slaByCategory,
-        }),
+      const payload = await saveTicketAdminSettingsRequest({
+        role: user.role,
+        numberFormat: ticketAdminSettings.numberFormat,
+        numberSeed: ticketAdminSettings.numberSeed,
+        notificationEmails: parsedEmails,
+        defaultSlaHours: ticketAdminSettings.defaultSlaHours,
+        trashRetentionDays: ticketAdminSettings.trashRetentionDays,
+        slaByCategory: ticketAdminSettings.slaByCategory,
       });
-
-      if (!response.ok) {
-        throw new Error('ticket_settings_save_failed');
-      }
-
-      const payload = await response.json();
       const nextSettings: TicketAdminSettings = payload?.settings ?? ticketAdminSettings;
       setTicketAdminSettings(nextSettings);
       setTicketAdminEmailsInput((nextSettings.notificationEmails ?? parsedEmails).join(', '));
@@ -2397,32 +2386,23 @@ export default function NOCActivityApp() {
 
   const loadTicketsModuleData = useCallback(async () => {
     try {
-      const [activeRes, trashRes, sitesRes, localitiesRes] = await Promise.all([
-        fetch('/api/tickets/list?trash=false', { cache: 'no-store' }),
-        fetch('/api/tickets/list?trash=true', { cache: 'no-store' }),
-        fetch('/api/tickets/sites', { cache: 'no-store' }),
-        fetch('/api/tickets/localities', { cache: 'no-store' }),
-      ]);
+      const moduleData = await fetchTicketsModuleDataRequest();
 
-      const activeData = activeRes.ok ? await activeRes.json() : [];
-      const trashData = trashRes.ok ? await trashRes.json() : [];
-
-      if (!activeRes.ok) {
-        console.error('[tickets page] active tickets request failed', activeRes.status);
+      if (!moduleData.activeOk) {
+        console.error('[tickets page] active tickets request failed', moduleData.activeStatus);
       }
-      if (!trashRes.ok) {
-        console.error('[tickets page] trash tickets request failed', trashRes.status);
+      if (!moduleData.trashOk) {
+        console.error('[tickets page] trash tickets request failed', moduleData.trashStatus);
       }
 
-      if (activeRes.ok || trashRes.ok) {
-        setTickets(mapCombinedApiTickets(activeData, trashData));
+      if (moduleData.activeOk || moduleData.trashOk) {
+        setTickets(mapCombinedApiTickets(moduleData.activeData, moduleData.trashData));
       }
 
       const mergedLocalities = new Set<string>();
 
-      if (sitesRes.ok) {
-        const sitesData = await sitesRes.json();
-        const normalizedSites = parseTicketSitePayload(sitesData, CONGO_DEPARTMENTS);
+      if (moduleData.sitesOk) {
+        const normalizedSites = parseTicketSitePayload(moduleData.sitesData, CONGO_DEPARTMENTS);
         if (normalizedSites.siteOptions.length > 0) {
           setTicketSiteOptions(normalizedSites.siteOptions);
           setTicketCongoDepartments(normalizedSites.departments);
@@ -2430,9 +2410,8 @@ export default function NOCActivityApp() {
         }
       }
 
-      if (localitiesRes.ok) {
-        const localitiesData = await localitiesRes.json();
-        const managedPayload = parseManagedLocalitiesPayload(localitiesData);
+      if (moduleData.localitiesOk) {
+        const managedPayload = parseManagedLocalitiesPayload(moduleData.localitiesData);
         setManagedLocalities(managedPayload.managedEntries);
         managedPayload.localities.forEach((locality) => mergedLocalities.add(locality));
       }
