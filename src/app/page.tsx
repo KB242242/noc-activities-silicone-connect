@@ -207,6 +207,15 @@ import {
   updateTicketStatusRequest,
 } from '@/features/app-shell/ticket-api';
 import {
+  changeOwnPasswordRequest,
+  createUserRequest,
+  deleteUserRequest,
+  resetUserPasswordRequest,
+  toggleUserBlockRequest,
+  updateUserRequest,
+  updateUserRoleRequest,
+} from '@/features/app-shell/user-admin-api';
+import {
   applyOptimisticDelete,
   applyOptimisticRestore,
   resolveTicketRetentionDays,
@@ -3900,21 +3909,11 @@ export default function NOCActivityApp() {
     }
 
     try {
-      const response = await fetch('/api/users', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: user.id,
-          actorId: user.id,
-          newPassword: editPassword,
-          changePassword: true,
-        }),
+      const result = await changeOwnPasswordRequest({
+        userId: user.id,
+        actorId: user.id,
+        newPassword: editPassword,
       });
-
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok || !result?.success || !result?.user) {
-        throw new Error(result?.error || 'Échec de mise à jour du mot de passe');
-      }
 
       const updatedUser = {
         ...user,
@@ -3954,19 +3953,11 @@ export default function NOCActivityApp() {
 
     setUsersActionInProgress(`role:${targetUser.id}`);
     try {
-      const response = await fetch('/api/users', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          adminId: user.id,
-          userId: targetUser.id,
-          role: nextRole,
-        }),
+      const result = await updateUserRoleRequest({
+        adminId: user.id,
+        userId: targetUser.id,
+        role: nextRole,
       });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok || !result?.success || !result?.user) {
-        throw new Error(result?.error || 'Erreur lors de la mise à jour du rôle');
-      }
 
       const updatedUser = { ...targetUser, ...result.user, updatedAt: new Date() };
 
@@ -4053,26 +4044,18 @@ export default function NOCActivityApp() {
 
     setUsersActionInProgress('create');
     try {
-      const response = await fetch('/api/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          adminId: user.id,
-          email: editEmail,
-          name: `${editFirstName} ${editLastName}`.trim(),
-          firstName: editFirstName,
-          lastName: editLastName,
-          username: editUsername || editEmail.split('@')[0],
-          password: editPassword,
-          role: editRole,
-          shiftId: nextShiftId,
-          responsibility: editResponsibility || undefined,
-        }),
+      const result = await createUserRequest({
+        adminId: user.id,
+        email: editEmail,
+        name: `${editFirstName} ${editLastName}`.trim(),
+        firstName: editFirstName,
+        lastName: editLastName,
+        username: editUsername || editEmail.split('@')[0],
+        password: editPassword,
+        role: editRole,
+        shiftId: nextShiftId,
+        responsibility: editResponsibility || undefined,
       });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok || !result?.success || !result?.user) {
-        throw new Error(result?.error || 'Erreur lors de la création de l\'utilisateur');
-      }
 
       const createdUser = { ...result.user, updatedAt: new Date(), createdAt: new Date() } as UserProfile;
 
@@ -4122,28 +4105,20 @@ export default function NOCActivityApp() {
 
     setUsersActionInProgress(`edit:${userToEdit.id}`);
     try {
-      const response = await fetch('/api/users', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          adminId: user.id,
-          userId: userToEdit.id,
-          name: fullName,
-          firstName: editFirstName,
-          lastName: editLastName,
-          email: editEmail,
-          username: editUsername || null,
-          role: editRole,
-          shiftId: nextShiftId,
-          responsibility: editResponsibility || null,
-          isActive: editUserIsActive,
-          isBlocked: editUserIsBlocked,
-        }),
+      const result = await updateUserRequest({
+        adminId: user.id,
+        userId: userToEdit.id,
+        name: fullName,
+        firstName: editFirstName,
+        lastName: editLastName,
+        email: editEmail,
+        username: editUsername || null,
+        role: editRole,
+        shiftId: nextShiftId,
+        responsibility: editResponsibility || null,
+        isActive: editUserIsActive,
+        isBlocked: editUserIsBlocked,
       });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok || !result?.success || !result?.user) {
-        throw new Error(result?.error || 'Mise à jour impossible');
-      }
 
       const updatedUser = { ...userToEdit, ...result.user, updatedAt: new Date() } as UserProfile;
       setAllUsers((prev) => {
@@ -4181,19 +4156,11 @@ export default function NOCActivityApp() {
     
     setUsersActionInProgress(`block:${targetUser.id}`);
     try {
-      const response = await fetch('/api/users', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          adminId: user.id,
-          userId: targetUser.id,
-          isBlocked: !targetUser.isBlocked,
-        }),
+      const result = await toggleUserBlockRequest({
+        adminId: user.id,
+        userId: targetUser.id,
+        isBlocked: !targetUser.isBlocked,
       });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok || !result?.success || !result?.user) {
-        throw new Error(result?.error || 'Erreur lors du blocage/déblocage');
-      }
 
       const syncedUser = { ...updatedUser, ...result.user };
       setAllUsers(prev => {
@@ -4225,20 +4192,11 @@ export default function NOCActivityApp() {
     
     setUsersActionInProgress(`reset:${targetUser.id}`);
     try {
-      const response = await fetch('/api/users', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          adminId: user.id,
-          targetUserId: targetUser.id,
-          newPassword,
-          forceResetPassword: true,
-        }),
+      const result = await resetUserPasswordRequest({
+        adminId: user.id,
+        targetUserId: targetUser.id,
+        newPassword,
       });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok || !result?.success || !result?.user) {
-        throw new Error(result?.error || 'Erreur lors de la réinitialisation du mot de passe');
-      }
 
       const syncedUser = { ...updatedUser, ...result.user };
       setAllUsers(prev => {
@@ -4288,13 +4246,11 @@ export default function NOCActivityApp() {
     setDeleteConfirmationOpen(false);
     
     try {
-      const response = await fetch(`/api/users?adminId=${encodeURIComponent(user.id)}&userId=${encodeURIComponent(userToDelete.id)}&permanent=true`, {
-        method: 'DELETE',
+      await deleteUserRequest({
+        adminId: user.id,
+        userId: userToDelete.id,
+        permanent: true,
       });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok || !result?.success) {
-        throw new Error(result?.error || 'Erreur lors de la suppression de l\'utilisateur');
-      }
     } catch (error) {
       toast.error('Erreur', { description: error instanceof Error ? error.message : 'Suppression impossible' });
       return;
