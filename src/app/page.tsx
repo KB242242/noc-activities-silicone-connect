@@ -178,6 +178,12 @@ import {
   parseNotificationEmailsInput,
 } from '@/features/app-shell/ticket-admin-settings';
 import {
+  normalizeTicketLocality,
+  prepareCreateLocality,
+  resolveCreatedLocalityName,
+  splitTicketValues,
+} from '@/features/app-shell/ticket-locality-utils';
+import {
   CreateTicketDialog,
   TicketArchiveDashboard,
 } from '@/features/app-shell/lazy-components';
@@ -2192,24 +2198,6 @@ export default function NOCActivityApp() {
     router.push(`/tickets/${ticketId}`);
   }, [router]);
 
-  const splitTicketValues = useCallback((value?: string) => {
-    if (!value) return [] as string[];
-    return value.split(',').map((item) => item.trim()).filter(Boolean);
-  }, []);
-
-  const normalizeTicketLocality = useCallback((value: string) => {
-    const cleaned = value.trim().replace(/\s+/g, ' ');
-    if (!cleaned) return '';
-    return cleaned
-      .split(/(\s+|-|')/)
-      .map((chunk) => {
-        if (!chunk || /^(\s+|-|')$/.test(chunk)) return chunk;
-        const [first, ...rest] = chunk;
-        return `${first.toUpperCase()}${rest.join('').toLowerCase()}`;
-      })
-      .join('');
-  }, []);
-
   const applyLocalityToTicket = useCallback((name: string) => {
     setEditingTicket((prev) => prev ? { ...prev, localite: name } : prev);
   }, []);
@@ -2224,25 +2212,12 @@ export default function NOCActivityApp() {
       }
       return [...prev, normalized].sort((left, right) => left.localeCompare(right, 'fr'));
     });
-  }, [normalizeTicketLocality]);
+  }, []);
 
   const createTicketLocality = useCallback(async (payload: Partial<TicketLocalityDraft>, target: 'edit' | 'none' = 'none') => {
-    const freeText = normalizeTicketLocality(payload.freeText ?? '');
-    const normalizedDepartment = normalizeTicketLocality(payload.departement ?? '');
-    const normalizedCity = normalizeTicketLocality(payload.city ?? '');
-    const normalizedArrondissement = normalizeTicketLocality(payload.arrondissement ?? '');
-    const normalizedQuartier = normalizeTicketLocality(payload.quartier ?? '');
-    const fallbackName = freeText || normalizedCity || normalizedDepartment || normalizedArrondissement || normalizedQuartier;
+    const prepared = prepareCreateLocality(payload);
 
-    if (
-      !freeText
-      && !normalizedDepartment
-      && !payload.city?.trim()
-      && !payload.arrondissement?.trim()
-      && !payload.quartier?.trim()
-      && !payload.address?.trim()
-      && !payload.reference?.trim()
-    ) {
+    if (!prepared.canCreate) {
       toast.error('Veuillez renseigner une localité');
       return;
     }
@@ -2252,17 +2227,7 @@ export default function NOCActivityApp() {
       const response = await fetch('/api/tickets/localities', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: fallbackName,
-          countryCode: payload.countryCode,
-          countryName: payload.countryName,
-          departement: normalizedDepartment,
-          city: normalizedCity,
-          arrondissement: normalizedArrondissement,
-          quartier: normalizedQuartier,
-          address: payload.address,
-          reference: payload.reference,
-        }),
+        body: JSON.stringify(prepared.requestBody),
       });
 
       if (!response.ok) {
@@ -2271,7 +2236,7 @@ export default function NOCActivityApp() {
       }
 
       const created = await response.json();
-      const localityName = normalizeTicketLocality(String(created?.name ?? created?.label ?? created?.value ?? fallbackName));
+      const localityName = resolveCreatedLocalityName(created, prepared.fallbackName);
       if (!localityName) {
         throw new Error('locality_name_empty');
       }
@@ -2297,7 +2262,7 @@ export default function NOCActivityApp() {
     } finally {
       setIsCreatingLocality(false);
     }
-  }, [applyLocalityToTicket, normalizeTicketLocality, upsertLocalityOption]);
+  }, [applyLocalityToTicket, upsertLocalityOption]);
 
   const handleQuickCreateLocality = useCallback(async () => {
     const hasStructuredData = Boolean(
@@ -2319,7 +2284,7 @@ export default function NOCActivityApp() {
     if (!created) return;
 
     setQuickLocalityDialogOpen(false);
-  }, [createTicketLocality, normalizeTicketLocality, quickLocalityDraft]);
+  }, [createTicketLocality, quickLocalityDraft]);
 
   const handleSelectManagedLocality = useCallback((id: string) => {
     setSelectedManagedLocalityId(id);
@@ -2411,7 +2376,7 @@ export default function NOCActivityApp() {
     } finally {
       setIsUpdatingLocality(false);
     }
-  }, [managedLocalityDraft, managedLocalityName, normalizeTicketLocality, selectedManagedLocalityId, upsertLocalityOption]);
+  }, [managedLocalityDraft, managedLocalityName, selectedManagedLocalityId, upsertLocalityOption]);
 
   const handleDeleteManagedLocality = useCallback(async () => {
     if (!selectedManagedLocalityId) {
@@ -2449,17 +2414,17 @@ export default function NOCActivityApp() {
     } finally {
       setIsDeletingLocality(false);
     }
-  }, [managedLocalityName, normalizeTicketLocality, selectedManagedLocalityId]);
+  }, [managedLocalityName, selectedManagedLocalityId]);
 
   const resolveTicketSiteSelection = useCallback((value?: string) => {
     const names = splitTicketValues(value);
     return ticketSiteOptions.filter((site) => names.includes(site.name));
-  }, [splitTicketValues, ticketSiteOptions]);
+  }, [ticketSiteOptions]);
 
   const resolveTicketTechnicians = useCallback((value?: string) => {
     const names = splitTicketValues(value);
     return ticketTechnicianOptions.filter((technician) => names.includes(technician.name));
-  }, [splitTicketValues, ticketTechnicianOptions]);
+  }, [ticketTechnicianOptions]);
 
   const loadTicketsModuleData = useCallback(async () => {
     try {
@@ -2566,7 +2531,7 @@ export default function NOCActivityApp() {
     } catch (error) {
       console.error('[tickets page] loadTicketsModuleData', error);
     }
-  }, [normalizeTicketLocality]);
+  }, []);
 
   useEffect(() => {
     void loadTicketsModuleData();
