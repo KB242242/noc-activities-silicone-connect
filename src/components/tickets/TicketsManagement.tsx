@@ -520,7 +520,7 @@ export default function TicketsManagement({ user }: TicketsManagementProps) {
       <Card>
         <CardContent className="pt-6">
           <div className="flex flex-wrap gap-4">
-            <div className="flex-1 min-w-[200px]">
+            <div className="flex-1 min-w-50">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <Input
@@ -532,7 +532,7 @@ export default function TicketsManagement({ user }: TicketsManagementProps) {
               </div>
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[150px]">
+              <SelectTrigger className="w-37.5">
                 <SelectValue placeholder="Statut" />
               </SelectTrigger>
               <SelectContent>
@@ -543,7 +543,7 @@ export default function TicketsManagement({ user }: TicketsManagementProps) {
               </SelectContent>
             </Select>
             <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-              <SelectTrigger className="w-[150px]">
+              <SelectTrigger className="w-37.5">
                 <SelectValue placeholder="Priorité" />
               </SelectTrigger>
               <SelectContent>
@@ -554,7 +554,7 @@ export default function TicketsManagement({ user }: TicketsManagementProps) {
               </SelectContent>
             </Select>
             <Select value={siteFilter} onValueChange={setSiteFilter}>
-              <SelectTrigger className="w-[150px]">
+              <SelectTrigger className="w-37.5">
                 <SelectValue placeholder="Site" />
               </SelectTrigger>
               <SelectContent>
@@ -565,7 +565,7 @@ export default function TicketsManagement({ user }: TicketsManagementProps) {
               </SelectContent>
             </Select>
             <Select value={technicianFilter} onValueChange={setTechnicianFilter}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-45">
                 <SelectValue placeholder="Technicien" />
               </SelectTrigger>
               <SelectContent>
@@ -576,7 +576,7 @@ export default function TicketsManagement({ user }: TicketsManagementProps) {
               </SelectContent>
             </Select>
             <Select value={periodFilter} onValueChange={setPeriodFilter}>
-              <SelectTrigger className="w-[150px]">
+              <SelectTrigger className="w-37.5">
                 <SelectValue placeholder="Période" />
               </SelectTrigger>
               <SelectContent>
@@ -634,7 +634,7 @@ export default function TicketsManagement({ user }: TicketsManagementProps) {
                         <span className="font-mono text-sm">{ticket.ticketNumber}</span>
                       </td>
                       <td className="px-4 py-3">
-                        <span className="font-medium truncate block max-w-[200px]">{ticket.object}</span>
+                        <span className="font-medium truncate block max-w-50">{ticket.object}</span>
                       </td>
                       <td className="px-4 py-3 text-sm">{ticket.creatorName}</td>
                       <td className="px-4 py-3 text-sm">

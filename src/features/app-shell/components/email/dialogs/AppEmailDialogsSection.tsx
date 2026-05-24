@@ -1,0 +1,307 @@
+import { AppEmailActiveCallDialog } from '@/features/app-shell/components/email/dialogs/AppEmailActiveCallDialog';
+import { AppEmailAddCallParticipantsDialog } from '@/features/app-shell/components/email/dialogs/AppEmailAddCallParticipantsDialog';
+import { AppEmailChatSettingsDialog } from '@/features/app-shell/components/email/dialogs/AppEmailChatSettingsDialog';
+import { AppEmailCreateGroupDialog } from '@/features/app-shell/components/email/dialogs/AppEmailCreateGroupDialog';
+import { AppEmailCreateStatusDialog } from '@/features/app-shell/components/email/dialogs/AppEmailCreateStatusDialog';
+import { AppEmailEditMessageDialog } from '@/features/app-shell/components/email/dialogs/AppEmailEditMessageDialog';
+import { AppEmailImagePreviewDialog } from '@/features/app-shell/components/email/dialogs/AppEmailImagePreviewDialog';
+import { AppEmailIncomingCallDialog } from '@/features/app-shell/components/email/dialogs/AppEmailIncomingCallDialog';
+import { AppEmailMyStatusesDialog } from '@/features/app-shell/components/email/dialogs/AppEmailMyStatusesDialog';
+import { AppEmailNewConversationDialog } from '@/features/app-shell/components/email/dialogs/AppEmailNewConversationDialog';
+import { AppEmailProfilePhotoCropDialog } from '@/features/app-shell/components/email/dialogs/AppEmailProfilePhotoCropDialog';
+import { AppEmailViewStatusDialog } from '@/features/app-shell/components/email/dialogs/AppEmailViewStatusDialog';
+type AppEmailDialogsSectionProps = any;
+
+export function AppEmailDialogsSection({
+  editMessageDialogOpen,
+  setEditMessageDialogOpen,
+  editMessageContent,
+  setEditMessageContent,
+  onSaveEditedMessage,
+  chatImagePreview,
+  setChatImagePreview,
+  chatImageZoom,
+  setChatImageZoom,
+  userId,
+  setChatMessages,
+  setPinnedMessages,
+  updateChatMessage,
+  createGroupOpen,
+  setCreateGroupOpen,
+  newGroupName,
+  setNewGroupName,
+  newGroupDescription,
+  setNewGroupDescription,
+  selectedMembers,
+  setSelectedMembers,
+  usersDirectory,
+  user,
+  createConversationInDb,
+  setConversations,
+  setSelectedConversation,
+  incomingCall,
+  activeCall,
+  callState,
+  handleIncomingCallAction,
+  setConferenceEnabled,
+  setHeldCall,
+  callParticipants,
+  setCallParticipants,
+  addNotification,
+  callDialogOpen,
+  setCallDialogOpen,
+  setActiveCall,
+  setCallState,
+  callTimer,
+  setCallTimer,
+  liveReactions,
+  setLiveReactions,
+  setAddParticipantsOpen,
+  isCallMuted,
+  setIsCallMuted,
+  isCallSpeakerOn,
+  setIsCallSpeakerOn,
+  showCallReactionPicker,
+  setShowCallReactionPicker,
+  theme,
+  isCompactEmojiLayout,
+  broadcastLiveReaction,
+  callTimeoutRef,
+  addParticipantsOpen,
+  newConversationOpen,
+  setNewConversationOpen,
+  newConversationSearch,
+  setNewConversationSearch,
+  conversations,
+  userPresence,
+  getShiftColor,
+  resetConversationUnreadCount,
+  backgroundSettingsOpen,
+  setBackgroundSettingsOpen,
+  soundEnabled,
+  setSoundEnabled,
+  soundOnSend,
+  setSoundOnSend,
+  soundOnReceive,
+  setSoundOnReceive,
+  soundOnNotification,
+  setSoundOnNotification,
+  handleSetBackground,
+  profilePhotoDialogOpen,
+  setProfilePhotoDialogOpen,
+  tempProfilePhoto,
+  setTempProfilePhoto,
+  clearTempAvatarObjectUrl,
+  profileCrop,
+  setProfileCrop,
+  profileZoom,
+  setProfileZoom,
+  setProfileCroppedAreaPixels,
+  handleAvatarFileSelection,
+  handleSaveCroppedPhoto,
+  createStatusOpen,
+  setCreateStatusOpen,
+  statusMediaPreview,
+  setStatusMediaPreview,
+  statusMediaType,
+  setStatusMediaType,
+  statusCaption,
+  setStatusCaption,
+  statusBlockedContacts,
+  setStatusBlockedContacts,
+  currentUser,
+  onPublishStatus,
+  myStatusesOpen,
+  setMyStatusesOpen,
+  statusList,
+  currentUserId,
+  setViewingUserStatuses,
+  setViewingStatusIndex,
+  setViewingStatus,
+  setStatusViewOpen,
+  setStatusList,
+  onStatusDeleted,
+  statusViewOpen,
+  viewingStatus,
+  viewingStatusIndex,
+  viewingUserStatuses,
+  showStatusDetails,
+  setShowStatusDetails,
+  onLikeSuccess,
+}: AppEmailDialogsSectionProps) {
+  return (
+    <>
+      <AppEmailEditMessageDialog
+        editMessageDialogOpen={editMessageDialogOpen}
+        setEditMessageDialogOpen={setEditMessageDialogOpen}
+        editMessageContent={editMessageContent}
+        setEditMessageContent={setEditMessageContent}
+        onSave={onSaveEditedMessage}
+      />
+
+      <AppEmailImagePreviewDialog
+        chatImagePreview={chatImagePreview}
+        setChatImagePreview={setChatImagePreview}
+        chatImageZoom={chatImageZoom}
+        setChatImageZoom={setChatImageZoom}
+        userId={userId}
+        setChatMessages={setChatMessages}
+        setPinnedMessages={setPinnedMessages}
+        updateChatMessage={updateChatMessage}
+      />
+
+      <AppEmailCreateGroupDialog
+        createGroupOpen={createGroupOpen}
+        setCreateGroupOpen={setCreateGroupOpen}
+        newGroupName={newGroupName}
+        setNewGroupName={setNewGroupName}
+        newGroupDescription={newGroupDescription}
+        setNewGroupDescription={setNewGroupDescription}
+        selectedMembers={selectedMembers}
+        setSelectedMembers={setSelectedMembers}
+        usersDirectory={usersDirectory}
+        user={user}
+        createConversationInDb={createConversationInDb}
+        setConversations={setConversations}
+        setSelectedConversation={setSelectedConversation}
+      />
+
+      <AppEmailIncomingCallDialog
+        incomingCall={incomingCall}
+        activeCall={activeCall}
+        callState={callState}
+        handleIncomingCallAction={handleIncomingCallAction}
+        setConferenceEnabled={setConferenceEnabled}
+        setHeldCall={setHeldCall}
+        setCallParticipants={setCallParticipants}
+        addNotification={addNotification}
+      />
+
+      <AppEmailActiveCallDialog
+        callDialogOpen={callDialogOpen}
+        setCallDialogOpen={setCallDialogOpen}
+        activeCall={activeCall}
+        setActiveCall={setActiveCall}
+        callState={callState}
+        setCallState={setCallState}
+        callTimer={callTimer}
+        setCallTimer={setCallTimer}
+        liveReactions={liveReactions}
+        setLiveReactions={setLiveReactions}
+        callParticipants={callParticipants}
+        setCallParticipants={setCallParticipants}
+        user={user}
+        setAddParticipantsOpen={setAddParticipantsOpen}
+        isCallMuted={isCallMuted}
+        setIsCallMuted={setIsCallMuted}
+        isCallSpeakerOn={isCallSpeakerOn}
+        setIsCallSpeakerOn={setIsCallSpeakerOn}
+        showCallReactionPicker={showCallReactionPicker}
+        setShowCallReactionPicker={setShowCallReactionPicker}
+        theme={theme}
+        isCompactEmojiLayout={isCompactEmojiLayout}
+        broadcastLiveReaction={broadcastLiveReaction}
+        callTimeoutRef={callTimeoutRef}
+      />
+
+      <AppEmailAddCallParticipantsDialog
+        addParticipantsOpen={addParticipantsOpen}
+        setAddParticipantsOpen={setAddParticipantsOpen}
+        usersDirectory={usersDirectory}
+        user={user}
+        callParticipants={callParticipants}
+        setCallParticipants={setCallParticipants}
+      />
+
+      <AppEmailNewConversationDialog
+        newConversationOpen={newConversationOpen}
+        setNewConversationOpen={setNewConversationOpen}
+        newConversationSearch={newConversationSearch}
+        setNewConversationSearch={setNewConversationSearch}
+        usersDirectory={usersDirectory}
+        user={user}
+        conversations={conversations}
+        userPresence={userPresence}
+        getShiftColor={getShiftColor}
+        setSelectedConversation={setSelectedConversation}
+        setConversations={setConversations}
+        resetConversationUnreadCount={resetConversationUnreadCount}
+        createConversationInDb={createConversationInDb}
+      />
+
+      <AppEmailChatSettingsDialog
+        backgroundSettingsOpen={backgroundSettingsOpen}
+        setBackgroundSettingsOpen={setBackgroundSettingsOpen}
+        soundEnabled={soundEnabled}
+        setSoundEnabled={setSoundEnabled}
+        soundOnSend={soundOnSend}
+        setSoundOnSend={setSoundOnSend}
+        soundOnReceive={soundOnReceive}
+        setSoundOnReceive={setSoundOnReceive}
+        soundOnNotification={soundOnNotification}
+        setSoundOnNotification={setSoundOnNotification}
+        handleSetBackground={handleSetBackground}
+      />
+
+      <AppEmailProfilePhotoCropDialog
+        profilePhotoDialogOpen={profilePhotoDialogOpen}
+        setProfilePhotoDialogOpen={setProfilePhotoDialogOpen}
+        tempProfilePhoto={tempProfilePhoto}
+        setTempProfilePhoto={setTempProfilePhoto}
+        clearTempAvatarObjectUrl={clearTempAvatarObjectUrl}
+        profileCrop={profileCrop}
+        setProfileCrop={setProfileCrop}
+        profileZoom={profileZoom}
+        setProfileZoom={setProfileZoom}
+        setProfileCroppedAreaPixels={setProfileCroppedAreaPixels}
+        handleAvatarFileSelection={handleAvatarFileSelection}
+        handleSaveCroppedPhoto={handleSaveCroppedPhoto}
+      />
+
+      <AppEmailCreateStatusDialog
+        createStatusOpen={createStatusOpen}
+        setCreateStatusOpen={setCreateStatusOpen}
+        statusMediaPreview={statusMediaPreview}
+        setStatusMediaPreview={setStatusMediaPreview}
+        statusMediaType={statusMediaType}
+        setStatusMediaType={setStatusMediaType}
+        statusCaption={statusCaption}
+        setStatusCaption={setStatusCaption}
+        statusBlockedContacts={statusBlockedContacts}
+        setStatusBlockedContacts={setStatusBlockedContacts}
+        usersDirectory={usersDirectory}
+        currentUser={currentUser}
+        onPublishStatus={onPublishStatus}
+      />
+
+      <AppEmailMyStatusesDialog<any>
+        myStatusesOpen={myStatusesOpen}
+        setMyStatusesOpen={setMyStatusesOpen}
+        statusList={statusList}
+        currentUserId={currentUserId}
+        setCreateStatusOpen={setCreateStatusOpen}
+        setViewingUserStatuses={setViewingUserStatuses}
+        setViewingStatusIndex={setViewingStatusIndex}
+        setViewingStatus={setViewingStatus}
+        setStatusViewOpen={setStatusViewOpen}
+        setStatusList={setStatusList}
+        onStatusDeleted={onStatusDeleted}
+      />
+
+      <AppEmailViewStatusDialog<any>
+        statusViewOpen={statusViewOpen}
+        setStatusViewOpen={setStatusViewOpen}
+        viewingStatus={viewingStatus}
+        setViewingStatus={setViewingStatus}
+        viewingStatusIndex={viewingStatusIndex}
+        setViewingStatusIndex={setViewingStatusIndex}
+        viewingUserStatuses={viewingUserStatuses}
+        setStatusList={setStatusList}
+        currentUser={user ? { id: user.id, name: user.name } : null}
+        showStatusDetails={showStatusDetails}
+        setShowStatusDetails={setShowStatusDetails}
+        onLikeSuccess={onLikeSuccess}
+      />
+    </>
+  );
+}

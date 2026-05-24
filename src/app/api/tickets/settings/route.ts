@@ -116,7 +116,10 @@ export async function PUT(req: NextRequest) {
         ...Object.fromEntries(
           Object.entries(rawSlaByCategory)
             .map(([key, value]) => [key, Math.max(1, Math.floor(Number(value) || 0))])
-            .filter(([, value]) => Number.isFinite(value) && value > 0)
+            .filter(([, value]) => {
+              const numericValue = Number(value);
+              return Number.isFinite(numericValue) && numericValue > 0;
+            })
         ),
       },
     };

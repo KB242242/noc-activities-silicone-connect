@@ -240,7 +240,7 @@ function MultiSelectMenu({ label, placeholder, options, selectedIds, onChange }:
             <Plus className="h-4 w-4 opacity-60" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent className="w-[360px] max-h-[300px] overflow-auto bg-white dark:bg-slate-800">
+        <DropdownMenuContent className="w-[360px] max-h-75 overflow-auto bg-white dark:bg-slate-800">
           {options.map((opt) => (
             <DropdownMenuCheckboxItem
               key={opt.id}
@@ -928,7 +928,7 @@ export function CreateTicketDialog({
                       <Plus className="h-4 w-4 opacity-60" />
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent className="w-[360px] max-h-[300px] overflow-auto bg-white dark:bg-slate-800">
+                  <DropdownMenuContent className="w-[360px] max-h-75 overflow-auto bg-white dark:bg-slate-800">
                     {localityOptions.map((loc) => {
                       const key = localityKey(loc);
                       const selected = form.localities.some((item) => localityKey(item) === key);

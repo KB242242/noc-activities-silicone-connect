@@ -597,7 +597,6 @@ export default function TicketDetail({
                           minHeight="180px"
                           enableTicketReferences
                           className="bg-white/70 dark:bg-slate-900/45 backdrop-blur-sm"
-                          disabled={!isEditor}
                         />
                       </div>
                       {isEditor && (

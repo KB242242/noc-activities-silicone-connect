@@ -56,7 +56,10 @@ async function loadTicketSettings(): Promise<TicketSettingsLite> {
         ? Object.fromEntries(
             Object.entries(parsed.slaByCategory)
               .map(([key, value]) => [key, Math.max(1, Math.floor(Number(value) || 0))])
-              .filter(([, value]) => Number.isFinite(value) && value > 0)
+              .filter(([, value]) => {
+                const numericValue = Number(value);
+                return Number.isFinite(numericValue) && numericValue > 0;
+              })
           )
         : {},
       trashRetentionDays: Number.isFinite(Number((parsed as any).trashRetentionDays))

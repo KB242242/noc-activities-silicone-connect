@@ -136,6 +136,7 @@ export interface NocTicket {
   durationDetailed?: string;
   resolutionDescription?: string;
   resolutionCause?: NocResolutionCause;
+  resolutionAuthorId?: string;
   outageStartTime?: Date;
   outageEndTime?: Date;
   isRecurring: boolean;

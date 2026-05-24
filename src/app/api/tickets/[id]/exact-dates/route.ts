@@ -377,6 +377,16 @@ export async function DELETE(
     const createdAt = String(tags.exactDatesCreatedAt ?? '').trim() || null;
 
 
+    const actor = deletedById
+      ? await (db as any).user.findUnique({
+          where: { id: deletedById },
+          select: { id: true, name: true, username: true },
+        }).catch(() => null)
+      : null;
+
+    const actorId = String((actor?.id ?? ticket.reporterId) || 'system');
+    const actorName = String(((actor?.name ?? actor?.username ?? deletedByNameRaw) || 'Utilisateur'));
+
     // On veut toujours créer un commentaire système pour la traçabilité, même si aucune date n'était présente
     let autoComment: string;
     if (!hadStart && !hadClose) {
@@ -391,16 +401,6 @@ export async function DELETE(
         hadClose,
       });
     }
-
-    const actor = deletedById
-      ? await (db as any).user.findUnique({
-          where: { id: deletedById },
-          select: { id: true, name: true, username: true },
-        }).catch(() => null)
-      : null;
-
-    const actorId = String((actor?.id ?? ticket.reporterId) || 'system');
-    const actorName = String(((actor?.name ?? actor?.username ?? deletedByNameRaw) || 'Utilisateur'));
 
     // Strip all exactDates fields from tags
     const {

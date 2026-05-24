@@ -449,7 +449,7 @@ export default function TicketManager({ userId, userName, userRole }: TicketMana
         return (
           <div className="space-y-4">
             {/* Comments list */}
-            <div className="space-y-3 max-h-[400px] overflow-y-auto ticket-scroll-container">
+            <div className="space-y-3 max-h-100 overflow-y-auto ticket-scroll-container">
               {selectedTicket.comments.length === 0 ? (
                 <div className="text-center py-8 bg-gray-100 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
                   <MessageCircle className="w-12 h-12 mx-auto mb-4 text-gray-400 dark:text-gray-500" />
@@ -647,7 +647,7 @@ export default function TicketManager({ userId, userName, userRole }: TicketMana
               </Badge>
             </div>
             
-            <div className="space-y-2 max-h-[300px] overflow-y-auto ticket-scroll-container">
+            <div className="space-y-2 max-h-75 overflow-y-auto ticket-scroll-container">
               {selectedTicket.timeEntries.length === 0 ? (
                 <div className="text-center py-8 bg-gray-100 dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-700">
                   <Clock className="w-12 h-12 mx-auto mb-4 text-gray-400 dark:text-gray-500" />
@@ -810,7 +810,7 @@ export default function TicketManager({ userId, userName, userRole }: TicketMana
               </Badge>
             </div>
             
-            <div className="space-y-2 max-h-[300px] overflow-y-auto ticket-scroll-container">
+            <div className="space-y-2 max-h-75 overflow-y-auto ticket-scroll-container">
               {selectedTicket.activities.length === 0 ? (
                 <div className="text-center py-8 bg-gray-100 dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-700">
                   <Activity className="w-12 h-12 mx-auto mb-4 text-gray-400 dark:text-gray-500" />
@@ -961,7 +961,7 @@ export default function TicketManager({ userId, userName, userRole }: TicketMana
         
       case 'historique':
         return (
-          <div className="space-y-2 max-h-[500px] overflow-y-auto ticket-scroll-container">
+          <div className="space-y-2 max-h-125 overflow-y-auto ticket-scroll-container">
             {selectedTicket.history.length === 0 ? (
               <div className="text-center py-8 bg-gray-100 dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-700">
                 <History className="w-12 h-12 mx-auto mb-4 text-gray-400 dark:text-gray-500" />
@@ -1317,10 +1317,10 @@ export default function TicketManager({ userId, userName, userRole }: TicketMana
                       </TableHead>
                       <TableHead className="font-bold text-gray-900 dark:text-white bg-gray-200 dark:bg-gray-700 min-w-[160px]">ID du Ticket</TableHead>
                       <TableHead className="font-bold text-gray-900 dark:text-white bg-gray-200 dark:bg-gray-700 min-w-[300px]">Objet</TableHead>
-                      <TableHead className="font-bold text-gray-900 dark:text-white bg-gray-200 dark:bg-gray-700 min-w-[150px]">Contact</TableHead>
-                      <TableHead className="font-bold text-gray-900 dark:text-white bg-gray-200 dark:bg-gray-700 min-w-[150px]">Compte</TableHead>
+                      <TableHead className="font-bold text-gray-900 dark:text-white bg-gray-200 dark:bg-gray-700 min-w-37.5">Contact</TableHead>
+                      <TableHead className="font-bold text-gray-900 dark:text-white bg-gray-200 dark:bg-gray-700 min-w-37.5">Compte</TableHead>
                       <TableHead className="font-bold text-gray-900 dark:text-white bg-gray-200 dark:bg-gray-700 min-w-[130px]">Fil récent</TableHead>
-                      <TableHead className="font-bold text-gray-900 dark:text-white bg-gray-200 dark:bg-gray-700 min-w-[140px]">Date échéance</TableHead>
+                      <TableHead className="font-bold text-gray-900 dark:text-white bg-gray-200 dark:bg-gray-700 min-w-35">Date échéance</TableHead>
                       <TableHead className="font-bold text-gray-900 dark:text-white bg-gray-200 dark:bg-gray-700 min-w-[120px]">État</TableHead>
                       <TableHead className="font-bold text-gray-900 dark:text-white bg-gray-200 dark:bg-gray-700 min-w-[160px]">Propriétaire</TableHead>
                       <TableHead className="font-bold text-gray-900 dark:text-white bg-gray-200 dark:bg-gray-700 min-w-[100px]">Canal</TableHead>
@@ -1362,7 +1362,7 @@ export default function TicketManager({ userId, userName, userRole }: TicketMana
                             </div>
                           </TableCell>
                           <TableCell className="text-gray-900 dark:text-white">
-                            <div className="max-w-[200px] truncate font-medium">{ticket.objet}</div>
+                            <div className="max-w-50 truncate font-medium">{ticket.objet}</div>
                           </TableCell>
                           <TableCell className="text-gray-700 dark:text-gray-300">{ticket.contactName || '-'}</TableCell>
                           <TableCell className="font-medium text-gray-900 dark:text-white">{ticket.accountName || ticket.lieu}</TableCell>
@@ -1895,7 +1895,7 @@ export default function TicketManager({ userId, userName, userRole }: TicketMana
               </DialogDescription>
             </DialogHeader>
             
-            <div className="space-y-2 max-h-[400px] overflow-y-auto ticket-scroll-container">
+            <div className="space-y-2 max-h-100 overflow-y-auto ticket-scroll-container">
               {trash.length === 0 ? (
                 <p className="text-center py-8 text-gray-600 dark:text-gray-400">Corbeille vide</p>
               ) : (
