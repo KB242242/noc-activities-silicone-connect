@@ -42,7 +42,7 @@ import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 
-import type { InternalMessage, UserProfile } from '@/features/app-shell/types';
+import type { InternalMessage, UserProfile } from '@/features/app-shell/core/shared/types';
 
 import { AppEmailComposeDialog } from '@/features/app-shell/components/email/dialogs/AppEmailComposeDialog';
 import { AppEmailMailboxSettingsDialog } from '@/features/app-shell/components/email/dialogs/AppEmailMailboxSettingsDialog';

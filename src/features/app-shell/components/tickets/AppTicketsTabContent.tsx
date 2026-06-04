@@ -1,10 +1,10 @@
 import type { ComponentProps } from 'react';
 
-import { AppTicketsActiveContent } from '@/features/app-shell/components/tickets/AppTicketsActiveContent';
-import { AppTicketsArchiveContent } from '@/features/app-shell/components/tickets/AppTicketsArchiveContent';
-import { AppTicketsHeader } from '@/features/app-shell/components/tickets/AppTicketsHeader';
-import { AppTicketsHeaderActions } from '@/features/app-shell/components/tickets/AppTicketsHeaderActions';
-import { AppTicketsLocalityDialog } from '@/features/app-shell/components/tickets/AppTicketsLocalityDialog';
+import { AppTicketsActiveContent } from '@/features/app-shell/components/tickets/content/AppTicketsActiveContent';
+import { AppTicketsArchiveContent } from '@/features/app-shell/components/tickets/content/AppTicketsArchiveContent';
+import { AppTicketsHeader } from '@/features/app-shell/components/tickets/layout/AppTicketsHeader';
+import { AppTicketsHeaderActions } from '@/features/app-shell/components/tickets/layout/AppTicketsHeaderActions';
+import { AppTicketsLocalityDialog } from '@/features/app-shell/components/tickets/dialogs/AppTicketsLocalityDialog';
 
 type HeaderActionsProps = Omit<ComponentProps<typeof AppTicketsHeaderActions>, 'localityDialogSlot'>;
 type LocalityDialogProps = ComponentProps<typeof AppTicketsLocalityDialog>;

@@ -1,16 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { resolveTicketManagerFromActorId } from '@/lib/tickets/permissions';
 
 const ATTACHMENT_COMMENT_PREFIX = '[ATTACHMENT_COMMENT:';
-
-function canDeleteAttachment(input: { requesterId?: string | null; requesterRole?: string | null; ownerId?: string | null }) {
-  const requesterId = String(input.requesterId ?? '').trim();
-  const ownerId = String(input.ownerId ?? '').trim();
-  const role = String(input.requesterRole ?? '').trim().toUpperCase();
-  if (!requesterId) return false;
-  if (requesterId === ownerId) return true;
-  return role === 'SUPER_ADMIN' || role === 'ADMIN' || role === 'RESPONSABLE';
-}
 
 export async function GET(
   req: NextRequest,
@@ -67,16 +59,30 @@ export async function DELETE(
     const { id, attachmentId } = await context.params;
     const body = await req.json().catch(() => ({}));
     const requesterId = String(body.requesterId ?? '').trim();
-    const requesterRole = String(body.requesterRole ?? '').trim();
+
+    const actor = requesterId
+      ? await (db as any).user.findUnique({
+          where: { id: requesterId },
+          select: { id: true, name: true, username: true, firstName: true },
+        }).catch(() => null)
+      : null;
+    const actorName = String(actor?.name ?? actor?.username ?? actor?.firstName ?? requesterId ?? 'Utilisateur').trim() || 'Utilisateur';
+
+    const actorAccess = await resolveTicketManagerFromActorId(db, requesterId);
+    if (!actorAccess.canManage) {
+      return NextResponse.json({ error: 'Acces refuse' }, { status: 403 });
+    }
 
     const current = await (db as any).ticketAttachment.findUnique({ where: { id: attachmentId } });
     if (!current || String(current.ticketId ?? '') !== id) {
       return NextResponse.json({ error: 'Piece jointe non trouvee' }, { status: 404 });
     }
 
-    if (!canDeleteAttachment({ requesterId, requesterRole, ownerId: current.uploadedBy })) {
-      return NextResponse.json({ error: 'Non autorise' }, { status: 403 });
-    }
+    const currentUploader = await (db as any).user.findUnique({
+      where: { id: String(current.uploadedBy ?? '') },
+      select: { id: true, name: true, username: true, firstName: true },
+    }).catch(() => null);
+    const uploaderName = String(currentUploader?.name ?? currentUploader?.username ?? currentUploader?.firstName ?? current.uploadedBy ?? 'Utilisateur').trim() || 'Utilisateur';
 
     await (db as any).ticketAttachment.delete({ where: { id: attachmentId } });
 
@@ -92,6 +98,28 @@ export async function DELETE(
     await (db as any).ticket.update({
       where: { id },
       data: { updatedAt: new Date() },
+    }).catch(() => null);
+
+    await (db as any).ticketHistory.create({
+      data: {
+        ticketId: id,
+        action: 'attachment_deleted',
+        field: 'attachment',
+        oldValue: JSON.stringify({
+          fileName: String(current.fileName ?? '').trim(),
+          fileType: String(current.fileType ?? '').trim(),
+          uploadedById: String(current.uploadedBy ?? ''),
+          uploadedByName: uploaderName,
+        }),
+        newValue: JSON.stringify({
+          fileName: String(current.fileName ?? '').trim(),
+          fileType: String(current.fileType ?? '').trim(),
+          deletedById: actor?.id ?? requesterId,
+          deletedByName: actorName,
+        }),
+        userId: actor?.id ?? requesterId,
+        userName: actorName,
+      },
     }).catch(() => null);
 
     return NextResponse.json({ success: true });

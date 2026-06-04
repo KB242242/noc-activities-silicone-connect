@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { canManageTicketEntities } from '@/lib/tickets/permissions';
 
 type LocalityOption = {
   id?: string;
@@ -149,6 +150,28 @@ async function ensureTicketLocalitiesTable() {
   await addColumnIfMissing(`ALTER TABLE noc_ticket_localities ADD COLUMN reference_note TEXT NULL AFTER address`);
 }
 
+async function hasTicketManagementAccess(body: Record<string, unknown>): Promise<boolean> {
+  const actorId = String(
+    body.requesterId
+    ?? body.actorId
+    ?? body.userId
+    ?? body.creatorId
+    ?? body.createdBy
+    ?? body.updatedById
+    ?? body.deletedBy
+    ?? ''
+  ).trim();
+
+  if (!actorId) return false;
+
+  const actor = await (db as any).user.findUnique({
+    where: { id: actorId },
+    select: { role: true },
+  }).catch(() => null);
+
+  return canManageTicketEntities(actor?.role);
+}
+
 export async function GET() {
   try {
     await ensureTicketLocalitiesTable();
@@ -251,6 +274,9 @@ export async function POST(req: Request) {
     await ensureTicketLocalitiesTable();
 
     const body = await req.json().catch(() => ({}));
+    if (!(await hasTicketManagementAccess(body as Record<string, unknown>))) {
+      return NextResponse.json({ error: 'Acces refuse' }, { status: 403 });
+    }
     const countryCode = toNullableCountryCode(body.countryCode);
     const countryName = toNullableFreeText(body.countryName); // preserve accents
     const departement = toNullableText(body.departement);
@@ -369,6 +395,9 @@ export async function PUT(req: Request) {
     await ensureTicketLocalitiesTable();
 
     const body = await req.json().catch(() => ({}));
+    if (!(await hasTicketManagementAccess(body as Record<string, unknown>))) {
+      return NextResponse.json({ error: 'Acces refuse' }, { status: 403 });
+    }
     const rawId = String(body.id ?? '').trim();
     if (!rawId) {
       return NextResponse.json({ error: 'Identifiant de localité requis.' }, { status: 400 });
@@ -489,6 +518,9 @@ export async function DELETE(req: Request) {
     await ensureTicketLocalitiesTable();
 
     const body = await req.json().catch(() => ({}));
+    if (!(await hasTicketManagementAccess(body as Record<string, unknown>))) {
+      return NextResponse.json({ error: 'Acces refuse' }, { status: 403 });
+    }
     const rawId = String(body.id ?? '').trim();
     if (!rawId) {
       return NextResponse.json({ error: 'Identifiant de localité requis.' }, { status: 400 });

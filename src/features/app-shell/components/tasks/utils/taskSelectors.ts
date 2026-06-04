@@ -1,4 +1,4 @@
-import { sortTasksByPriority } from '@/features/app-shell/task-utils';
+import { sortTasksByPriority } from '@/features/app-shell/core/tasks/task-utils';
 import { filterTasksForList, type TaskFilterValue } from '@/features/app-shell/components/tasks/utils/filterTasksForList';
 
 type SelectableTask = {

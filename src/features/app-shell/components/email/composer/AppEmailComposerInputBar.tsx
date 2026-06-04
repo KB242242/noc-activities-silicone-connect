@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import type { ChatMessageType } from '@/features/app-shell/types';
+import type { ChatMessageType } from '@/features/app-shell/core/shared/types';
 import { toast } from '@/lib/toast';
 
 type AttachmentPreview = {

@@ -31,7 +31,6 @@ Ce système offre une plateforme d'appel vidéo complète et robuste, comparable
    - Formatage et statistiques d'appel
 
 ### Modèles de données
-
 #### ScheduledMeeting (Réunions planifiées)
 ```
 - id: String (unique)

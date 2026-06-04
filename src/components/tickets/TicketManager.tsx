@@ -26,6 +26,14 @@ import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Calendar } from '@/components/ui/calendar';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 // Icons
@@ -211,6 +219,12 @@ export default function TicketManager({ userId, userName, userRole }: TicketMana
   const handleSelectTicket = (ticket: TicketType) => {
     selectTicket(ticket);
     setActiveTab('conversations');
+    setDetailDialogOpen(true);
+  };
+
+  const openTicketWithTab = (ticket: TicketType, tab: string) => {
+    selectTicket(ticket);
+    setActiveTab(tab);
     setDetailDialogOpen(true);
   };
   
@@ -1330,18 +1344,19 @@ export default function TicketManager({ userId, userName, userRole }: TicketMana
                   <TableBody>
                     <>
                       {filteredTickets.map(ticket => (
-                        <tr
-                          key={ticket.id}
-                          className={`
-                            cursor-pointer border-b border-gray-200 dark:border-gray-700
-                            hover:bg-cyan-50 dark:hover:bg-cyan-900/30
-                            ${selectedRows.includes(ticket.id) ? 'bg-cyan-100 dark:bg-cyan-900/40' : 'bg-white dark:bg-gray-800'}
-                            ${ticket.sla.isBreached && ticket.status !== 'ferme' ? 'bg-red-50 dark:bg-red-900/20' : ''}
-                          `}
-                          onClick={() => handleSelectTicket(ticket)}
-                          onMouseEnter={() => setHoveredRow(ticket.id)}
-                          onMouseLeave={() => setHoveredRow(null)}
-                        >
+                        <ContextMenu key={ticket.id}>
+                          <ContextMenuTrigger asChild>
+                            <tr
+                              className={`
+                                cursor-pointer border-b border-gray-200 dark:border-gray-700
+                                hover:bg-cyan-50 dark:hover:bg-cyan-900/30
+                                ${selectedRows.includes(ticket.id) ? 'bg-cyan-100 dark:bg-cyan-900/40' : 'bg-white dark:bg-gray-800'}
+                                ${ticket.sla.isBreached && ticket.status !== 'ferme' ? 'bg-red-50 dark:bg-red-900/20' : ''}
+                              `}
+                              onClick={() => handleSelectTicket(ticket)}
+                              onMouseEnter={() => setHoveredRow(ticket.id)}
+                              onMouseLeave={() => setHoveredRow(null)}
+                            >
                           <TableCell onClick={(e) => e.stopPropagation()}>
                             <Checkbox 
                               checked={selectedRows.includes(ticket.id)}
@@ -1454,7 +1469,26 @@ export default function TicketManager({ userId, userName, userRole }: TicketMana
                               )}
                             </div>
                           </TableCell>
-                        </tr>
+                            </tr>
+                          </ContextMenuTrigger>
+                          <ContextMenuContent className="w-56">
+                            <ContextMenuLabel>{ticket.ticketNumber}</ContextMenuLabel>
+                            <ContextMenuItem onClick={() => openTicketWithTab(ticket, 'conversations')}>
+                              Ouvrir le ticket
+                            </ContextMenuItem>
+                            <ContextMenuSeparator />
+                            <ContextMenuLabel>Activités</ContextMenuLabel>
+                            <ContextMenuItem onClick={() => openTicketWithTab(ticket, 'activity')}>
+                              Aller à Activités
+                            </ContextMenuItem>
+                            <ContextMenuItem onClick={() => openTicketWithTab(ticket, 'history')}>
+                              Aller à Historique
+                            </ContextMenuItem>
+                            <ContextMenuItem onClick={() => openTicketWithTab(ticket, 'conversations')}>
+                              Ajouter un commentaire
+                            </ContextMenuItem>
+                          </ContextMenuContent>
+                        </ContextMenu>
                       ))}
                     </>
                     

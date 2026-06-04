@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { mapTicket } from '@/lib/tickets/mapTicket';
-import { sendTicketLifecycleEmail } from '@/lib/tickets/emailNotifications';
+import { buildTicketMessageContent, sendTicketLifecycleEmail } from '@/lib/tickets/emailNotifications';
+import { canManageTicketEntities } from '@/lib/tickets/permissions';
 import { extractTechnicianIds, validateTechnicianWeeklyCapacity } from '@/lib/tickets/technicianCapacity';
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -27,6 +28,15 @@ type TicketSettingsLite = {
   numberFormat: string;
   numberSeed: number;
   notificationEmails: string[];
+  supportCopyEmail?: string;
+  technicianFallbackEmail?: string;
+  lifecycleEmailEvents?: {
+    creation?: boolean;
+    pending?: boolean;
+    escalated?: boolean;
+    closed?: boolean;
+  };
+  sendClientCopyForIncidentMaintenance?: boolean;
   defaultSlaHours?: number;
   slaByCategory?: Record<string, number>;
   trashRetentionDays?: number;
@@ -34,6 +44,8 @@ type TicketSettingsLite = {
 
 const TICKET_SETTINGS_FILE = path.join(process.cwd(), 'data', 'ticket_settings.json');
 const DEFAULT_DUE_DAYS = 3;
+const LIST_MAINTENANCE_MIN_INTERVAL_MS = 5 * 60 * 1000;
+let lastListMaintenanceRunAt = 0;
 
 async function loadTicketSettings(): Promise<TicketSettingsLite> {
   try {
@@ -48,7 +60,20 @@ async function loadTicketSettings(): Promise<TicketSettingsLite> {
         : 100000000,
       notificationEmails: Array.isArray(parsed.notificationEmails)
         ? parsed.notificationEmails.map((item) => String(item).trim()).filter(Boolean)
-        : ['ange.bata@siliconeconnect.com'],
+        : ['kevinebauer7@gmail.com'],
+      supportCopyEmail: typeof parsed.supportCopyEmail === 'string' && parsed.supportCopyEmail.trim()
+        ? parsed.supportCopyEmail.trim()
+        : 'support@siliconeconnect.com',
+      technicianFallbackEmail: typeof parsed.technicianFallbackEmail === 'string' && parsed.technicianFallbackEmail.trim()
+        ? parsed.technicianFallbackEmail.trim()
+        : 'kevinebauer7@gmail.com',
+      lifecycleEmailEvents: {
+        creation: Boolean((parsed as any)?.lifecycleEmailEvents?.creation ?? true),
+        pending: Boolean((parsed as any)?.lifecycleEmailEvents?.pending ?? true),
+        escalated: Boolean((parsed as any)?.lifecycleEmailEvents?.escalated ?? true),
+        closed: Boolean((parsed as any)?.lifecycleEmailEvents?.closed ?? true),
+      },
+      sendClientCopyForIncidentMaintenance: Boolean((parsed as any)?.sendClientCopyForIncidentMaintenance ?? false),
       defaultSlaHours: Number.isFinite(Number(parsed.defaultSlaHours))
         ? Math.max(1, Math.floor(Number(parsed.defaultSlaHours)))
         : 24,
@@ -70,7 +95,16 @@ async function loadTicketSettings(): Promise<TicketSettingsLite> {
     return {
       numberFormat: '#SC{date}-{seq}',
       numberSeed: 100000000,
-      notificationEmails: ['ange.bata@siliconeconnect.com'],
+      notificationEmails: ['kevinebauer7@gmail.com'],
+      supportCopyEmail: 'support@siliconeconnect.com',
+      technicianFallbackEmail: 'kevinebauer7@gmail.com',
+      lifecycleEmailEvents: {
+        creation: true,
+        pending: true,
+        escalated: true,
+        closed: true,
+      },
+      sendClientCopyForIncidentMaintenance: false,
       defaultSlaHours: 24,
       slaByCategory: {},
       trashRetentionDays: 30,
@@ -226,6 +260,23 @@ async function purgeExpiredDeletedTickets(retentionDays: number) {
   }
 }
 
+function triggerListMaintenanceInBackground() {
+  const now = Date.now();
+  if (now - lastListMaintenanceRunAt < LIST_MAINTENANCE_MIN_INTERVAL_MS) {
+    return;
+  }
+  lastListMaintenanceRunAt = now;
+
+  void (async () => {
+    try {
+      const settings = await loadTicketSettings();
+      await purgeExpiredDeletedTickets(settings.trashRetentionDays ?? 30);
+    } catch (err) {
+      console.error('[tickets/list GET] background maintenance failed', err);
+    }
+  })();
+}
+
 function buildTicketNumero(date: Date, type?: string, settings?: TicketSettingsLite) {
   const dd = String(date.getDate()).padStart(2, '0');
   const mm = String(date.getMonth() + 1).padStart(2, '0');
@@ -244,6 +295,79 @@ function buildTicketNumero(date: Date, type?: string, settings?: TicketSettingsL
     seed,
     type,
   };
+}
+
+function uniqueEmails(values: string[]) {
+  return Array.from(new Set(values.map((value) => String(value ?? '').trim().toLowerCase()).filter(Boolean)));
+}
+
+function buildAssignationSubject(ticketNumber: string, objet: string) {
+  return `${ticketNumber} INTERVENTION - ${String(objet ?? '').trim().toUpperCase()}`;
+}
+
+function buildAssignationHtml(input: {
+  recipientName: string;
+  creatorName: string;
+  ticketId: string;
+  ticketObject: string;
+  assignedTechnicians: string[];
+  locality: string;
+  status: string;
+  othersCount: number;
+}) {
+  const othersText = input.othersCount > 0 ? ` avec ${input.othersCount} autres techniciens` : '';
+  return `
+    <div style="font-family: Arial, sans-serif; color: #0f172a; line-height: 1.5;">
+      <p>Bonjour ${input.recipientName},</p>
+      <p>Vous avez ete assigne${othersText} au ticket "${input.ticketId}" - "${input.ticketObject}".</p>
+      <p>Les autres techniciens selectionnes recoivent aussi une notification personnalisee.</p>
+      <p>A chaque changement du ticket, vous recevrez les notifications directement depuis votre boite mail.</p>
+      <p><strong>Detail du ticket</strong></p>
+      <p style="margin: 0;">Techniciens assignes : ${input.assignedTechnicians.join(', ') || 'Non assigne'}</p>
+      <p style="margin: 0;">Localite : ${input.locality || 'Non precisee'}</p>
+      <p style="margin: 0;">Statut : ${input.status}</p>
+      <p style="margin-top: 12px;">Cordialement,<br/>${input.creatorName}</p>
+    </div>
+  `;
+}
+
+function buildIncidentClientTableHtml(input: {
+  ticketNumber: string;
+  objet: string;
+  owner: string;
+  priority: string;
+  status: string;
+  startDate?: string;
+  endDate?: string;
+  rootCause?: string;
+  siteA?: string;
+  siteB?: string;
+}) {
+  return `
+    <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.5;">
+      <p>Dear Client,</p>
+      <h3 style="margin-bottom: 8px;">Incident Information</h3>
+      <table style="border-collapse: collapse; width: 100%; margin-bottom: 12px;"><tbody>
+        <tr><td style="border: 1px solid #d1d5db; padding: 8px; width: 45%;"><strong>Entity Name</strong></td><td style="border: 1px solid #d1d5db; padding: 8px;">Silicone Connect</td></tr>
+        <tr><td style="border: 1px solid #d1d5db; padding: 8px;"><strong>Ticket Number</strong></td><td style="border: 1px solid #d1d5db; padding: 8px;">${input.ticketNumber}</td></tr>
+        <tr><td style="border: 1px solid #d1d5db; padding: 8px;"><strong>Incident Start Date/Time (UTC)</strong></td><td style="border: 1px solid #d1d5db; padding: 8px;">${input.startDate || 'N/A'}</td></tr>
+        <tr><td style="border: 1px solid #d1d5db; padding: 8px;"><strong>Incident End Date/Time</strong></td><td style="border: 1px solid #d1d5db; padding: 8px;">${input.endDate || 'N/A'}</td></tr>
+        <tr><td style="border: 1px solid #d1d5db; padding: 8px;"><strong>Incident Owner</strong></td><td style="border: 1px solid #d1d5db; padding: 8px;">${input.owner || 'N/A'}</td></tr>
+        <tr><td style="border: 1px solid #d1d5db; padding: 8px;"><strong>Priority Level</strong></td><td style="border: 1px solid #d1d5db; padding: 8px;">${input.priority || 'N/A'}</td></tr>
+        <tr><td style="border: 1px solid #d1d5db; padding: 8px;"><strong>Root Cause</strong></td><td style="border: 1px solid #d1d5db; padding: 8px;">${input.rootCause || 'Under analysis'}</td></tr>
+        <tr><td style="border: 1px solid #d1d5db; padding: 8px;"><strong>Case Status</strong></td><td style="border: 1px solid #d1d5db; padding: 8px;">${input.status || 'OPEN'}</td></tr>
+      </tbody></table>
+
+      <h3 style="margin-bottom: 8px;">Service Information</h3>
+      <table style="border-collapse: collapse; width: 100%;"><tbody>
+        <tr><td style="border: 1px solid #d1d5db; padding: 8px; width: 45%;"><strong>Service ID</strong></td><td style="border: 1px solid #d1d5db; padding: 8px;">${input.ticketNumber}</td></tr>
+        <tr><td style="border: 1px solid #d1d5db; padding: 8px;"><strong>Capacity</strong></td><td style="border: 1px solid #d1d5db; padding: 8px;">N/A</td></tr>
+        <tr><td style="border: 1px solid #d1d5db; padding: 8px;"><strong>A-End</strong></td><td style="border: 1px solid #d1d5db; padding: 8px;">${input.siteA || 'N/A'}</td></tr>
+        <tr><td style="border: 1px solid #d1d5db; padding: 8px;"><strong>B-End</strong></td><td style="border: 1px solid #d1d5db; padding: 8px;">${input.siteB || 'N/A'}</td></tr>
+        <tr><td style="border: 1px solid #d1d5db; padding: 8px;"><strong>Impact</strong></td><td style="border: 1px solid #d1d5db; padding: 8px;">${input.objet}</td></tr>
+      </tbody></table>
+    </div>
+  `;
 }
 
 async function getNextTicketSequence(counterPrefix: string, year: number, seed: number): Promise<number> {
@@ -279,8 +403,8 @@ export async function GET(req: NextRequest) {
     const dateFrom = searchParams.get('dateFrom');
     const dateTo = searchParams.get('dateTo');
 
-    const settings = await loadTicketSettings();
-    await purgeExpiredDeletedTickets(settings.trashRetentionDays ?? 30);
+    // Maintenance (purge/notifications) is intentionally async so list rendering stays fast.
+    triggerListMaintenanceInBackground();
 
     const where: Record<string, unknown> = { isDeleted: isTrash };
 
@@ -313,8 +437,40 @@ export async function GET(req: NextRequest) {
       where,
       orderBy: { createdAt: 'desc' },
       include: {
-        attachments: true,
-        comments: { take: 3, orderBy: { createdAt: 'desc' } },
+        attachments: {
+          select: {
+            id: true,
+            ticketId: true,
+            fileName: true,
+            fileType: true,
+            fileSize: true,
+            uploadedBy: true,
+            uploadedAt: true,
+            user: {
+              select: {
+                id: true,
+                name: true,
+                username: true,
+                firstName: true,
+              },
+            },
+          },
+        },
+        comments: {
+          take: 3,
+          orderBy: { createdAt: 'desc' },
+          include: {
+            user: {
+              select: {
+                id: true,
+                username: true,
+                firstName: true,
+                name: true,
+                avatar: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -350,6 +506,7 @@ export async function POST(req: NextRequest) {
       categoryKey,
       maintenanceMode,
       incidentLevel,
+      sendCopyToClient,
       attachments,
     } = body;
 
@@ -361,6 +518,14 @@ export async function POST(req: NextRequest) {
 
     if (!creatorId || !creatorName) {
       return NextResponse.json({ error: 'Utilisateur createur requis' }, { status: 400 });
+    }
+
+    const creator = await (db as any).user.findUnique({
+      where: { id: String(creatorId) },
+      select: { role: true },
+    }).catch(() => null);
+    if (!canManageTicketEntities(creator?.role)) {
+      return NextResponse.json({ error: 'Acces refuse' }, { status: 403 });
     }
 
     const settings = await loadTicketSettings();
@@ -528,6 +693,23 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const resolvedChannel = String(channel ?? body?.channel ?? '').trim() || 'Non précisé';
+    const resolvedStatus = String(incomingStatus ?? 'OPEN');
+    const statusLabelMap: Record<string, string> = {
+      OPEN: 'Ouvert', PENDING: 'En attente', ESCALATED: 'Escaladé',
+      RESOLVED: 'Résolu', CLOSED: 'Fermé',
+    };
+    const statusLabel = statusLabelMap[resolvedStatus] ?? resolvedStatus;
+    const clientNamesStr = clientPayload.length > 0
+      ? clientPayload.map((c) => c.name).join(', ')
+      : 'Aucun';
+    const techNamesStr = technicianPayload.length > 0
+      ? technicianPayload.map((t) => t.name).join(', ')
+      : 'Non assigné';
+    const ownerName = ownerTechnicianName ?? technicianPayload[0]?.name ?? 'Non assigné';
+    const resolvedCategoryLabel = String(categoryLabel ?? type ?? '').trim() || 'Incident';
+    const descriptionText = String(description ?? '').trim().slice(0, 500) || 'Aucune description';
+
     await (db as any).ticketHistory.create({
       data: {
         ticketId: ticket.id,
@@ -538,22 +720,157 @@ export async function POST(req: NextRequest) {
         oldValue: null,
         newValue: JSON.stringify({
           numero,
-          categoryLabel,
+          categoryLabel: resolvedCategoryLabel,
           type,
-          ownerTechnicianName: ownerTechnicianName ?? technicianPayload[0]?.name ?? null,
+          ownerTechnicianName: ownerName,
+          // Enriched creation snapshot displayed in history
+          _creationSnapshot: true,
+          service: 'SILICONE CONNECT',
+          objet: String(objet ?? '').trim(),
+          description: descriptionText,
+          status: statusLabel,
+          canal: resolvedChannel,
+          clients: clientNamesStr,
+          techniciens: techNamesStr,
+          localites: allLocalities.length > 0 ? allLocalities.join(', ') : 'Non précisé',
+          sites: siteNames.length > 0 ? siteNames.join(', ') : null,
+          createdAt: now.toISOString(),
         }),
       },
     }).catch(() => null);
 
-    for (const receiver of settings.notificationEmails) {
-      void sendTicketLifecycleEmail({
-        action: 'created',
-        ticketNumber: numero,
-        subject: objet,
-        status: status ?? 'OPEN',
-        creatorName,
-        receiver,
-      });
+    const lifecycleCreationEnabled = settings.lifecycleEmailEvents?.creation !== false;
+    const hasExactTicketDateAtCreation = Boolean(dueDate);
+    const supportCopyEmail = String(settings.supportCopyEmail ?? '').trim();
+    const fallbackTechEmail = String(settings.technicianFallbackEmail ?? '').trim();
+    const adminNotificationRecipients = uniqueEmails(settings.notificationEmails ?? []);
+    const nocMailbox = 'noc@siliconeconnect.com';
+    const nocFromAddress = 'NOC Silicone Connect <noc@siliconeconnect.com>';
+
+    if (lifecycleCreationEnabled && !hasExactTicketDateAtCreation) {
+      const assignedTechNames = technicianPayload.map((tech) => tech.name).filter(Boolean);
+      const assignedLocality = allLocalities[0] ?? '';
+      const ticketNumber = numero.startsWith('#') ? numero : `#${numero}`;
+      const assignationSubject = buildAssignationSubject(ticketNumber, objet);
+      const actionAt = new Date();
+      const currentTicketDescription = String(description ?? '').trim() || 'Aucune description';
+
+      const selectedTechEmailById = new Map(
+        selectedTechnicians.map((tech: { id: string; email: string | null }) => [
+          String(tech.id ?? '').trim(),
+          String(tech.email ?? '').trim().toLowerCase(),
+        ])
+      );
+
+      // Always build recipients from assigned technicians so each assignee gets a personalized notification.
+      // If a technician has no email, we route the notification to the NOC fallback mailbox.
+      const techRecipients = technicianPayload
+        .map((tech) => {
+          const normalizedId = String(tech.id ?? '').trim();
+          const directEmail = selectedTechEmailById.get(normalizedId) ?? '';
+          return {
+            email: directEmail,
+            name: String(tech.name ?? '').trim() || 'Technicien',
+            hasDirectEmail: Boolean(directEmail),
+          };
+        })
+        .filter((entry) => Boolean(entry.email));
+
+      for (const techRecipient of techRecipients) {
+        const { html, text } = buildTicketMessageContent({
+          greeting: `Bonjour ${techRecipient.name},`,
+          intro: 'Vous avez ete assigne(e) a un ticket voici le detail,',
+          ticketNumber,
+          subject: String(objet ?? '').trim(),
+          description: currentTicketDescription,
+          assignedTechnician: assignedTechNames.join(', ') || techRecipient.name,
+          locality: assignedLocality || 'Non precisee',
+          status: 'Ouvert',
+          addTechnicianSignature: true,
+        });
+        void sendTicketLifecycleEmail({
+          action: 'created',
+          ticketNumber,
+          subject: objet,
+          status: 'Ouvert',
+          creatorName,
+          actionBy: creatorName,
+          actionAt,
+          receiver: techRecipient.email,
+          fromOverride: nocFromAddress,
+          subjectOverride: assignationSubject,
+          htmlBody: html,
+          textBody: text,
+        });
+      }
+
+      const adminRecipients = uniqueEmails([nocMailbox, ...adminNotificationRecipients, fallbackTechEmail]);
+      if (adminRecipients.length > 0) {
+        const { html, text } = buildTicketMessageContent({
+          greeting: 'NOC SILICONE CONNECT,\nBonjour !,',
+          intro: 'Un ticket a ete cree voici le detail:',
+          ticketNumber,
+          subject: String(objet ?? '').trim(),
+          description: currentTicketDescription,
+          assignedTechnician: assignedTechNames.join(', ') || 'Non assigne',
+          locality: assignedLocality || 'Non precisee',
+          status: 'Ouvert',
+          footer: `Le ticket est passe de Aucun a Ouvert initier par ${creatorName}.`,
+        });
+        void sendTicketLifecycleEmail({
+          action: 'created',
+          ticketNumber,
+          subject: objet,
+          status: 'Ouvert',
+          creatorName,
+          actionBy: creatorName,
+          actionAt,
+          receiver: adminRecipients.join(', '),
+          cc: supportCopyEmail,
+          fromOverride: nocFromAddress,
+          subjectOverride: `[COPIE ASSIGNATION] ${assignationSubject}`,
+          htmlBody: html,
+          textBody: text,
+        });
+      }
+
+      const typeUpper = String(type ?? '').trim().toUpperCase();
+      const categoryKeyLower = String(categoryKey ?? '').trim().toLowerCase();
+      const isIncidentOrMaintenance = typeUpper === 'INC'
+        || typeUpper === 'MC'
+        || categoryKeyLower === 'incident'
+        || categoryKeyLower === 'maintenance';
+      const allowClientCopy = settings.sendClientCopyForIncidentMaintenance === true;
+      const shouldSendClientCopy = allowClientCopy && isIncidentOrMaintenance && Boolean(sendCopyToClient);
+      const clientReceiver = String(contactEmail ?? '').trim().toLowerCase();
+
+      if (shouldSendClientCopy && clientReceiver) {
+        const sitesForClient = siteNames.length > 0 ? siteNames : ['N/A'];
+        void sendTicketLifecycleEmail({
+          action: 'created',
+          ticketNumber,
+          subject: `Incident Information - ${ticketNumber}`,
+          status: 'OPEN',
+          creatorName,
+          actionBy: creatorName,
+          actionAt,
+          receiver: clientReceiver,
+          cc: supportCopyEmail,
+          subjectOverride: `Incident Information - ${ticketNumber}`,
+          htmlBody: buildIncidentClientTableHtml({
+            ticketNumber,
+            objet: String(objet ?? '').trim() || 'N/A',
+            owner: ownerName,
+            priority: String(priority ?? 'MEDIUM'),
+            status: 'OPEN',
+            startDate: String(startDate ?? eta ?? ''),
+            endDate: String(endDate ?? etr ?? ''),
+            rootCause: String(resolutionCause ?? '').trim(),
+            siteA: sitesForClient[0],
+            siteB: sitesForClient[1] ?? 'N/A',
+          }),
+        });
+      }
     }
 
     const created = await (db as any).ticket.findUnique({

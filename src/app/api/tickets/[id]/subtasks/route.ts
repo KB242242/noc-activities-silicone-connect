@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { resolveTicketManagerFromActorId } from '@/lib/tickets/permissions';
 
 export async function POST(
   req: NextRequest,
@@ -23,6 +24,14 @@ export async function POST(
     } = await req.json();
     if (!description?.trim()) {
       return NextResponse.json({ error: 'Description requise' }, { status: 400 });
+    }
+    if (!creatorId) {
+      return NextResponse.json({ error: 'Utilisateur requis' }, { status: 400 });
+    }
+
+    const actorAccess = await resolveTicketManagerFromActorId(db, creatorId);
+    if (!actorAccess.canManage) {
+      return NextResponse.json({ error: 'Acces refuse' }, { status: 403 });
     }
 
     const normalizedReferences = Array.isArray(referenceTicketIds)

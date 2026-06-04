@@ -2,7 +2,7 @@ import type { Dispatch, SetStateAction } from 'react';
 import { File, Reply, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import type { ChatMessage } from '@/features/app-shell/types';
+import type { ChatMessage } from '@/features/app-shell/core/shared/types';
 
 type AttachmentPreview = {
   file: File | null;

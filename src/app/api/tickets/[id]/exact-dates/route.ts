@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { mapTicket } from '@/lib/tickets/mapTicket';
+import { resolveTicketManagerFromActorId } from '@/lib/tickets/permissions';
 
 function parseDateInput(value: unknown): Date | null {
   const raw = String(value ?? '').trim();
@@ -20,6 +21,133 @@ const SYSTEM_COMMENT_PREFIX = '🤖 Système';
 
 function buildSystemCommentUserName(actorName: string) {
   return `${SYSTEM_COMMENT_PREFIX} — ${actorName}`;
+}
+
+function formatTicketStatusLabel(status: unknown) {
+  switch (String(status ?? '').trim().toUpperCase()) {
+    case 'OPEN': return 'Ouvert';
+    case 'IN_PROGRESS': return 'En cours';
+    case 'PENDING': return 'En attente';
+    case 'ESCALATED': return 'Escalade';
+    case 'RESOLVED': return 'Resolue';
+    case 'CLOSED': return 'Ferme';
+    case 'TRASHED': return 'Corbeille';
+    default: return String(status ?? 'Ouvert').trim() || 'Ouvert';
+  }
+}
+
+function formatCategoryLabel(value: unknown) {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (!normalized) return 'Aucun';
+  if (normalized === 'incident' || normalized === 'inc') return 'Incident';
+  if (normalized === 'deployment') return 'Deploiement';
+  if (normalized === 'supervision' || normalized === 'su') return 'Supervision';
+  if (normalized === 'ravitaillement') return 'Ravitaillement';
+  if (normalized === 'client_complaint' || normalized === 'pc') return 'Plainte Client';
+  if (normalized === 'routine_visit') return 'Visite de Routine';
+  if (normalized === 'security') return 'Securite';
+  if (normalized === 'maintenance') return 'Maintenance';
+  if (normalized === 'survey') return 'Survey';
+  return normalized;
+}
+
+function formatPriorityLabel(value: unknown) {
+  const normalized = String(value ?? '').trim().toUpperCase();
+  if (normalized === 'LOW') return 'Faible';
+  if (normalized === 'MEDIUM') return 'Moyenne';
+  if (normalized === 'HIGH') return 'Haute';
+  if (normalized === 'CRITICAL') return 'Critique';
+  return String(value ?? '').trim() || 'Aucun';
+}
+
+function formatOptionalTicketDate(value: unknown) {
+  if (!value) return 'Aucun';
+  const parsed = new Date(String(value));
+  if (Number.isNaN(parsed.getTime())) return String(value);
+  return parsed.toLocaleString('fr-FR');
+}
+
+function buildExactDateSummary(exactStartAt: unknown, exactClosedAt: unknown) {
+  const start = exactStartAt ? formatOptionalTicketDate(exactStartAt) : '';
+  const closed = exactClosedAt ? formatOptionalTicketDate(exactClosedAt) : '';
+  if (start && closed) return `Debut: ${start} | Fermeture: ${closed}`;
+  if (start) return `Debut: ${start}`;
+  if (closed) return `Fermeture: ${closed}`;
+  return '';
+}
+
+function resolvePrimarySite(tags: Record<string, unknown>, fallbackSite: unknown) {
+  const siteNames = Array.isArray(tags.siteNames) ? tags.siteNames : [];
+  const firstFromTags = String(siteNames[0] ?? '').trim();
+  if (firstFromTags) return firstFromTags;
+  return String(fallbackSite ?? '').split(',').map((part) => part.trim()).filter(Boolean)[0] ?? '';
+}
+
+function resolvePrimaryLocality(tags: Record<string, unknown>, fallbackLocalite: unknown) {
+  const localities = Array.isArray(tags.localities) ? tags.localities : [];
+  const firstFromTags = String(localities[0] ?? '').trim();
+  if (firstFromTags) return firstFromTags;
+  return String(fallbackLocalite ?? '').split(',').map((part) => part.trim()).filter(Boolean)[0] ?? '';
+}
+
+function resolveOwnerTechnicianName(tags: Record<string, unknown>, fallbackOwner: unknown) {
+  const explicitName = String(tags.ownerTechnicianName ?? '').trim();
+  if (explicitName) return explicitName;
+  const ownerId = String(tags.ownerTechnicianId ?? '').trim();
+  const technicianNames = Array.isArray(tags.technicianNames) ? tags.technicianNames : [];
+  const matchedById = technicianNames.find((entry: any) => String(entry?.id ?? '').trim() === ownerId);
+  const matchedName = String(matchedById?.name ?? '').trim();
+  if (matchedName) return matchedName;
+  const firstName = String((technicianNames[0] as any)?.name ?? '').trim();
+  if (firstName) return firstName;
+  return String(fallbackOwner ?? '').split(',').map((part) => part.trim()).filter(Boolean)[0] ?? 'Aucun';
+}
+
+function isTicketStateSyncCommentContent(content: unknown) {
+  const raw = String(content ?? '');
+  return /Date d\s*echeance du ticket\s*:/i.test(raw)
+    && /Responsable Ticket\s*:/i.test(raw)
+    && /Priorit[eé]\s*:/i.test(raw);
+}
+
+function buildTicketStateSyncComment(input: {
+  status: unknown;
+  dueDate: unknown;
+  eta: unknown;
+  etr: unknown;
+  ownerTechnicianName: unknown;
+  priority: unknown;
+  category: unknown;
+  classification: unknown;
+  channel: unknown;
+  exactStartAt: unknown;
+  exactClosedAt: unknown;
+  site: unknown;
+  localite: unknown;
+}) {
+  const lines = [
+    `Statut du ticket: ${formatTicketStatusLabel(input.status)}`,
+    `Date d echeance du ticket: ${formatOptionalTicketDate(input.dueDate)}`,
+    `ETR: ${formatOptionalTicketDate(input.etr)}`,
+    `Responsable Ticket: ${String(input.ownerTechnicianName ?? '').trim() || 'Aucun'}`,
+    `Priorité : ${formatPriorityLabel(input.priority)}`,
+    `Categorie: ${formatCategoryLabel(input.category)}`,
+    `Classification: ${String(input.classification ?? '').trim() || 'Aucune'}`,
+    `Canal utilise: ${String(input.channel ?? '').trim() || 'Aucun'}`,
+    `Site: ${String(input.site ?? '').trim() || 'Aucun'}`,
+    `Localite: ${String(input.localite ?? '').trim() || 'Aucune'}`,
+  ];
+
+  if (String(input.eta ?? '').trim()) {
+    lines.splice(2, 0, `ETA: ${formatOptionalTicketDate(input.eta)}`);
+  }
+
+  const exactDateLabel = buildExactDateSummary(input.exactStartAt, input.exactClosedAt);
+  if (exactDateLabel) {
+    lines.splice(lines.length - 2, 0, `Date exacte du ticket: ${exactDateLabel}`);
+  }
+
+  return lines.join('\n');
 }
 
 /** Picks a random phrase variant to avoid robotic/copy-paste look. */
@@ -166,6 +294,15 @@ export async function POST(
     const updatedByNameRaw = String(body.updatedByName ?? '').trim();
     const closeTicket = Boolean(body.closeTicket);
 
+    if (!updatedById) {
+      return NextResponse.json({ error: 'Utilisateur requis' }, { status: 400 });
+    }
+
+    const actorAccess = await resolveTicketManagerFromActorId(db, updatedById);
+    if (!actorAccess.canManage) {
+      return NextResponse.json({ error: 'Acces refuse' }, { status: 403 });
+    }
+
     const exactStartInput = parseDateInput(body.exactStartAt);
     const exactCloseInput = parseDateInput(body.exactClosedAt);
 
@@ -285,6 +422,73 @@ export async function POST(
       },
     });
 
+    const syncCommentContent = buildTicketStateSyncComment({
+      status: updatedTicket.status,
+      dueDate: updatedTicket.dueDate,
+      eta: updatedTags.eta,
+      etr: updatedTags.etr,
+      ownerTechnicianName: resolveOwnerTechnicianName(updatedTags as Record<string, unknown>, updatedTicket.technicien),
+      priority: updatedTicket.priority,
+      category: updatedTags.category,
+      classification: updatedTags.classification,
+      channel: updatedTags.channel,
+      exactStartAt: updatedTags.exactStartAt,
+      exactClosedAt: updatedTags.exactClosedAt,
+      site: resolvePrimarySite(updatedTags as Record<string, unknown>, updatedTicket.site),
+      localite: resolvePrimaryLocality(updatedTags as Record<string, unknown>, updatedTicket.localite),
+    });
+
+    const existingSystemComments = await (db as any).ticketComment.findMany({
+      where: {
+        ticketId: id,
+        userName: {
+          startsWith: SYSTEM_COMMENT_PREFIX,
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        content: true,
+      },
+    }).catch(() => []);
+
+    const existingSyncComments = Array.isArray(existingSystemComments)
+      ? existingSystemComments.filter((entry: any) => isTicketStateSyncCommentContent(entry?.content))
+      : [];
+
+    const primarySyncComment = existingSyncComments[0];
+    const duplicateSyncIds = existingSyncComments.slice(1).map((entry: any) => String(entry?.id ?? '').trim()).filter(Boolean);
+    const syncCommentUserId = String((actor?.id) || ticket.reporterId || '').trim();
+
+    if (primarySyncComment?.id) {
+      await (db as any).ticketComment.update({
+        where: { id: primarySyncComment.id },
+        data: {
+          content: syncCommentContent,
+          isPrivate: false,
+          updatedAt: new Date(),
+        },
+      }).catch(() => null);
+    } else if (syncCommentUserId) {
+      await (db as any).ticketComment.create({
+        data: {
+          ticketId: id,
+          userId: syncCommentUserId,
+          userName: buildSystemCommentUserName(actorName),
+          content: syncCommentContent,
+          isPrivate: false,
+        },
+      }).catch(() => null);
+    }
+
+    if (duplicateSyncIds.length > 0) {
+      await (db as any).ticketComment.deleteMany({
+        where: {
+          id: { in: duplicateSyncIds },
+        },
+      }).catch(() => null);
+    }
+
     const isFirstTime = !tags.exactDatesCreatedAt;
     const autoComment = buildExactDatesComment({
       ticketNumero: String(updatedTicket.numero ?? id),
@@ -358,6 +562,15 @@ export async function DELETE(
 
     const deletedById = String(body.deletedById ?? '').trim();
     const deletedByNameRaw = String(body.deletedByName ?? '').trim();
+
+    if (!deletedById) {
+      return NextResponse.json({ error: 'Utilisateur requis' }, { status: 400 });
+    }
+
+    const actorAccess = await resolveTicketManagerFromActorId(db, deletedById);
+    if (!actorAccess.canManage) {
+      return NextResponse.json({ error: 'Acces refuse' }, { status: 403 });
+    }
 
     const ticket = await (db as any).ticket.findUnique({ where: { id } });
     if (!ticket) {
@@ -435,6 +648,73 @@ export async function DELETE(
         history: { orderBy: { timestamp: 'desc' }, take: 50 },
       },
     });
+
+    const syncCommentContent = buildTicketStateSyncComment({
+      status: updatedTicket.status,
+      dueDate: updatedTicket.dueDate,
+      eta: cleanedTags.eta,
+      etr: cleanedTags.etr,
+      ownerTechnicianName: resolveOwnerTechnicianName(cleanedTags as Record<string, unknown>, updatedTicket.technicien),
+      priority: updatedTicket.priority,
+      category: cleanedTags.category,
+      classification: cleanedTags.classification,
+      channel: cleanedTags.channel,
+      exactStartAt: null,
+      exactClosedAt: null,
+      site: resolvePrimarySite(cleanedTags as Record<string, unknown>, updatedTicket.site),
+      localite: resolvePrimaryLocality(cleanedTags as Record<string, unknown>, updatedTicket.localite),
+    });
+
+    const existingSystemComments = await (db as any).ticketComment.findMany({
+      where: {
+        ticketId: id,
+        userName: {
+          startsWith: SYSTEM_COMMENT_PREFIX,
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        content: true,
+      },
+    }).catch(() => []);
+
+    const existingSyncComments = Array.isArray(existingSystemComments)
+      ? existingSystemComments.filter((entry: any) => isTicketStateSyncCommentContent(entry?.content))
+      : [];
+
+    const primarySyncComment = existingSyncComments[0];
+    const duplicateSyncIds = existingSyncComments.slice(1).map((entry: any) => String(entry?.id ?? '').trim()).filter(Boolean);
+    const syncCommentUserId = String((actor?.id) || ticket.reporterId || '').trim();
+
+    if (primarySyncComment?.id) {
+      await (db as any).ticketComment.update({
+        where: { id: primarySyncComment.id },
+        data: {
+          content: syncCommentContent,
+          isPrivate: false,
+          updatedAt: new Date(),
+        },
+      }).catch(() => null);
+    } else if (syncCommentUserId) {
+      await (db as any).ticketComment.create({
+        data: {
+          ticketId: id,
+          userId: syncCommentUserId,
+          userName: buildSystemCommentUserName(actorName),
+          content: syncCommentContent,
+          isPrivate: false,
+        },
+      }).catch(() => null);
+    }
+
+    if (duplicateSyncIds.length > 0) {
+      await (db as any).ticketComment.deleteMany({
+        where: {
+          id: { in: duplicateSyncIds },
+        },
+      }).catch(() => null);
+    }
 
     const commentUserId = String((actor?.id) || ticket.reporterId || '').trim();
     if (commentUserId) {

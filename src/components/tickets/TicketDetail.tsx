@@ -17,6 +17,7 @@ const Zarko = dynamic(
   () => import('@/components/ui/rich-text-editor').then((module) => module.RichTextEditor),
   { ssr: false, loading: () => <div className="h-55 rounded-md border bg-muted/20" /> }
 );
+import { formatHistoryInvestigationMessage } from '@/lib/tickets/history';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
@@ -775,13 +776,16 @@ export default function TicketDetail({
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm">
-                          <span className="font-medium">{h.userName}</span>
-                          {' '}{h.action}
-                          {h.field && (
-                            <> · <span className="text-muted-foreground">{h.field}</span>
-                              {h.oldValue && <> : <span className="line-through text-red-400/70">{h.oldValue}</span></>}
-                              {h.newValue && <> → <span className="text-green-400/70">{h.newValue}</span></>}
-                            </>
+                          {formatHistoryInvestigationMessage(
+                            {
+                              action: h.action,
+                              field: h.field,
+                              oldValue: h.oldValue,
+                              newValue: h.newValue,
+                              userName: h.userName,
+                              userId: h.userId,
+                            },
+                            { includeFallback: true, viewerId: user.id, isSuperAdmin }
                           )}
                         </p>
                         <p className="text-xs text-muted-foreground">

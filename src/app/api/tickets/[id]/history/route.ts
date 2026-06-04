@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { resolveTicketManagerFromActorId } from '@/lib/tickets/permissions';
 
 export async function GET(
   _req: NextRequest,
@@ -45,6 +46,11 @@ export async function POST(
     const newValue = body.newValue === undefined ? null : String(body.newValue ?? '');
     const userId = String(body.userId ?? 'system');
     const userName = String(body.userName ?? 'Système');
+
+    const actorAccess = await resolveTicketManagerFromActorId(db, userId);
+    if (!actorAccess.canManage) {
+      return NextResponse.json({ error: 'Acces refuse' }, { status: 403 });
+    }
 
     const created = await (db as any).ticketHistory.create({
       data: {

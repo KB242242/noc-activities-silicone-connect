@@ -149,12 +149,61 @@ export function mapTicket(t: any) {
   const mergedTicketNumeros = Array.isArray(tags.mergedTicketNumeros)
     ? tags.mergedTicketNumeros.map((value) => String(value ?? '').trim()).filter(Boolean)
     : [];
+  const approvalApprovers = Array.isArray(tags.approvalApprovers)
+    ? (tags.approvalApprovers as Array<Record<string, unknown>>)
+      .map((entry) => ({
+        id: String(entry?.id ?? '').trim(),
+        name: String(entry?.name ?? '').trim(),
+        email: String(entry?.email ?? '').trim(),
+        role: String(entry?.role ?? '').trim(),
+      }))
+      .filter((entry) => entry.id || entry.email || entry.name)
+    : [];
+  const approvalSignatures = Array.isArray(tags.approvalSignatures)
+    ? (tags.approvalSignatures as Array<Record<string, unknown>>)
+      .map((entry) => ({
+        id: String(entry?.id ?? entry?.userId ?? '').trim(),
+        name: String(entry?.name ?? entry?.userName ?? '').trim(),
+        email: String(entry?.email ?? '').trim(),
+        role: String(entry?.role ?? '').trim().toUpperCase(),
+        decision: String(entry?.decision ?? entry?.status ?? '').trim().toUpperCase(),
+        responseHtml: String(entry?.responseHtml ?? '').trim(),
+        signedAt: String(entry?.signedAt ?? entry?.at ?? '').trim(),
+      }))
+      .filter((entry) => entry.id || entry.name || entry.email)
+    : [];
+  const legacyApprovalSignature = approvalSignatures.length > 0
+    ? approvalSignatures[approvalSignatures.length - 1]
+    : ((tags.approvalSignedById || tags.approvalSignedByName || tags.approvalSignedByRole || tags.approvalSignedAt)
+      ? {
+          id: String(tags.approvalSignedById ?? '').trim(),
+          name: String(tags.approvalSignedByName ?? '').trim(),
+          email: '',
+          role: String(tags.approvalSignedByRole ?? '').trim().toUpperCase(),
+          decision: String(tags.approvalDecision ?? '').trim().toUpperCase(),
+          responseHtml: String(tags.approvalResponseHtml ?? '').trim(),
+          signedAt: String(tags.approvalSignedAt ?? '').trim(),
+        }
+      : null);
+    const approvalOpenedByIds = Array.isArray(tags.approvalOpenedByIds)
+      ? tags.approvalOpenedByIds.map((value) => String(value ?? '').trim()).filter(Boolean)
+      : [];
+    const approvalApproverIds = Array.isArray(tags.approvalApproverIds)
+      ? tags.approvalApproverIds.map((value) => String(value ?? '').trim()).filter(Boolean)
+      : approvalApprovers.map((entry) => entry.id).filter(Boolean);
+  const approvalStatus = String(tags.approvalStatus ?? '').trim().toUpperCase() || 'NONE';
+  const approvalDecision = String(tags.approvalDecision ?? '').trim().toUpperCase() || 'NONE';
+  const approvalSignerRole = String(legacyApprovalSignature?.role ?? tags.approvalSignedByRole ?? '').trim().toUpperCase();
+  const isPremiumSigned = approvalStatus === 'APPROVED'
+    && [approvalSignerRole, ...approvalSignatures.map((entry) => String(entry.role ?? '').trim().toUpperCase())]
+      .some((role) => new Set(['MANAGER', 'SUPERVISOR', 'RESPONSABLE', 'ADMIN', 'SUPER_ADMIN']).has(role));
 
   return {
     id: t.id,
     numero: t.numero ?? '',
     ticketZoho: (tags.ticketZoho as string) ?? '',
     type: (tags.type as string) ?? mapCategoryToType(t.category),
+    title: String((tags.title as string) ?? t.title ?? '').trim(),
     objet: t.objet ?? '',
     description: t.description ?? '',
     contactName: (tags.contactName as string) ?? '',
@@ -184,6 +233,7 @@ export function mapTicket(t: any) {
     link: (tags.link as string) ?? '',
     ownerTechnicianId: (tags.ownerTechnicianId as string) ?? '',
     ownerTechnicianName: (tags.ownerTechnicianName as string) ?? '',
+    category: String((tags.category as string) ?? t.category ?? '').trim().toLowerCase(),
     priority: t.priority ?? 'MEDIUM',
     status: t.status ?? 'OPEN',
     channel: (tags.channel as string) ?? '',
@@ -219,6 +269,26 @@ export function mapTicket(t: any) {
     mergedMode: (tags.mergedMode as string) ?? '',
     mergedParentTicketId: (tags.mergedParentTicketId as string) ?? '',
     mergedParentTicketNumero: (tags.mergedParentTicketNumero as string) ?? '',
+    approvalStatus,
+    approvalDecision,
+    approvalRequestedAt: (tags.approvalRequestedAt as string) ?? '',
+    approvalRequestedById: (tags.approvalRequestedById as string) ?? '',
+    approvalRequestedByName: (tags.approvalRequestedByName as string) ?? '',
+    approvalApproverIds,
+    approvalApprovers,
+    approvalOpenedByIds,
+    approvalSignatures: approvalSignatures.length > 0 ? approvalSignatures : (legacyApprovalSignature ? [legacyApprovalSignature] : []),
+    approvalSubject: (tags.approvalSubject as string) ?? '',
+    approvalDescriptionHtml: (tags.approvalDescriptionHtml as string) ?? '',
+    approvalResponseHtml: (tags.approvalResponseHtml as string) ?? '',
+    approvalSignedById: String(legacyApprovalSignature?.id ?? tags.approvalSignedById ?? '').trim(),
+    approvalSignedByName: String(legacyApprovalSignature?.name ?? tags.approvalSignedByName ?? '').trim(),
+    approvalSignedByRole: String(legacyApprovalSignature?.role ?? tags.approvalSignedByRole ?? '').trim(),
+    approvalSignedAt: String(legacyApprovalSignature?.signedAt ?? tags.approvalSignedAt ?? '').trim(),
+    approvalUpdatedAt: (tags.approvalUpdatedAt as string) ?? '',
+    approvalIsPremium: tags.approvalIsPremium === true || isPremiumSigned,
+    approvalReminderCount: Number(tags.approvalReminderCount ?? 0) || 0,
+    approvalLastReminderAt: (tags.approvalLastReminderAt as string) ?? '',
     slaStartAt: exactStartAt ?? t.createdAt,
     slaClosedAt: exactClosedAt ?? t.closedAt ?? null,
     isRecurring: false,

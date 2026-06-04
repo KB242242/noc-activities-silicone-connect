@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { sendTicketLifecycleEmail } from '@/lib/tickets/emailNotifications';
+import { resolveTicketManagerFromActorId } from '@/lib/tickets/permissions';
 import { promises as fs } from 'fs';
 import path from 'path';
 
@@ -30,6 +31,15 @@ export async function POST(
     const body = await req.json().catch(() => ({}));
     const restoredByRaw = String(body.restoredBy ?? '').trim();
     const restoredByName = String(body.restoredByName ?? '').trim();
+
+    if (!restoredByRaw) {
+      return NextResponse.json({ error: 'Utilisateur requis' }, { status: 400 });
+    }
+
+    const actorAccess = await resolveTicketManagerFromActorId(db, restoredByRaw);
+    if (!actorAccess.canManage) {
+      return NextResponse.json({ error: 'Acces refuse' }, { status: 403 });
+    }
 
     const actorById = restoredByRaw
       ? await (db as any).user.findUnique({

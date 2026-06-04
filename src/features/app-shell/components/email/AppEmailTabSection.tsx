@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import type { CSSProperties } from 'react';
 
@@ -20,16 +20,16 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { canManageAnnouncements } from '@/features/app-shell/constants';
-import { AppEmailConversationBackground } from '@/features/app-shell/components/AppEmailConversationBackground';
-import { AppEmailConversationHeader } from '@/features/app-shell/components/AppEmailConversationHeader';
-import { AppEmailMessageSearchBar } from '@/features/app-shell/components/AppEmailMessageSearchBar';
-import { AppEmailMessagesViewport } from '@/features/app-shell/components/AppEmailMessagesViewport';
-import { AppEmailPinnedMessages } from '@/features/app-shell/components/AppEmailPinnedMessages';
-import { AppEmailScrollToBottomButton } from '@/features/app-shell/components/AppEmailScrollToBottomButton';
-import { AppEmailSidebar } from '@/features/app-shell/components/AppEmailSidebar';
-import { AppEmailTypingIndicator } from '@/features/app-shell/components/AppEmailTypingIndicator';
-import { AppEmailLiveReactionsOverlay } from '@/features/app-shell/components/AppEmailLiveReactionsOverlay';
+import { canManageAnnouncements } from '@/features/app-shell/core/shared/constants';
+import { AppEmailConversationBackground } from '@/features/app-shell/components/email/conversation/AppEmailConversationBackground';
+import { AppEmailConversationHeader } from '@/features/app-shell/components/email/conversation/AppEmailConversationHeader';
+import { AppEmailMessageSearchBar } from '@/features/app-shell/components/email/conversation/AppEmailMessageSearchBar';
+import { AppEmailMessagesViewport } from '@/features/app-shell/components/email/conversation/AppEmailMessagesViewport';
+import { AppEmailPinnedMessages } from '@/features/app-shell/components/email/conversation/AppEmailPinnedMessages';
+import { AppEmailScrollToBottomButton } from '@/features/app-shell/components/email/conversation/AppEmailScrollToBottomButton';
+import { AppEmailSidebar } from '@/features/app-shell/components/email/conversation/AppEmailSidebar';
+import { AppEmailTypingIndicator } from '@/features/app-shell/components/email/conversation/AppEmailTypingIndicator';
+import { AppEmailLiveReactionsOverlay } from '@/features/app-shell/components/email/conversation/AppEmailLiveReactionsOverlay';
 import { AppEmailComposerInputBar } from '@/features/app-shell/components/email/composer/AppEmailComposerInputBar';
 import { AppEmailComposerPreviews } from '@/features/app-shell/components/email/composer/AppEmailComposerPreviews';
 import { AppEmailFormattingToolbar } from '@/features/app-shell/components/email/composer/AppEmailFormattingToolbar';
@@ -311,7 +311,7 @@ export function AppEmailTabSection(props: AppEmailTabSectionProps) {
                     const isCurrentResult = searchResults[currentSearchIndex]?.id === message.id;
                     const renderMessageContent = () => {
                       if (message.deletedForEveryone) {
-                        return <p className="text-sm text-muted-foreground italic">Ce message a ete supprime</p>;
+                        return <p className="text-sm text-muted-foreground italic">Ce message a été supprimé</p>;
                       }
                       if (message.isDeleted) {
                         return <p className="text-sm text-muted-foreground italic">Message supprime</p>;
@@ -666,7 +666,7 @@ export function AppEmailTabSection(props: AppEmailTabSectionProps) {
                             )}
                             <div className="flex items-center justify-end gap-1 mt-1">
                               {message.isImportant && <AlertCircle className="w-3 h-3 text-yellow-500" />}
-                              {message.isEdited && <span className="text-[10px] text-muted-foreground italic mr-1">modifie</span>}
+                              {message.isEdited && <span className="text-[10px] text-muted-foreground italic mr-1">modifié</span>}
                               {message.isArchived && <Archive className="w-3 h-3 text-slate-400 mr-1" />}
                               <span className="text-[10px] text-muted-foreground">{format(message.createdAt, 'HH:mm')}</span>
                               {isOwn && !message.deletedForEveryone && !message.isDeleted && (

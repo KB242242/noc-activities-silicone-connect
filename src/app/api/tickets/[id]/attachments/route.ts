@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { resolveTicketManagerFromActorId } from '@/lib/tickets/permissions';
 
 const ATTACHMENT_COMMENT_PREFIX = '[ATTACHMENT_COMMENT:';
 
@@ -89,6 +90,11 @@ export async function POST(
       return NextResponse.json({ error: 'Utilisateur requis' }, { status: 400 });
     }
 
+    const actorAccess = await resolveTicketManagerFromActorId(db, uploadedBy);
+    if (!actorAccess.canManage) {
+      return NextResponse.json({ error: 'Acces refuse' }, { status: 403 });
+    }
+
     if (!fileData) {
       return NextResponse.json({ error: 'Contenu du fichier requis' }, { status: 400 });
     }
@@ -138,6 +144,23 @@ export async function POST(
         },
       }).catch(() => null);
     }
+
+    await (db as any).ticketHistory.create({
+      data: {
+        ticketId: id,
+        action: 'attachment_uploaded',
+        field: 'attachment',
+        oldValue: null,
+        newValue: JSON.stringify({
+          fileName: attachment.fileName ?? fileName,
+          fileType: attachment.fileType ?? fileType,
+          uploadedById: uploader.id,
+          uploadedByName: uploader.name ?? uploader.username ?? uploader.firstName ?? 'Utilisateur',
+        }),
+        userId: uploader.id,
+        userName: uploader.name ?? uploader.username ?? uploader.firstName ?? 'Utilisateur',
+      },
+    }).catch(() => null);
 
     await (db as any).ticket.update({
       where: { id },

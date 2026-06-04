@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import type { Conversation, PresenceStatus, UserProfile } from '@/features/app-shell/types';
+import type { Conversation, PresenceStatus, UserProfile } from '@/features/app-shell/core/shared/types';
 
 type AppEmailNewConversationDialogProps = {
   newConversationOpen: boolean;

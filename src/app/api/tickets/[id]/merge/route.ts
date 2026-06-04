@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { mapTicket } from '@/lib/tickets/mapTicket';
+import { resolveTicketManagerFromActorId } from '@/lib/tickets/permissions';
 
 function parseTags(raw?: string | null): Record<string, unknown> {
   if (!raw) return {};
@@ -66,6 +67,11 @@ export async function POST(
     const mode = String(body.mode ?? 'group').toLowerCase() === 'merge' ? 'merge' : 'group';
     const userId = String(body.userId ?? 'system').trim() || 'system';
     const userName = String(body.userName ?? 'Systeme').trim() || 'Systeme';
+
+    const actorAccess = await resolveTicketManagerFromActorId(db, userId);
+    if (!actorAccess.canManage) {
+      return NextResponse.json({ error: 'Acces refuse' }, { status: 403 });
+    }
 
     if (ticketRefs.length === 0) {
       return NextResponse.json({ error: 'Aucun ticket a fusionner' }, { status: 400 });
@@ -261,6 +267,11 @@ export async function DELETE(
     const ticketRef = normalizeTicketRef(body.ticketRef);
     const userId = String(body.userId ?? 'system').trim() || 'system';
     const userName = String(body.userName ?? 'Systeme').trim() || 'Systeme';
+
+    const actorAccess = await resolveTicketManagerFromActorId(db, userId);
+    if (!actorAccess.canManage) {
+      return NextResponse.json({ error: 'Acces refuse' }, { status: 403 });
+    }
 
     if (!ticketRef) {
       return NextResponse.json({ error: 'Ticket a dissocier requis' }, { status: 400 });

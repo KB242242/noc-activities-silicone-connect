@@ -2,7 +2,7 @@ import type { Dispatch, SetStateAction } from 'react';
 import { Archive, CheckSquare, Trash2, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import type { ChatMessage } from '@/features/app-shell/types';
+import type { ChatMessage } from '@/features/app-shell/core/shared/types';
 import { toast } from '@/lib/toast';
 
 type AppEmailSelectionActionBarProps = {

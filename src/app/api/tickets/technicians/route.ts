@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { startOfWeek, endOfWeek } from 'date-fns';
+import { resolveTicketManagerFromActorId } from '@/lib/tickets/permissions';
 
 // ── GET /api/tickets/technicians ──────────────────────────────
 // Returns users with their weekly open ticket count
@@ -82,6 +83,8 @@ export async function GET(_req: NextRequest) {
             firstName: tech.firstName,
             lastName: tech.lastName,
             pseudo: tech.pseudo,
+            email: tech.pseudo.includes('@') ? tech.pseudo : null,
+            hasEmail: tech.pseudo.includes('@'),
             department: tech.department,
             unit: tech.unitName,
             weeklyOpen,
@@ -116,6 +119,8 @@ export async function GET(_req: NextRequest) {
         return {
           id: u.id,
           name: u.name,
+          email: u.email ?? null,
+          hasEmail: Boolean(String(u.email ?? '').trim()),
           pseudo: u.email?.split('@')[0],
           department: 'Technique',
           unit: 'NOC',
@@ -135,6 +140,15 @@ export async function POST(req: NextRequest) {
   try {
     await ensureTicketTechniciansTable();
     const body = await req.json();
+
+    const requesterId = String(body?.requesterId ?? '').trim();
+    if (!requesterId) {
+      return NextResponse.json({ error: 'user_required' }, { status: 400 });
+    }
+    const actorAccess = await resolveTicketManagerFromActorId(db, requesterId);
+    if (!actorAccess.canManage) {
+      return NextResponse.json({ error: 'access_denied' }, { status: 403 });
+    }
 
     const firstName = String(body?.firstName ?? '').trim();
     const lastName = String(body?.lastName ?? '').trim();

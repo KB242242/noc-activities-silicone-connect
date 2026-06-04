@@ -2,6 +2,9 @@
 
 ## Application de Gestion des Activités NOC - Silicone Connect
 
+> Source canonique recommandee pour une reconstruction complete: `database/noc_activities_final.sql`.
+> Ce guide utilise `download/noc_activities_mysql.sql` pour l'import manuel rapide via phpMyAdmin.
+
 ---
 
 ## 📋 PRÉREQUIS

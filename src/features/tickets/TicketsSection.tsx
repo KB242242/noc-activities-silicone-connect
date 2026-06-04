@@ -79,6 +79,7 @@ const DEFAULT_FORM = {
   etr: null as Date | null,
   sla: '',
   slr: '',
+  sendCopyToClient: false,
 };
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -135,13 +136,16 @@ export function TicketsSection({ user, usersDirectory }: TicketsSectionProps) {
 
   // ── Create dialog ────────────────────────────────────────────────────────────
   const [createOpen, setCreateOpen] = useState(false);
-    const openTicketDetailPage = useCallback((ticketId: string) => {
-      router.push(`/tickets/${ticketId}`);
-    }, []);
+  const openTicketDetailPage = useCallback((ticketId: string) => {
+    const ticket = tickets.find((entry) => entry.id === ticketId);
+    if (!ticket) return;
+    setSelectedTicket(ticket);
+    setDetailOpen(true);
+  }, [tickets]);
 
   const prefetchTicketDetail = useCallback((ticketId: string) => {
-    router.prefetch(`/tickets/${ticketId}`);
-  }, [router]);
+    void ticketId;
+  }, []);
 
   const [form, setForm] = useState(DEFAULT_FORM);
   const [localityDraft, setLocalityDraft] = useState<TicketLocalityDraft>(DEFAULT_LOCALITY_DRAFT);
@@ -414,6 +418,7 @@ export function TicketsSection({ user, usersDirectory }: TicketsSectionProps) {
           dueDate: form.dueDate?.toISOString() ?? null,
           etr: form.etr?.toISOString() ?? null,
           sla: form.sla, slr: form.slr,
+          sendCopyToClient: form.sendCopyToClient,
         }),
       });
       if (!res.ok) {
@@ -877,6 +882,19 @@ export function TicketsSection({ user, usersDirectory }: TicketsSectionProps) {
                       </SelectContent>
                     </Select>
                   </div>
+
+                  {(form.category === 'incident' || form.category === 'maintenance') && (
+                    <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-800/60">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">Envoyer une copie au client</p>
+                        <p className="text-xs text-muted-foreground">Désactivé par défaut pour Incident/Maintenance.</p>
+                      </div>
+                      <Switch
+                        checked={form.sendCopyToClient}
+                        onCheckedChange={(checked) => setForm((prev) => ({ ...prev, sendCopyToClient: checked }))}
+                      />
+                    </div>
+                  )}
 
                   {/* Dates */}
                   <div className="grid grid-cols-2 gap-4">

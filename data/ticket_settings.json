@@ -2,8 +2,17 @@
   "numberFormat": "#SC{date}-{seq}",
   "numberSeed": 100000000,
   "notificationEmails": [
-    "ange.bata@siliconeconnect.com"
+    "kevinebauer7@gmail.com"
   ],
+  "supportCopyEmail": "support@siliconeconnect.com",
+  "technicianFallbackEmail": "kevinebauer7@gmail.com",
+  "lifecycleEmailEvents": {
+    "creation": true,
+    "pending": true,
+    "escalated": true,
+    "closed": true
+  },
+  "sendClientCopyForIncidentMaintenance": false,
   "defaultSlaHours": 24,
   "trashRetentionDays": 30,
   "slaByCategory": {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { resolveTicketManagerFromActorId } from '@/lib/tickets/permissions';
 
 // ── GET /api/tickets/clients ──────────────────────────────────
 // Returns clients for the ticket form dropdown
@@ -169,6 +170,15 @@ export async function POST(req: NextRequest) {
   try {
     await ensureTicketClientsTable();
     const body = await req.json();
+
+    const requesterId = String(body?.requesterId ?? '').trim();
+    if (!requesterId) {
+      return NextResponse.json({ error: 'user_required' }, { status: 400 });
+    }
+    const actorAccess = await resolveTicketManagerFromActorId(db, requesterId);
+    if (!actorAccess.canManage) {
+      return NextResponse.json({ error: 'access_denied' }, { status: 403 });
+    }
 
     const name = String(body?.name ?? '').trim();
     if (!name) {

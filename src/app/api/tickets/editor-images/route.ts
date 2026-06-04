@@ -2,6 +2,8 @@ import { randomUUID } from 'crypto';
 import { mkdir, writeFile } from 'fs/promises';
 import path from 'path';
 import { NextRequest, NextResponse } from 'next/server';
+import { db } from '@/lib/db';
+import { resolveTicketManagerFromActorId } from '@/lib/tickets/permissions';
 
 const ALLOWED_MIME = new Set([
   'image/jpeg',
@@ -16,7 +18,17 @@ function sanitizeName(name: string): string {
 export async function POST(request: NextRequest) {
   try {
     const form = await request.formData();
+    const requesterId = String(form.get('requesterId') ?? '').trim();
     const file = form.get('file');
+
+    if (!requesterId) {
+      return NextResponse.json({ success: false, error: 'Utilisateur requis.' }, { status: 400 });
+    }
+
+    const actorAccess = await resolveTicketManagerFromActorId(db, requesterId);
+    if (!actorAccess.canManage) {
+      return NextResponse.json({ success: false, error: 'Acces refuse.' }, { status: 403 });
+    }
 
     if (!(file instanceof File)) {
       return NextResponse.json({ success: false, error: 'Fichier obligatoire.' }, { status: 400 });

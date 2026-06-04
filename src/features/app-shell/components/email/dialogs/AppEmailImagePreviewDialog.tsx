@@ -4,7 +4,7 @@ import { Download, Forward, Maximize2, Minimize2, Pin, Trash2, X } from 'lucide-
 
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import type { ChatMessage } from '@/features/app-shell/types';
+import type { ChatMessage } from '@/features/app-shell/core/shared/types';
 import { toast } from '@/lib/toast';
 
 type ChatImagePreview = {

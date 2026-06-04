@@ -1,0 +1,11 @@
+{
+  "policies": [
+    {
+      "userId": "cmpl6fcnp0009w0ooszm9eihn",
+      "mode": "allow_any",
+      "customDomains": [],
+      "updatedAt": "2026-06-04T11:49:11.029Z",
+      "updatedBy": "super-admin-1"
+    }
+  ]
+}

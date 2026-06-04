@@ -1,5 +1,8 @@
 # NOC Activities - Guide d'Installation MySQL
 
+> Source canonique recommandee pour une reconstruction complete: `database/noc_activities_final.sql`.
+> Le fichier `download/noc_activities_mysql.sql` reste disponible pour l'import rapide via phpMyAdmin.
+
 ## 📋 Prérequis
 
 - **WampServer** installé (avec MySQL)
@@ -12,7 +15,7 @@
 
 1. Ouvrez **phpMyAdmin** (généralement: http://localhost/phpmyadmin)
 2. Cliquez sur l'onglet **"Importer"**
-3. Sélectionnez le fichier `noc_activities_database.sql` situé dans ce dossier
+3. Sélectionnez le fichier `noc_activities_mysql.sql` situé dans ce dossier
 4. Cliquez sur **"Exécuter"**
 
 La base de données `noc_activities` sera créée avec toutes les tables nécessaires.

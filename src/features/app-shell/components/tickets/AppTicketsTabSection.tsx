@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 
+import { toast } from '@/lib/toast';
 import { AppTicketsTabContent } from '@/features/app-shell/components/tickets/AppTicketsTabContent';
 
 type AppTicketsTabSectionProps = {
@@ -86,6 +87,7 @@ type AppTicketsTabSectionProps = {
   handleUnarchiveTicket: any;
   ticketStatusArchiveOptions: any;
   ticketPriorityArchiveOptions: any;
+  canManageTicketEntities: boolean;
 };
 
 export function AppTicketsTabSection({
@@ -172,7 +174,95 @@ export function AppTicketsTabSection({
   handleUnarchiveTicket,
   ticketStatusArchiveOptions,
   ticketPriorityArchiveOptions,
+  canManageTicketEntities,
 }: AppTicketsTabSectionProps) {
+  const handleBulkArchiveTickets = async (selectedTickets: any[]) => {
+    if (selectedTickets.length === 0) return;
+
+    const archivedAt = new Date();
+    const archivedYear = archivedAt.getFullYear();
+    let successCount = 0;
+    let failureCount = 0;
+
+    await Promise.all(
+      selectedTickets.map(async (ticket) => {
+        try {
+          const response = await fetch(`/api/tickets/${ticket.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              isArchived: true,
+              archivedAt,
+              archivedYear,
+              updatedBy: user?.name,
+              updatedById: user?.id,
+            }),
+          });
+
+          if (!response.ok) {
+            throw new Error('archive_failed');
+          }
+
+          const updatedPayload = await response.json();
+          const updatedTicket = mapApiTicketToLegacy(updatedPayload);
+          setTickets((prev) => prev.map((entry) => (entry.id === updatedTicket.id ? updatedTicket : entry)));
+          successCount += 1;
+        } catch {
+          failureCount += 1;
+        }
+      })
+    );
+
+    await Promise.resolve(loadTicketsModuleData());
+
+    if (successCount > 0) {
+      toast.success(`${successCount} ticket(s) archivé(s)`);
+    }
+    if (failureCount > 0) {
+      toast.error(`Échec d'archivage pour ${failureCount} ticket(s)`);
+    }
+  };
+
+  const handleBulkDeleteTickets = async (selectedTickets: any[]) => {
+    if (selectedTickets.length === 0) return;
+
+    let successCount = 0;
+    let failureCount = 0;
+
+    await Promise.all(
+      selectedTickets.map(async (ticket) => {
+        try {
+          const response = await fetch(`/api/tickets/${ticket.id}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              permanent: false,
+              deletedBy: user?.id,
+              deletedByName: user?.name,
+            }),
+          });
+
+          if (!response.ok) {
+            throw new Error('delete_failed');
+          }
+
+          successCount += 1;
+        } catch {
+          failureCount += 1;
+        }
+      })
+    );
+
+    await Promise.resolve(loadTicketsModuleData());
+
+    if (successCount > 0) {
+      toast.success(`${successCount} ticket(s) supprimé(s)`);
+    }
+    if (failureCount > 0) {
+      toast.error(`Échec de suppression pour ${failureCount} ticket(s)`);
+    }
+  };
+
   return (
     <motion.div key="tickets" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-4">
       <AppTicketsTabContent
@@ -212,6 +302,7 @@ export function AppTicketsTabSection({
         }}
         headerActionsProps={{
           ticketViewMode,
+          canManageTickets: canManageTicketEntities,
           siteOptions: ticketSiteOptions,
           localityOptions: ticketLocalityOptions,
           technicianOptions: ticketTechnicianOptions,
@@ -249,6 +340,7 @@ export function AppTicketsTabSection({
         }}
         activeContentProps={{
           ticketViewMode,
+          canManageTickets: canManageTicketEntities,
           visibleTickets,
           currentStorageCount: currentStorageTickets.length,
           showDeletedTickets,
@@ -292,6 +384,8 @@ export function AppTicketsTabSection({
             setEditingTicket(ticket);
             setEditTicketOpen(true);
           },
+          onBulkArchiveTickets: handleBulkArchiveTickets,
+          onBulkDeleteTickets: handleBulkDeleteTickets,
           onDeleteDialogOpenChange: (open: boolean) => {
             setDeleteTicketDialogOpen(open);
             if (!open) {

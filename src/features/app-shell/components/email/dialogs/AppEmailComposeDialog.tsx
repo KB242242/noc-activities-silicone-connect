@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
-import type { EmailAttachment, InternalMessage, MessagePriority, UserProfile } from '@/features/app-shell/types';
+import type { EmailAttachment, InternalMessage, MessagePriority, UserProfile } from '@/features/app-shell/core/shared/types';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';

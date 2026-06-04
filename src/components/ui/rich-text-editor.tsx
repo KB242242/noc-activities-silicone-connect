@@ -358,6 +358,20 @@ export function RichTextEditor({
         : 'image/jpeg';
     const extension = inferredMimeType === 'image/png' ? '.png' : inferredMimeType === 'image/webp' ? '.webp' : '.jpg';
     formData.append('file', new File([blob], `${baseName}${extension}`, { type: inferredMimeType }));
+    const requesterId = (() => {
+      if (typeof window === 'undefined') return '';
+      try {
+        const stored = localStorage.getItem('noc_user');
+        if (!stored) return '';
+        const parsed = JSON.parse(stored);
+        return String(parsed?.id ?? '').trim();
+      } catch {
+        return '';
+      }
+    })();
+    if (requesterId) {
+      formData.append('requesterId', requesterId);
+    }
 
     const uploadResponse = await fetch('/api/tickets/editor-images', {
       method: 'POST',
@@ -379,6 +393,20 @@ export function RichTextEditor({
   const uploadEditorFile = useCallback(async (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
+    const requesterId = (() => {
+      if (typeof window === 'undefined') return '';
+      try {
+        const stored = localStorage.getItem('noc_user');
+        if (!stored) return '';
+        const parsed = JSON.parse(stored);
+        return String(parsed?.id ?? '').trim();
+      } catch {
+        return '';
+      }
+    })();
+    if (requesterId) {
+      formData.append('requesterId', requesterId);
+    }
 
     const uploadResponse = await fetch('/api/tickets/editor-images', {
       method: 'POST',

@@ -12,7 +12,7 @@ export default function TicketsRoute() {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      router.replace('/auth/login');
+      router.replace('/');
     }
   }, [isAuthenticated, router]);
 

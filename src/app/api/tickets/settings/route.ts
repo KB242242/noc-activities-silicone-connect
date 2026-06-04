@@ -1,11 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { promises as fs } from 'fs';
 import path from 'path';
+import { db } from '@/lib/db';
+import { resolveTicketManagerFromActorId } from '@/lib/tickets/permissions';
 
 type TicketSettings = {
   numberFormat: string;
   numberSeed: number;
   notificationEmails: string[];
+  supportCopyEmail: string;
+  technicianFallbackEmail: string;
+  lifecycleEmailEvents: {
+    creation: boolean;
+    pending: boolean;
+    escalated: boolean;
+    closed: boolean;
+  };
+  sendClientCopyForIncidentMaintenance: boolean;
   defaultSlaHours: number;
   trashRetentionDays: number;
   slaByCategory: Record<string, number>;
@@ -16,7 +27,16 @@ const STORE_FILE = path.join(process.cwd(), 'data', 'ticket_settings.json');
 const DEFAULT_SETTINGS: TicketSettings = {
   numberFormat: '#SC{date}-{seq}',
   numberSeed: 100000000,
-  notificationEmails: ['ange.bata@siliconeconnect.com'],
+  notificationEmails: ['kevinebauer7@gmail.com'],
+  supportCopyEmail: 'support@siliconeconnect.com',
+  technicianFallbackEmail: 'kevinebauer7@gmail.com',
+  lifecycleEmailEvents: {
+    creation: true,
+    pending: true,
+    escalated: true,
+    closed: true,
+  },
+  sendClientCopyForIncidentMaintenance: false,
   defaultSlaHours: 24,
   trashRetentionDays: 30,
   slaByCategory: {
@@ -53,6 +73,21 @@ async function readStore(): Promise<TicketSettings> {
       notificationEmails: Array.isArray(parsed.notificationEmails)
         ? parsed.notificationEmails.map((item) => String(item).trim()).filter(Boolean)
         : DEFAULT_SETTINGS.notificationEmails,
+      supportCopyEmail: typeof parsed.supportCopyEmail === 'string' && parsed.supportCopyEmail.trim()
+        ? parsed.supportCopyEmail.trim()
+        : DEFAULT_SETTINGS.supportCopyEmail,
+      technicianFallbackEmail: typeof parsed.technicianFallbackEmail === 'string' && parsed.technicianFallbackEmail.trim()
+        ? parsed.technicianFallbackEmail.trim()
+        : DEFAULT_SETTINGS.technicianFallbackEmail,
+      lifecycleEmailEvents: {
+        creation: Boolean((parsed as any)?.lifecycleEmailEvents?.creation ?? DEFAULT_SETTINGS.lifecycleEmailEvents.creation),
+        pending: Boolean((parsed as any)?.lifecycleEmailEvents?.pending ?? DEFAULT_SETTINGS.lifecycleEmailEvents.pending),
+        escalated: Boolean((parsed as any)?.lifecycleEmailEvents?.escalated ?? DEFAULT_SETTINGS.lifecycleEmailEvents.escalated),
+        closed: Boolean((parsed as any)?.lifecycleEmailEvents?.closed ?? DEFAULT_SETTINGS.lifecycleEmailEvents.closed),
+      },
+      sendClientCopyForIncidentMaintenance: Boolean(
+        (parsed as any)?.sendClientCopyForIncidentMaintenance ?? DEFAULT_SETTINGS.sendClientCopyForIncidentMaintenance
+      ),
       defaultSlaHours: Number.isFinite(Number(parsed.defaultSlaHours)) ? Number(parsed.defaultSlaHours) : DEFAULT_SETTINGS.defaultSlaHours,
       trashRetentionDays: Number.isFinite(Number(parsed.trashRetentionDays))
         ? Math.min(365, Math.max(1, Math.floor(Number(parsed.trashRetentionDays))))
@@ -72,11 +107,6 @@ async function writeStore(value: TicketSettings): Promise<void> {
   await fs.writeFile(STORE_FILE, JSON.stringify(value, null, 2), 'utf8');
 }
 
-function canManage(body: unknown): boolean {
-  const role = String((body as { role?: string })?.role ?? '').toUpperCase();
-  return role === 'ADMIN' || role === 'SUPER_ADMIN';
-}
-
 export async function GET() {
   try {
     const settings = await readStore();
@@ -90,7 +120,13 @@ export async function GET() {
 export async function PUT(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
-    if (!canManage(body)) {
+    const requesterId = String((body as { requesterId?: unknown })?.requesterId ?? '').trim();
+    if (!requesterId) {
+      return NextResponse.json({ error: 'Utilisateur requis' }, { status: 400 });
+    }
+
+    const actorAccess = await resolveTicketManagerFromActorId(db, requesterId);
+    if (!actorAccess.canManage || (actorAccess.role !== 'ADMIN' && actorAccess.role !== 'SUPER_ADMIN')) {
       return NextResponse.json({ error: 'Acces refuse' }, { status: 403 });
     }
 
@@ -99,6 +135,12 @@ export async function PUT(req: NextRequest) {
     const notificationEmails = Array.isArray(body.notificationEmails)
       ? body.notificationEmails.map((item: unknown) => String(item).trim()).filter(Boolean)
       : [];
+    const supportCopyEmail = String(body.supportCopyEmail ?? '').trim();
+    const technicianFallbackEmail = String(body.technicianFallbackEmail ?? '').trim();
+    const lifecycleEmailEvents = body.lifecycleEmailEvents && typeof body.lifecycleEmailEvents === 'object'
+      ? body.lifecycleEmailEvents
+      : {};
+    const sendClientCopyForIncidentMaintenance = Boolean(body.sendClientCopyForIncidentMaintenance);
     const defaultSlaHours = Number(body.defaultSlaHours);
     const trashRetentionDays = Number(body.trashRetentionDays);
     const rawSlaByCategory = body.slaByCategory && typeof body.slaByCategory === 'object' ? body.slaByCategory : {};
@@ -107,6 +149,15 @@ export async function PUT(req: NextRequest) {
       numberFormat: numberFormat || DEFAULT_SETTINGS.numberFormat,
       numberSeed: Number.isFinite(numberSeed) ? Math.max(1, Math.floor(numberSeed)) : DEFAULT_SETTINGS.numberSeed,
       notificationEmails: notificationEmails.length > 0 ? notificationEmails : DEFAULT_SETTINGS.notificationEmails,
+      supportCopyEmail: supportCopyEmail || DEFAULT_SETTINGS.supportCopyEmail,
+      technicianFallbackEmail: technicianFallbackEmail || DEFAULT_SETTINGS.technicianFallbackEmail,
+      lifecycleEmailEvents: {
+        creation: Boolean(lifecycleEmailEvents.creation ?? DEFAULT_SETTINGS.lifecycleEmailEvents.creation),
+        pending: Boolean(lifecycleEmailEvents.pending ?? DEFAULT_SETTINGS.lifecycleEmailEvents.pending),
+        escalated: Boolean(lifecycleEmailEvents.escalated ?? DEFAULT_SETTINGS.lifecycleEmailEvents.escalated),
+        closed: Boolean(lifecycleEmailEvents.closed ?? DEFAULT_SETTINGS.lifecycleEmailEvents.closed),
+      },
+      sendClientCopyForIncidentMaintenance,
       defaultSlaHours: Number.isFinite(defaultSlaHours) ? Math.max(1, Math.floor(defaultSlaHours)) : DEFAULT_SETTINGS.defaultSlaHours,
       trashRetentionDays: Number.isFinite(trashRetentionDays)
         ? Math.min(365, Math.max(1, Math.floor(trashRetentionDays)))

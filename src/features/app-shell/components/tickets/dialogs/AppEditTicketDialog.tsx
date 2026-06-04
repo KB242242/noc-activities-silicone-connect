@@ -1,8 +1,8 @@
 import type { Dispatch, SetStateAction } from 'react';
 
-import { TICKET_COUNTRIES } from '@/features/app-shell/ticket-constants';
-import { renderTicketCountryLabel } from '@/features/app-shell/ticket-ui';
-import type { TicketCountryOption, TicketItem, TicketLocalityDraft, TicketPriority, TicketStatus } from '@/features/app-shell/types';
+import { TICKET_COUNTRIES } from '@/features/app-shell/core/config/ticket-constants';
+import { renderTicketCountryLabel } from '@/features/app-shell/core/tickets/ticket-ui';
+import type { TicketCountryOption, TicketItem, TicketLocalityDraft, TicketPriority, TicketStatus } from '@/features/app-shell/core/shared/types';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';

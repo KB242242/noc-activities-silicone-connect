@@ -1,5 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { resolveTicketManagerFromActorId } from '@/lib/tickets/permissions';
+
+function stripCommentHtml(value: string) {
+  return String(value ?? '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#0?39;/gi, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 function normalizeAvatarPath(value: string, userId?: string) {
   const src = String(value ?? '').trim().replace(/\\/g, '/');
@@ -88,6 +102,11 @@ export async function POST(
       return NextResponse.json({ error: 'Utilisateur requis' }, { status: 400 });
     }
 
+    const actorAccess = await resolveTicketManagerFromActorId(db, userId);
+    if (!actorAccess.canManage) {
+      return NextResponse.json({ error: 'Acces refuse' }, { status: 403 });
+    }
+
     const contentBytes = new TextEncoder().encode(content).length;
     if (contentBytes > 65000) {
       return NextResponse.json({ error: 'Commentaire trop volumineux' }, { status: 400 });
@@ -112,6 +131,25 @@ export async function POST(
         // Update ticket's updatedAt
       },
     });
+
+    await (db as any).ticketHistory.create({
+      data: {
+        ticketId: id,
+        action: 'comment_created',
+        field: 'comment',
+        oldValue: null,
+        newValue: JSON.stringify({
+          commentId: comment.id,
+          content,
+          isPrivate,
+          authorId: comment.userId ?? existingUser.id,
+          authorName: comment.userName ?? (userName || String(existingUser.username ?? 'Utilisateur')),
+          commentType: isPrivate ? 'private' : 'public',
+        }),
+        userId: existingUser.id,
+        userName: comment.userName ?? (userName || String(existingUser.username ?? 'Utilisateur')),
+      },
+    }).catch(() => null);
 
     // Bump ticket updatedAt
     await (db as any).ticket.update({

@@ -1,7 +1,7 @@
 import type { Dispatch, SetStateAction } from 'react';
 import { AlertCircle, Edit, Pin, Reply, Trash2 } from 'lucide-react';
 
-import type { ChatMessage, Conversation, UserProfile } from '@/features/app-shell/types';
+import type { ChatMessage, Conversation, UserProfile } from '@/features/app-shell/core/shared/types';
 import { toast } from '@/lib/toast';
 
 type AppEmailMessageContextMenuProps = {

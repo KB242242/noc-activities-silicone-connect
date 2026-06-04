@@ -1,14 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-
-function canManageHistoryEntry(input: { requesterId?: string | null; requesterRole?: string | null; authorId?: string | null }) {
-  const requesterId = String(input.requesterId ?? '').trim();
-  const requesterRole = String(input.requesterRole ?? '').toUpperCase();
-  const authorId = String(input.authorId ?? '').trim();
-  if (!requesterId) return false;
-  if (requesterRole === 'SUPER_ADMIN') return true;
-  return Boolean(authorId) && requesterId === authorId;
-}
+import { resolveTicketManagerFromActorId } from '@/lib/tickets/permissions';
 
 function parseExistingPayload(raw?: string | null) {
   if (!raw) return {} as Record<string, unknown>;
@@ -28,15 +20,15 @@ export async function PUT(
     const { id, subtaskId } = await context.params;
     const body = await req.json().catch(() => ({}));
     const requesterId = typeof body.requesterId === 'string' ? body.requesterId : null;
-    const requesterRole = typeof body.requesterRole === 'string' ? body.requesterRole : null;
+
+    const actorAccess = await resolveTicketManagerFromActorId(db, requesterId);
+    if (!actorAccess.canManage) {
+      return NextResponse.json({ error: 'Acces refuse' }, { status: 403 });
+    }
 
     const current = await (db as any).ticketHistory.findUnique({ where: { id: subtaskId } });
     if (!current || current.ticketId !== id || (current.field !== 'subtask' && current.action !== 'subtask_created')) {
       return NextResponse.json({ error: 'Activite introuvable' }, { status: 404 });
-    }
-
-    if (!canManageHistoryEntry({ requesterId, requesterRole, authorId: current.userId })) {
-      return NextResponse.json({ error: 'Non autorise' }, { status: 403 });
     }
 
     const existingPayload = parseExistingPayload(current.newValue);
@@ -98,15 +90,15 @@ export async function DELETE(
     const { id, subtaskId } = await context.params;
     const body = await req.json().catch(() => ({}));
     const requesterId = typeof body.requesterId === 'string' ? body.requesterId : null;
-    const requesterRole = typeof body.requesterRole === 'string' ? body.requesterRole : null;
+
+    const actorAccess = await resolveTicketManagerFromActorId(db, requesterId);
+    if (!actorAccess.canManage) {
+      return NextResponse.json({ error: 'Acces refuse' }, { status: 403 });
+    }
 
     const current = await (db as any).ticketHistory.findUnique({ where: { id: subtaskId } });
     if (!current || current.ticketId !== id || (current.field !== 'subtask' && current.action !== 'subtask_created')) {
       return NextResponse.json({ error: 'Activite introuvable' }, { status: 404 });
-    }
-
-    if (!canManageHistoryEntry({ requesterId, requesterRole, authorId: current.userId })) {
-      return NextResponse.json({ error: 'Non autorise' }, { status: 403 });
     }
 
     await (db as any).ticketHistory.delete({ where: { id: subtaskId } });

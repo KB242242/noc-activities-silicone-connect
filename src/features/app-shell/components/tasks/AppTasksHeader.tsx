@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+﻿import type { ReactNode } from 'react';
 
 import { ClipboardList } from 'lucide-react';
 
@@ -12,11 +12,12 @@ export function AppTasksHeader({ actions }: AppTasksHeaderProps) {
       <div>
         <h1 className="text-2xl lg:text-3xl font-bold flex items-center gap-2">
           <ClipboardList className="w-7 h-7 text-blue-600" />
-          Mes Taches Journalieres
+          Mes Tâches Journalières
         </h1>
-        <p className="text-muted-foreground">Gestion intelligente et supervisee des taches NOC</p>
+        <p className="text-muted-foreground">Gestion intelligente et supervisée des tâches NOC</p>
       </div>
       {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
     </div>
   );
 }
+

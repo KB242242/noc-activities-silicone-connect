@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { resolveTicketManagerFromActorId } from '@/lib/tickets/permissions';
 
 function parseTimeToMinutes(value: string): number | null {
   const match = value.match(/^(\d{2}):(\d{2})$/);
@@ -20,6 +21,14 @@ export async function POST(
     const { date, startTime, endTime, note, technicianId, technicianName } = await req.json();
     if (!startTime || !endTime) {
       return NextResponse.json({ error: 'Heures requises' }, { status: 400 });
+    }
+    if (!technicianId) {
+      return NextResponse.json({ error: 'Utilisateur requis' }, { status: 400 });
+    }
+
+    const actorAccess = await resolveTicketManagerFromActorId(db, technicianId);
+    if (!actorAccess.canManage) {
+      return NextResponse.json({ error: 'Acces refuse' }, { status: 403 });
     }
 
     const startMinutes = parseTimeToMinutes(String(startTime));

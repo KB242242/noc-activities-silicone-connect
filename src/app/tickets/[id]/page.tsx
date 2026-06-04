@@ -4,9 +4,7 @@ import dynamic from 'next/dynamic';
 import { db } from '@/lib/db';
 import { mapTicket } from '@/lib/tickets/mapTicket';
 
-const TicketDetailShell = dynamic(() => import('@/components/tickets/TicketDetailShell'), {
-  loading: () => <div className="p-4 text-sm text-muted-foreground">Chargement du ticket...</div>,
-});
+const TicketDetailShell = dynamic(() => import('@/components/tickets/TicketDetailShell'));
 
 export const revalidate = 30;
 

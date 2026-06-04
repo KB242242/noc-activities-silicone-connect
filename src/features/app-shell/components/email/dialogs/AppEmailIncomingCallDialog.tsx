@@ -4,7 +4,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import type { CallHistory } from '@/features/app-shell/types';
+import type { CallHistory } from '@/features/app-shell/core/shared/types';
 
 type CallParticipant = {
   id: string;

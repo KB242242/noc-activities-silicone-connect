@@ -1,4 +1,4 @@
-import type { ComponentType } from 'react';
+﻿import type { ComponentType } from 'react';
 
 import { TrendingUp } from 'lucide-react';
 
@@ -47,7 +47,7 @@ export function AppTasksPerformanceSummaryCard({
             <p className="text-2xl font-bold text-cyan-600">
               {tasksCompleted}/{tasksCreated}
             </p>
-            <p className="text-sm text-muted-foreground">Taches</p>
+            <p className="text-sm text-muted-foreground">Tâches</p>
           </div>
           <div className="text-center">
             <div className="flex items-center justify-center gap-1">
@@ -60,3 +60,4 @@ export function AppTasksPerformanceSummaryCard({
     </Card>
   );
 }
+

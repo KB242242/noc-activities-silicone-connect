@@ -1,4 +1,4 @@
-import type { ComponentType, Dispatch, SetStateAction } from 'react';
+﻿import type { ComponentType, Dispatch, SetStateAction } from 'react';
 
 import { ClipboardList, Plus } from 'lucide-react';
 
@@ -55,7 +55,7 @@ export function AppTaskCreateDialog<TPriority extends string, TCategory extends 
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ClipboardList className="w-5 h-5 text-blue-600" />
-            Creer une nouvelle tache
+            Créer une nouvelle tâche
           </DialogTitle>
           <DialogDescription>Remplissez les details de votre tache</DialogDescription>
         </DialogHeader>
@@ -178,9 +178,10 @@ export function AppTaskCreateDialog<TPriority extends string, TCategory extends 
           <Button variant="outline" onClick={() => setTaskDialogOpen(false)}>
             Annuler
           </Button>
-          <Button onClick={onCreateTask}>Creer la tache</Button>
+          <Button onClick={onCreateTask}>Créer la tâche</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
+

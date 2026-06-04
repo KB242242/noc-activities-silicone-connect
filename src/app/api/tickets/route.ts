@@ -1,5 +1,65 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { resolveTicketManagerFromActorId } from '@/lib/tickets/permissions';
+
+const SYSTEM_COMMENT_PREFIX = '🤖 Système';
+
+function buildSystemCommentUserName(actorName: string) {
+  return `${SYSTEM_COMMENT_PREFIX} — ${actorName}`;
+}
+
+function formatOptionalTicketDate(value: unknown) {
+  if (!value) return 'Aucun';
+  const parsed = new Date(String(value));
+  if (Number.isNaN(parsed.getTime())) return String(value);
+  return parsed.toLocaleString('fr-FR');
+}
+
+function formatCategoryLabel(value: unknown) {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (!normalized) return 'Aucun';
+  if (normalized === 'incident' || normalized === 'inc') return 'Incident';
+  if (normalized === 'deployment') return 'Deploiement';
+  if (normalized === 'supervision' || normalized === 'su') return 'Supervision';
+  if (normalized === 'ravitaillement') return 'Ravitaillement';
+  if (normalized === 'client_complaint' || normalized === 'pc') return 'Plainte Client';
+  if (normalized === 'routine_visit') return 'Visite de Routine';
+  if (normalized === 'security') return 'Securite';
+  if (normalized === 'maintenance') return 'Maintenance';
+  if (normalized === 'survey') return 'Survey';
+  return normalized;
+}
+
+function formatPriorityLabel(value: unknown) {
+  const normalized = String(value ?? '').trim().toUpperCase();
+  if (normalized === 'LOW') return 'Faible';
+  if (normalized === 'MEDIUM') return 'Moyenne';
+  if (normalized === 'HIGH') return 'Haute';
+  if (normalized === 'CRITICAL') return 'Critique';
+  return String(value ?? '').trim() || 'Aucun';
+}
+
+function formatTicketStatusLabel(status: unknown) {
+  switch (String(status ?? '').trim().toUpperCase()) {
+    case 'OPEN': return 'Ouvert';
+    case 'IN_PROGRESS': return 'En cours';
+    case 'PENDING': return 'En attente';
+    case 'ESCALATED': return 'Escalade';
+    case 'RESOLVED': return 'Resolue';
+    case 'CLOSED': return 'Ferme';
+    case 'TRASHED': return 'Corbeille';
+    default: return String(status ?? 'Ouvert').trim() || 'Ouvert';
+  }
+}
+
+function buildExactDateSummary(exactStartAt: unknown, exactClosedAt: unknown) {
+  const start = exactStartAt ? formatOptionalTicketDate(exactStartAt) : '';
+  const closed = exactClosedAt ? formatOptionalTicketDate(exactClosedAt) : '';
+  if (start && closed) return `Debut: ${start} | Fermeture: ${closed}`;
+  if (start) return `Debut: ${start}`;
+  if (closed) return `Fermeture: ${closed}`;
+  return '';
+}
 
 // GET /api/tickets - Get tickets with filters
 export async function GET(request: NextRequest) {
@@ -103,6 +163,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const reporterAccess = await resolveTicketManagerFromActorId(db, reporterId);
+    if (!reporterAccess.canManage) {
+      return NextResponse.json(
+        { success: false, error: 'Acces refuse' },
+        { status: 403 }
+      );
+    }
+
     // Get reporter info
     const reporter = await db.user.findUnique({ where: { id: reporterId } });
     if (!reporter) {
@@ -145,7 +213,7 @@ export async function POST(request: NextRequest) {
     const ticket = await db.ticket.create({
       data: {
         numero,
-        objet,
+        objet: String(objet ?? '').toUpperCase(),
         description: description || null,
         status: 'OPEN',
         priority: priority?.toUpperCase() || 'MEDIUM',
@@ -171,6 +239,79 @@ export async function POST(request: NextRequest) {
         }
       }
     });
+
+    const parsedTags = (() => {
+      if (!tags) return {} as Record<string, unknown>;
+      if (typeof tags === 'string') {
+        try {
+          const parsed = JSON.parse(tags);
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            return parsed as Record<string, unknown>;
+          }
+        } catch {
+          return {} as Record<string, unknown>;
+        }
+      }
+      if (typeof tags === 'object' && !Array.isArray(tags)) {
+        return tags as Record<string, unknown>;
+      }
+      return {} as Record<string, unknown>;
+    })();
+
+    const ownerFromTags = String(parsedTags.ownerTechnicianName ?? '').trim();
+    const ownerFromAssignee = String(assignee?.name ?? '').trim();
+    const ownerFromTechnicien = String(technicien ?? '')
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean)[0] ?? '';
+    const ownerLabel = ownerFromTags || ownerFromAssignee || ownerFromTechnicien || 'Aucun';
+
+    const categoryLabel = formatCategoryLabel(parsedTags.category ?? category);
+    const classificationLabel = String(parsedTags.classification ?? '').trim() || 'Aucune';
+    const channelLabel = String(parsedTags.channel ?? '').trim() || 'Aucun';
+    const siteLabel = String(site ?? '')
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean)[0] ?? 'Aucun';
+    const localiteLabel = String(localite ?? '')
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean)[0] ?? 'Aucune';
+
+    const syncLines = [
+      `Statut du ticket: ${formatTicketStatusLabel(ticket.status)}`,
+      `Date d echeance du ticket: ${formatOptionalTicketDate(ticket.dueDate)}`,
+      `ETR: ${formatOptionalTicketDate(parsedTags.etr)}`,
+      `Responsable Ticket: ${ownerLabel}`,
+      `Priorité : ${formatPriorityLabel(ticket.priority)}`,
+      `Categorie: ${categoryLabel}`,
+      `Classification: ${classificationLabel}`,
+      `Canal utilise: ${channelLabel}`,
+      `Site: ${siteLabel}`,
+      `Localite: ${localiteLabel}`,
+    ];
+
+    if (String(parsedTags.eta ?? '').trim()) {
+      syncLines.splice(2, 0, `ETA: ${formatOptionalTicketDate(parsedTags.eta)}`);
+    }
+
+    const exactDateLabel = buildExactDateSummary(parsedTags.exactStartAt, parsedTags.exactClosedAt);
+    if (exactDateLabel) {
+      syncLines.splice(syncLines.length - 2, 0, `Date exacte du ticket: ${exactDateLabel}`);
+    }
+
+    const syncCommentContent = syncLines.join('\n');
+
+    // First system sync comment is created at ticket creation and tied to the creator account.
+    await (db as any).ticketComment.create({
+      data: {
+        ticketId: ticket.id,
+        userId: reporter.id,
+        userName: buildSystemCommentUserName(String(reporter.name ?? 'Systeme').trim() || 'Systeme'),
+        content: syncCommentContent,
+        isPrivate: false,
+      },
+    }).catch(() => null);
 
     // Create history entry
     await db.ticketHistory.create({
@@ -238,6 +379,21 @@ export async function PUT(request: NextRequest) {
       );
     }
 
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: 'Utilisateur requis' },
+        { status: 400 }
+      );
+    }
+
+    const actorAccess = await resolveTicketManagerFromActorId(db, userId);
+    if (!actorAccess.canManage) {
+      return NextResponse.json(
+        { success: false, error: 'Acces refuse' },
+        { status: 403 }
+      );
+    }
+
     // Find ticket
     const ticket = await db.ticket.findUnique({ where: { id: ticketId } });
     if (!ticket) {
@@ -264,7 +420,7 @@ export async function PUT(request: NextRequest) {
       updatedAt: new Date()
     };
 
-    if (objet) updateData.objet = objet;
+    if (objet) updateData.objet = String(objet).toUpperCase();
     if (description !== undefined) updateData.description = description;
     if (status) updateData.status = status.toUpperCase();
     if (priority) updateData.priority = priority.toUpperCase();
@@ -357,6 +513,21 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: 'ID ticket requis' },
         { status: 400 }
+      );
+    }
+
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: 'Utilisateur requis' },
+        { status: 400 }
+      );
+    }
+
+    const actorAccess = await resolveTicketManagerFromActorId(db, userId);
+    if (!actorAccess.canManage) {
+      return NextResponse.json(
+        { success: false, error: 'Acces refuse' },
+        { status: 403 }
       );
     }
 

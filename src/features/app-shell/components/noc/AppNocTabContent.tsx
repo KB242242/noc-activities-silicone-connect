@@ -8,7 +8,7 @@ import { NocMonitoringPanel } from '@/components/noc/NocMonitoringPanel';
 import { NocReportingPanel } from '@/components/noc/NocReportingPanel';
 import { NocSitesPanel } from '@/components/noc/NocSitesPanel';
 
-import type { UserProfile } from '@/features/app-shell/types';
+import type { UserProfile } from '@/features/app-shell/core/shared/types';
 
 type AppNocTabContentProps = {
   currentTab: string;

@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import type { CallHistory, LiveReaction } from '@/features/app-shell/types';
+import type { CallHistory, LiveReaction } from '@/features/app-shell/core/shared/types';
 import { toast } from '@/lib/toast';
 
 type CallParticipant = {

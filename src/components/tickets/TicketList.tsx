@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import Link from 'next/link';
 import {
   Search, Plus, Filter, RefreshCw, Eye, Edit2, Trash2, RotateCcw,
   ChevronUp, ChevronDown, ChevronsUpDown, ChevronLeft, ChevronRight,
@@ -544,19 +543,11 @@ export default function TicketList({
                               </Tooltip>
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  {ticket.id ? (
-                                    <Button asChild variant="ghost" size="icon" className="h-7 w-7">
-                                      <Link href={`/tickets/${encodeURIComponent(String(ticket.id))}`}>
-                                        <ArrowUpRight className="w-4 h-4" />
-                                      </Link>
-                                    </Button>
-                                  ) : (
-                                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onView(ticket)}>
-                                      <ArrowUpRight className="w-4 h-4" />
-                                    </Button>
-                                  )}
+                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onView(ticket)}>
+                                    <ArrowUpRight className="w-4 h-4" />
+                                  </Button>
                                 </TooltipTrigger>
-                                <TooltipContent>Page detail</TooltipContent>
+                                <TooltipContent>Voir detail</TooltipContent>
                               </Tooltip>
                               {isEditor && (
                                 <Tooltip>

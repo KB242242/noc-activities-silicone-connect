@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
-import type { Conversation } from '@/features/app-shell/types';
+import type { Conversation } from '@/features/app-shell/core/shared/types';
 import { toast } from '@/lib/toast';
 
 type DirectoryUser = {

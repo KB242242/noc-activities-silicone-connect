@@ -1,13 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { db } from '@/lib/db';
+import { resolveTicketManagerFromActorId } from '@/lib/tickets/permissions';
 
 // API pour l'envoi d'emails de notification de tickets
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { to, subject, content, ticketId, ticketData } = body;
+    const { to, subject, content, html, text, ticketId, ticketData, requesterId } = body;
+    const normalizedText = String(text ?? content ?? '').trim();
+    const normalizedHtml = String(html ?? '').trim();
+    const normalizedContent = normalizedText || normalizedHtml;
+
+    const normalizedRequesterId = String(requesterId ?? '').trim();
+    if (!normalizedRequesterId) {
+      return NextResponse.json(
+        { error: 'Utilisateur requis' },
+        { status: 400 }
+      );
+    }
+
+    const actorAccess = await resolveTicketManagerFromActorId(db, normalizedRequesterId);
+    if (!actorAccess.canManage) {
+      return NextResponse.json(
+        { error: 'Acces refuse' },
+        { status: 403 }
+      );
+    }
 
     // Validation des données
-    if (!to || !subject || !content) {
+    if (!to || !subject || !normalizedContent) {
       return NextResponse.json(
         { error: 'Destinataire, sujet et contenu requis' },
         { status: 400 }
@@ -23,8 +44,12 @@ export async function POST(request: NextRequest) {
     console.log('========================================');
     console.log(`À: ${to}`);
     console.log(`Sujet: ${subject}`);
-    console.log('--- Contenu ---');
-    console.log(content);
+    console.log('--- Texte ---');
+    console.log(normalizedText || '[vide]');
+    if (normalizedHtml) {
+      console.log('--- HTML ---');
+      console.log(normalizedHtml);
+    }
     console.log('========================================');
 
     // Simuler un délai d'envoi

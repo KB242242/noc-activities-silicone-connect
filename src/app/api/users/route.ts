@@ -5,6 +5,12 @@ import { publishChatEvent } from '@/lib/chatRealtime';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { randomUUID } from 'crypto';
+import { isEmailDomainAllowed, loadAllowedEmailDomains } from '@/lib/users/emailDomains';
+import {
+  getUserEmailDomainPolicy,
+  loadUserEmailDomainPolicies,
+  resolveUserAllowedDomains,
+} from '@/lib/users/emailDomainPolicies';
 
 function getImageExtension(mimeType: string) {
   if (mimeType.includes('png')) return 'png';
@@ -74,6 +80,8 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' }
     });
 
+    const policiesStore = await loadUserEmailDomainPolicies();
+
     // Remove sensitive data
     const safeUsers = users.map(user => ({
       id: user.id,
@@ -96,7 +104,8 @@ export async function GET(request: NextRequest) {
       reliabilityIndex: user.reliabilityIndex,
       lastActivity: user.lastActivity,
       presenceStatus: user.presenceStatus,
-      createdAt: user.createdAt
+      createdAt: user.createdAt,
+      domainPolicy: getUserEmailDomainPolicy(user.id, policiesStore)
     }));
 
     return NextResponse.json({
@@ -148,8 +157,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const emailValue = String(email).trim().toLowerCase();
+    const domainStore = await loadAllowedEmailDomains();
+    const activeGlobalDomains = domainStore.domains.filter((entry) => entry.isActive).map((entry) => entry.domain);
+    if (!isEmailDomainAllowed(emailValue, domainStore.domains)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Domaine email non autorisé. Domaines actifs: ${activeGlobalDomains.map((d) => `@${d}`).join(', ') || 'aucun'}`,
+        },
+        { status: 400 }
+      );
+    }
+
     // Check if email already exists
-    const existingUser = await db.user.findUnique({ where: { email } });
+    const existingUser = await db.user.findUnique({ where: { email: emailValue } });
     if (existingUser) {
       return NextResponse.json(
         { success: false, error: 'Un utilisateur avec cet email existe déjà' },
@@ -187,7 +209,7 @@ export async function POST(request: NextRequest) {
     // Create user
     const user = await db.user.create({
       data: {
-        email,
+        email: emailValue,
         name,
         firstName: firstName || null,
         lastName: lastName || null,
@@ -304,7 +326,34 @@ export async function PUT(request: NextRequest) {
 
     // Check email uniqueness if changing
     if (email && email !== user.email) {
-      const existingEmail = await db.user.findUnique({ where: { email } });
+      const emailValue = String(email).trim().toLowerCase();
+      const [domainStore, policiesStore] = await Promise.all([
+        loadAllowedEmailDomains(),
+        loadUserEmailDomainPolicies(),
+      ]);
+      const activeGlobalDomains = domainStore.domains.filter((entry) => entry.isActive).map((entry) => entry.domain);
+      const userPolicy = getUserEmailDomainPolicy(user.id, policiesStore);
+      const effectiveAllowedDomains = resolveUserAllowedDomains(userPolicy, activeGlobalDomains);
+
+      if (
+        effectiveAllowedDomains !== null
+          ? !effectiveAllowedDomains.some((domain) => emailValue.endsWith(`@${domain}`))
+          : false
+      ) {
+        const allowedDomainsText =
+          effectiveAllowedDomains === null
+            ? 'tous les domaines'
+            : effectiveAllowedDomains.map((domain) => `@${domain}`).join(', ') || 'aucun';
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Domaine email non autorisé pour cet utilisateur. Domaines autorisés: ${allowedDomainsText}`,
+          },
+          { status: 400 }
+        );
+      }
+
+      const existingEmail = await db.user.findUnique({ where: { email: emailValue } });
       if (existingEmail) {
         return NextResponse.json(
           { success: false, error: 'Un utilisateur avec cet email existe déjà' },
@@ -328,7 +377,7 @@ export async function PUT(request: NextRequest) {
         name: name || user.name,
         firstName: firstName !== undefined ? firstName : user.firstName,
         lastName: lastName !== undefined ? lastName : user.lastName,
-        email: email !== undefined ? email : user.email,
+        email: email !== undefined ? String(email).trim().toLowerCase() : user.email,
         username: username !== undefined ? username : user.username,
         role: role || user.role,
         shiftId: shiftId !== undefined ? shiftId : user.shiftId,
@@ -638,13 +687,50 @@ export async function PATCH(request: NextRequest) {
         : `${typeof firstName === 'string' ? firstName : targetUser.firstName || ''} ${typeof lastName === 'string' ? lastName : targetUser.lastName || ''}`.trim() ||
           targetUser.name;
 
+    if (email !== undefined && email !== targetUser.email) {
+      const emailValue = String(email).trim().toLowerCase();
+      const [domainStore, policiesStore] = await Promise.all([
+        loadAllowedEmailDomains(),
+        loadUserEmailDomainPolicies(),
+      ]);
+      const activeGlobalDomains = domainStore.domains.filter((entry) => entry.isActive).map((entry) => entry.domain);
+      const userPolicy = getUserEmailDomainPolicy(targetUser.id, policiesStore);
+      const effectiveAllowedDomains = resolveUserAllowedDomains(userPolicy, activeGlobalDomains);
+
+      if (
+        effectiveAllowedDomains !== null
+          ? !effectiveAllowedDomains.some((domain) => emailValue.endsWith(`@${domain}`))
+          : false
+      ) {
+        const allowedDomainsText =
+          effectiveAllowedDomains === null
+            ? 'tous les domaines'
+            : effectiveAllowedDomains.map((domain) => `@${domain}`).join(', ') || 'aucun';
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Domaine email non autorisé pour cet utilisateur. Domaines autorisés: ${allowedDomainsText}`,
+          },
+          { status: 400 }
+        );
+      }
+
+      const existingEmail = await db.user.findUnique({ where: { email: emailValue } });
+      if (existingEmail && existingEmail.id !== targetUser.id) {
+        return NextResponse.json(
+          { success: false, error: 'Un utilisateur avec cet email existe déjà' },
+          { status: 400 }
+        );
+      }
+    }
+
     const updatedUser = await db.user.update({
       where: { id: targetUser.id },
       data: {
         firstName: firstName !== undefined ? firstName : targetUser.firstName,
         lastName: lastName !== undefined ? lastName : targetUser.lastName,
         name: nextName,
-        email: email !== undefined ? email : targetUser.email,
+        email: email !== undefined ? String(email).trim().toLowerCase() : targetUser.email,
         username: username !== undefined ? username : targetUser.username,
         avatar: avatarToStore !== undefined ? avatarToStore : targetUser.avatar,
         updatedAt: new Date(),

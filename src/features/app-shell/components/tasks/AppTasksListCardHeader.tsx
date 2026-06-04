@@ -1,4 +1,4 @@
-import { ClipboardList } from 'lucide-react';
+﻿import { ClipboardList } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,7 +12,7 @@ export function AppTasksListCardHeader({ taskCount }: AppTasksListCardHeaderProp
     <CardHeader className="pb-2 pt-4">
       <CardTitle className="text-base flex items-center gap-2">
         <ClipboardList className="w-5 h-5" />
-        Liste des taches
+        Liste des tâches
         {taskCount > 0 ? (
           <Badge variant="outline" className="ml-2">
             {taskCount}
@@ -22,3 +22,4 @@ export function AppTasksListCardHeader({ taskCount }: AppTasksListCardHeaderProp
     </CardHeader>
   );
 }
+
