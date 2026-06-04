@@ -1,5 +1,5 @@
 import { format } from 'date-fns';
-import { RefreshCw, Users } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 type AppAdminTabContentProps = {
   setCurrentTabSafely: (tab: any) => void;
@@ -30,7 +31,6 @@ type AppAdminTabContentProps = {
 };
 
 export function AppAdminTabContent({
-  setCurrentTabSafely,
   ticketAdminSettings,
   setTicketAdminSettings,
   ticketAdminSettingsLoading,
@@ -49,30 +49,20 @@ export function AppAdminTabContent({
   getShiftColor,
 }: AppAdminTabContentProps) {
   return (
-    <>
-      <div>
-        <h1 className="text-2xl lg:text-3xl font-bold">Administration</h1>
-        <p className="text-muted-foreground">Gestion des utilisateurs et paramètres</p>
-      </div>
+    <Tabs defaultValue="tickets" className="space-y-4">
+      <TabsList>
+        <TabsTrigger value="tickets">Tickets</TabsTrigger>
+        <TabsTrigger value="rubriques">Rubriques</TabsTrigger>
+        <TabsTrigger value="operations">Opérations</TabsTrigger>
+      </TabsList>
 
-      <Card>
-        <CardContent className="pt-6 pb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="font-medium">Gestion des comptes utilisateurs</p>
-            <p className="text-sm text-muted-foreground">Accédez à la page dédiée pour gérer rôles, sécurité et accès.</p>
-          </div>
-          <Button onClick={() => setCurrentTabSafely('admin_users')}>
-            <Users className="w-4 h-4 mr-2" /> Ouvrir la gestion utilisateurs
-          </Button>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-2 pt-4">
-          <CardTitle className="text-base">Paramètres Tickets</CardTitle>
-          <CardDescription>Personnalisez le format de numéro, les emails de notification et les SLA par catégorie.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4 pb-4">
+      <TabsContent value="tickets" className="space-y-4">
+        <Card>
+          <CardHeader className="pb-2 pt-4">
+            <CardTitle className="text-base">Paramètres Tickets</CardTitle>
+            <CardDescription>Personnalisez le format de numéro, les emails de notification et les SLA par catégorie.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4 pb-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label htmlFor="ticket-number-format">Format numéro ticket</Label>
@@ -118,6 +108,121 @@ export function AppAdminTabContent({
               disabled={ticketAdminSettingsLoading || ticketAdminSettingsSaving}
             />
             <p className="text-xs text-muted-foreground">Séparez plusieurs adresses par une virgule.</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="ticket-support-copy-email">Email copie support (CC)</Label>
+              <Input
+                id="ticket-support-copy-email"
+                value={ticketAdminSettings.supportCopyEmail}
+                onChange={(event) =>
+                  setTicketAdminSettings((prev: any) => ({
+                    ...prev,
+                    supportCopyEmail: event.target.value,
+                  }))
+                }
+                placeholder="support@siliconeconnect.com"
+                disabled={ticketAdminSettingsLoading || ticketAdminSettingsSaving}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="ticket-tech-fallback-email">Email fallback technicien</Label>
+              <Input
+                id="ticket-tech-fallback-email"
+                value={ticketAdminSettings.technicianFallbackEmail}
+                onChange={(event) =>
+                  setTicketAdminSettings((prev: any) => ({
+                    ...prev,
+                    technicianFallbackEmail: event.target.value,
+                  }))
+                }
+                placeholder="kevine.test242@gmail.com"
+                disabled={ticketAdminSettingsLoading || ticketAdminSettingsSaving}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Envoi email par étape du ticket</Label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="flex items-center justify-between rounded-lg border p-3">
+                <span className="text-sm font-medium">Création</span>
+                <Switch
+                  checked={ticketAdminSettings.lifecycleEmailEvents.creation}
+                  onCheckedChange={(checked) =>
+                    setTicketAdminSettings((prev: any) => ({
+                      ...prev,
+                      lifecycleEmailEvents: {
+                        ...prev.lifecycleEmailEvents,
+                        creation: checked,
+                      },
+                    }))
+                  }
+                />
+              </div>
+              <div className="flex items-center justify-between rounded-lg border p-3">
+                <span className="text-sm font-medium">En attente</span>
+                <Switch
+                  checked={ticketAdminSettings.lifecycleEmailEvents.pending}
+                  onCheckedChange={(checked) =>
+                    setTicketAdminSettings((prev: any) => ({
+                      ...prev,
+                      lifecycleEmailEvents: {
+                        ...prev.lifecycleEmailEvents,
+                        pending: checked,
+                      },
+                    }))
+                  }
+                />
+              </div>
+              <div className="flex items-center justify-between rounded-lg border p-3">
+                <span className="text-sm font-medium">Escaladé</span>
+                <Switch
+                  checked={ticketAdminSettings.lifecycleEmailEvents.escalated}
+                  onCheckedChange={(checked) =>
+                    setTicketAdminSettings((prev: any) => ({
+                      ...prev,
+                      lifecycleEmailEvents: {
+                        ...prev.lifecycleEmailEvents,
+                        escalated: checked,
+                      },
+                    }))
+                  }
+                />
+              </div>
+              <div className="flex items-center justify-between rounded-lg border p-3">
+                <span className="text-sm font-medium">Fermé</span>
+                <Switch
+                  checked={ticketAdminSettings.lifecycleEmailEvents.closed}
+                  onCheckedChange={(checked) =>
+                    setTicketAdminSettings((prev: any) => ({
+                      ...prev,
+                      lifecycleEmailEvents: {
+                        ...prev.lifecycleEmailEvents,
+                        closed: checked,
+                      },
+                    }))
+                  }
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between rounded-lg border p-3">
+            <div>
+              <p className="text-sm font-medium">Copie client (Incident/Maintenance)</p>
+              <p className="text-xs text-muted-foreground">Autorise l'envoi manuel d'une copie client depuis la création ticket.</p>
+            </div>
+            <Switch
+              checked={ticketAdminSettings.sendClientCopyForIncidentMaintenance}
+              onCheckedChange={(checked) =>
+                setTicketAdminSettings((prev: any) => ({
+                  ...prev,
+                  sendClientCopyForIncidentMaintenance: checked,
+                }))
+              }
+            />
           </div>
 
           <div className="space-y-2">
@@ -195,96 +300,101 @@ export function AppAdminTabContent({
             </div>
           </div>
 
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Button variant="outline" onClick={() => void loadTicketAdminSettings()} disabled={ticketAdminSettingsLoading || ticketAdminSettingsSaving}>
-              <RefreshCw className={`w-4 h-4 mr-2 ${ticketAdminSettingsLoading ? 'animate-spin' : ''}`} />
-              Recharger
-            </Button>
-            <Button onClick={() => void saveTicketAdminSettings()} disabled={ticketAdminSettingsLoading || ticketAdminSettingsSaving}>
-              {ticketAdminSettingsSaving ? 'Enregistrement...' : 'Enregistrer les paramètres tickets'}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button variant="outline" onClick={() => void loadTicketAdminSettings()} disabled={ticketAdminSettingsLoading || ticketAdminSettingsSaving}>
+                <RefreshCw className={`w-4 h-4 mr-2 ${ticketAdminSettingsLoading ? 'animate-spin' : ''}`} />
+                Recharger
+              </Button>
+              <Button onClick={() => void saveTicketAdminSettings()} disabled={ticketAdminSettingsLoading || ticketAdminSettingsSaving}>
+                {ticketAdminSettingsSaving ? 'Enregistrement...' : 'Enregistrer les paramètres tickets'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </TabsContent>
 
-      <Card>
-        <CardHeader className="pb-2 pt-4">
-          <CardTitle className="text-base">Contrôle des Rubriques</CardTitle>
-          <CardDescription>Activez ou désactivez les rubriques visibles pour les utilisateurs.</CardDescription>
-        </CardHeader>
-        <CardContent className="pb-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {Object.entries(SECTION_LABELS)
-              .filter(([key]) => key !== 'admin')
-              .map(([key, label]) => (
-                <div key={key} className="flex items-center justify-between rounded-lg border p-3">
-                  <span className="text-sm font-medium">{label}</span>
-                  <Switch
-                    checked={sectionAccess[key]}
-                    onCheckedChange={(checked) =>
-                      setSectionAccess((prev: any) => ({
-                        ...prev,
-                        [key]: checked,
-                      }))
-                    }
-                  />
-                </div>
+      <TabsContent value="rubriques" className="space-y-4">
+        <Card>
+          <CardHeader className="pb-2 pt-4">
+            <CardTitle className="text-base">Contrôle des Rubriques</CardTitle>
+            <CardDescription>Activez ou désactivez les rubriques visibles pour les utilisateurs.</CardDescription>
+          </CardHeader>
+          <CardContent className="pb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {Object.entries(SECTION_LABELS)
+                .filter(([key]) => key !== 'admin')
+                .map(([key, label]) => (
+                  <div key={key} className="flex items-center justify-between rounded-lg border p-3">
+                    <span className="text-sm font-medium">{label}</span>
+                    <Switch
+                      checked={sectionAccess[key]}
+                      onCheckedChange={(checked) =>
+                        setSectionAccess((prev: any) => ({
+                          ...prev,
+                          [key]: checked,
+                        }))
+                      }
+                    />
+                  </div>
+                ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2 pt-4">
+            <CardTitle className="text-base">Types d'Alertes Disponibles</CardTitle>
+            <CardDescription>Types utilisables pour qualifier les alertes NOC.</CardDescription>
+          </CardHeader>
+          <CardContent className="pb-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              {Object.entries(ALERT_TYPE_CONFIG).map(([key, config]) => (
+                <Badge key={key} variant="outline" className={`justify-center py-1 ${config.colorClass}`}>
+                  {config.label}
+                </Badge>
               ))}
-          </div>
-        </CardContent>
-      </Card>
+            </div>
+          </CardContent>
+        </Card>
+      </TabsContent>
 
-      <Card>
-        <CardHeader className="pb-2 pt-4">
-          <CardTitle className="text-base">Types d'Alertes Disponibles</CardTitle>
-          <CardDescription>Types utilisables pour qualifier les alertes NOC.</CardDescription>
-        </CardHeader>
-        <CardContent className="pb-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-            {Object.entries(ALERT_TYPE_CONFIG).map(([key, config]) => (
-              <Badge key={key} variant="outline" className={`justify-center py-1 ${config.colorClass}`}>
-                {config.label}
-              </Badge>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-2 pt-4">
-          <CardTitle className="text-base">Configuration des Shifts</CardTitle>
-        </CardHeader>
-        <CardContent className="pb-4">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            {Object.keys(SHIFTS_DATA).map((shiftName) => {
-              const shiftData = SHIFTS_DATA[shiftName];
-              return (
-                <Card key={shiftName} className="border-2" style={{ borderColor: getShiftColor(shiftName) }}>
-                  <CardHeader className="pb-2 pt-4">
-                    <CardTitle className="flex items-center gap-2 text-base">
-                      <div className="w-3 h-3 rounded" style={{ backgroundColor: getShiftColor(shiftName) }} />
-                      Shift {shiftName}
-                    </CardTitle>
-                    <CardDescription className="text-xs">Début: {format(SHIFT_CYCLE_START[shiftName], 'dd/MM/yyyy')}</CardDescription>
-                  </CardHeader>
-                  <CardContent className="pb-4">
-                    <div className="space-y-1.5">
-                      {shiftData.members.map((member: string, idx: number) => (
-                        <div key={idx} className="flex items-center gap-2 p-1.5 rounded bg-muted text-sm">
-                          <Avatar className="h-6 w-6">
-                            <AvatarFallback className="text-xs">{member.charAt(0)}</AvatarFallback>
-                          </Avatar>
-                          {member}
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
-    </>
+      <TabsContent value="operations" className="space-y-4">
+        <Card>
+          <CardHeader className="pb-2 pt-4">
+            <CardTitle className="text-base">Configuration des Shifts</CardTitle>
+          </CardHeader>
+          <CardContent className="pb-4">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {Object.keys(SHIFTS_DATA).map((shiftName) => {
+                const shiftData = SHIFTS_DATA[shiftName];
+                return (
+                  <Card key={shiftName} className="border-2" style={{ borderColor: getShiftColor(shiftName) }}>
+                    <CardHeader className="pb-2 pt-4">
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <div className="w-3 h-3 rounded" style={{ backgroundColor: getShiftColor(shiftName) }} />
+                        Shift {shiftName}
+                      </CardTitle>
+                      <CardDescription className="text-xs">Début: {format(SHIFT_CYCLE_START[shiftName], 'dd/MM/yyyy')}</CardDescription>
+                    </CardHeader>
+                    <CardContent className="pb-4">
+                      <div className="space-y-1.5">
+                        {shiftData.members.map((member: string, idx: number) => (
+                          <div key={idx} className="flex items-center gap-2 p-1.5 rounded bg-muted text-sm">
+                            <Avatar className="h-6 w-6">
+                              <AvatarFallback className="text-xs">{member.charAt(0)}</AvatarFallback>
+                            </Avatar>
+                            {member}
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      </TabsContent>
+    </Tabs>
   );
 }

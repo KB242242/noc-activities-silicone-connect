@@ -1,4 +1,4 @@
-import {
+﻿import {
   AlertTriangle,
   FileText,
   Plus,
@@ -6,6 +6,7 @@ import {
   Trash2,
   Users,
 } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -98,6 +99,13 @@ type AppAdminUserDialogsSectionProps = {
   auditLogs: any[];
 };
 
+type EmailDomainConfig = {
+  id: string;
+  domain: string;
+  isActive: boolean;
+  isDefault: boolean;
+};
+
 export function AppAdminUserDialogsSection({
   isSuperAdmin,
   user,
@@ -169,15 +177,136 @@ export function AppAdminUserDialogsSection({
   filteredAuditLogs,
   auditLogs,
 }: AppAdminUserDialogsSectionProps) {
+  const [emailDomains, setEmailDomains] = useState<EmailDomainConfig[]>([]);
+  const [newDomain, setNewDomain] = useState('');
+  const [newDomainIsDefault, setNewDomainIsDefault] = useState(false);
+  const [domainBusy, setDomainBusy] = useState(false);
+  const [domainError, setDomainError] = useState<string | null>(null);
+
+  const defaultDomain = useMemo(() => {
+    const fromDefault = emailDomains.find((entry) => entry.isDefault && entry.isActive);
+    if (fromDefault) return fromDefault.domain;
+    const firstActive = emailDomains.find((entry) => entry.isActive);
+    return firstActive?.domain ?? emailDomains[0]?.domain ?? 'siliconeconnect.com';
+  }, [emailDomains]);
+
+  const activeDomainsLabel = useMemo(() => {
+    return emailDomains
+      .filter((entry) => entry.isActive)
+      .map((entry) => `@${entry.domain}`)
+      .join(', ');
+  }, [emailDomains]);
+
+  const activeEmailDomains = useMemo(() => {
+    return emailDomains.filter((entry) => entry.isActive);
+  }, [emailDomains]);
+
+  const editDomainPolicy = userToEdit?.domainPolicy as
+    | { mode?: 'default' | 'custom' | 'allow_any'; customDomains?: string[] }
+    | undefined;
+
+  const editPlaceholderDomain = useMemo(() => {
+    const activeDomains = emailDomains.filter((entry) => entry.isActive).map((entry) => entry.domain);
+    if (editDomainPolicy?.mode === 'allow_any') {
+      return 'exemple.com';
+    }
+    if (editDomainPolicy?.mode === 'custom' && Array.isArray(editDomainPolicy.customDomains)) {
+      const firstCustom = editDomainPolicy.customDomains.find((entry) => typeof entry === 'string' && entry.trim().length > 0);
+      if (firstCustom) {
+        const normalized = String(firstCustom).trim().toLowerCase().replace(/^@+/, '');
+        return normalized || defaultDomain;
+      }
+    }
+    return activeDomains[0] || defaultDomain;
+  }, [emailDomains, defaultDomain, editDomainPolicy]);
+
+  const loadDomains = async () => {
+    try {
+      const response = await fetch('/api/users/email-domains', { cache: 'no-store' });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data?.success || !Array.isArray(data?.domains)) {
+        throw new Error(data?.error || 'Chargement des domaines impossible');
+      }
+      setEmailDomains(data.domains);
+      setDomainError(null);
+    } catch (error) {
+      setDomainError(error instanceof Error ? error.message : 'Chargement des domaines impossible');
+    }
+  };
+
+  useEffect(() => {
+    if (!canManageUsers) return;
+    void loadDomains();
+  }, [canManageUsers]);
+
+  useEffect(() => {
+    if (!canManageUsers) return;
+    if (!createUserDialogOpen && !editUserDialogOpen) return;
+    void loadDomains();
+  }, [canManageUsers, createUserDialogOpen, editUserDialogOpen]);
+
+  useEffect(() => {
+    if (!canManageUsers) return;
+
+    const onDomainsChanged = () => {
+      void loadDomains();
+    };
+
+    window.addEventListener('noc-email-domains-updated', onDomainsChanged);
+    return () => window.removeEventListener('noc-email-domains-updated', onDomainsChanged);
+  }, [canManageUsers]);
+
+  const callDomainsApi = async (method: 'POST' | 'PUT' | 'DELETE', payload: Record<string, unknown>) => {
+    if (!user?.id) return;
+    setDomainBusy(true);
+    setDomainError(null);
+    try {
+      const response = await fetch(
+        method === 'DELETE'
+          ? `/api/users/email-domains?adminId=${encodeURIComponent(user.id)}&domain=${encodeURIComponent(String(payload.domain || ''))}`
+          : '/api/users/email-domains',
+        method === 'DELETE'
+          ? { method }
+          : {
+              method,
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ...payload, adminId: user.id }),
+            }
+      );
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data?.success || !Array.isArray(data?.domains)) {
+        throw new Error(data?.error || 'Opération impossible');
+      }
+      setEmailDomains(data.domains);
+      window.dispatchEvent(new Event('noc-email-domains-updated'));
+    } catch (error) {
+      setDomainError(error instanceof Error ? error.message : 'Opération impossible');
+    } finally {
+      setDomainBusy(false);
+    }
+  };
+
+  const addDomain = async () => {
+    const domain = newDomain.trim().toLowerCase().replace(/^@+/, '');
+    if (!domain) {
+      setDomainError('Saisissez un domaine valide');
+      return;
+    }
+    await callDomainsApi('POST', { domain, isActive: true, isDefault: newDomainIsDefault });
+    setNewDomain('');
+    setNewDomainIsDefault(false);
+  };
+
   return (
     <>
       {false && isSuperAdmin(user) && (
         <Dialog open={usersManagementOpen} onOpenChange={setUsersManagementOpen}>
-          <DialogContent className="sm:max-w-[900px] max-h-[80vh]">
+          <DialogContent className="sm:max-w-225 max-h-[80vh]">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Users className="w-5 h-5" />
-                Gerer les utilisateurs
+                Gérer les utilisateurs
               </DialogTitle>
               <DialogDescription>Gerez tous les comptes utilisateurs</DialogDescription>
             </DialogHeader>
@@ -205,7 +334,7 @@ export function AppAdminUserDialogsSection({
                   </SelectContent>
                 </Select>
                 <Button onClick={() => setCreateUserDialogOpen(true)}>
-                  <Plus className="w-4 h-4 mr-2" /> Creer
+                  <Plus className="w-4 h-4 mr-2" /> Créer
                 </Button>
               </div>
 
@@ -238,7 +367,7 @@ export function AppAdminUserDialogsSection({
                           onValueChange={(value) => handleChangeUserRole(u, value)}
                           disabled={u.role === 'SUPER_ADMIN' && user?.id !== u.id}
                         >
-                          <SelectTrigger className="w-[170px] h-8 text-xs">
+                          <SelectTrigger className="w-42.5 h-8 text-xs">
                             <SelectValue placeholder="Changer le role" />
                           </SelectTrigger>
                           <SelectContent>
@@ -269,7 +398,7 @@ export function AppAdminUserDialogsSection({
                           }}
                           disabled={u.role === 'SUPER_ADMIN' && user?.id !== u.id}
                         >
-                          Reinitialiser MDP
+                          Réinitialiser MDP
                         </Button>
                         <Button
                           variant="destructive"
@@ -297,9 +426,9 @@ export function AppAdminUserDialogsSection({
 
       {canManageUsers && (
         <Dialog open={createUserDialogOpen} onOpenChange={setCreateUserDialogOpen}>
-          <DialogContent className="sm:max-w-125">
+          <DialogContent className="sm:max-w-200 max-h-[92vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Creer un nouvel utilisateur</DialogTitle>
+              <DialogTitle>Créer un nouvel utilisateur</DialogTitle>
               <DialogDescription>Remplissez les informations du nouveau compte</DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
@@ -315,7 +444,13 @@ export function AppAdminUserDialogsSection({
               </div>
               <div className="space-y-2">
                 <Label>Email</Label>
-                <Input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} placeholder="@siliconeconnect.com" />
+                <Input
+                  type="email"
+                  value={editEmail}
+                  onChange={(e) => setEditEmail(e.target.value)}
+                  placeholder={`ex: utilisateur@${defaultDomain}`}
+                />
+                <p className="text-xs text-muted-foreground">Domaines actifs: {activeDomainsLabel || 'aucun'}</p>
               </div>
               <div className="space-y-2">
                 <Label>Pseudo (optionnel)</Label>
@@ -373,10 +508,104 @@ export function AppAdminUserDialogsSection({
                 <Input type="password" value={editPassword} onChange={(e) => setEditPassword(e.target.value)} />
                 <p className="text-xs text-muted-foreground">L'utilisateur devra changer ce mot de passe a sa premiere connexion</p>
               </div>
+
+              {canManageUsers && (
+                <div className="space-y-3 rounded-lg border p-3">
+                  <div>
+                    <Label>Domaines email autorisés</Label>
+                    <p className="text-xs text-muted-foreground">Activez/désactivez des domaines, choisissez un domaine par défaut, ou ajoutez-en un nouveau.</p>
+                  </div>
+                  {domainError && <p className="text-xs text-destructive">{domainError}</p>}
+                  <div className="space-y-2 rounded-lg border bg-muted/20 p-3">
+                    <Label>Domaine par défaut actuel</Label>
+                    <Select
+                      value={defaultDomain}
+                      onValueChange={(value) => {
+                        void callDomainsApi('PUT', { domain: value, isDefault: true });
+                      }}
+                      disabled={domainBusy || activeEmailDomains.length === 0}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choisir un domaine par défaut" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {activeEmailDomains.map((entry) => (
+                          <SelectItem key={entry.id} value={entry.domain}>
+                            @{entry.domain}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Ce domaine est utilisé comme référence pour les nouveaux comptes et les champs d’email.
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      value={newDomain}
+                      onChange={(e) => setNewDomain(e.target.value)}
+                      placeholder="ex: gmail.com"
+                    />
+                    <Button type="button" variant="outline" onClick={() => void addDomain()} disabled={domainBusy}>
+                      Ajouter
+                    </Button>
+                  </div>
+                  <div className="flex items-center justify-between rounded border px-3 py-2">
+                    <div>
+                      <p className="text-sm font-medium">Définir comme domaine par défaut</p>
+                      <p className="text-xs text-muted-foreground">Le nouveau domaine sera activé et deviendra la référence pour les nouveaux comptes.</p>
+                    </div>
+                    <Switch checked={newDomainIsDefault} onCheckedChange={setNewDomainIsDefault} disabled={domainBusy} />
+                  </div>
+                  <div className="space-y-2 max-h-40 overflow-auto">
+                    {emailDomains.map((entry) => (
+                      <div key={entry.id} className="flex items-center justify-between gap-2 rounded border px-2 py-1.5">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium">@{entry.domain}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {entry.isDefault ? 'Domaine par défaut' : 'Domaine secondaire'}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={entry.isActive}
+                            onCheckedChange={(checked) => {
+                              void callDomainsApi('PUT', { domain: entry.domain, isActive: checked });
+                            }}
+                            disabled={domainBusy}
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              void callDomainsApi('PUT', { domain: entry.domain, isDefault: true });
+                            }}
+                            disabled={domainBusy || !entry.isActive}
+                          >
+                            Defaut
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              void callDomainsApi('DELETE', { domain: entry.domain });
+                            }}
+                            disabled={domainBusy}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
             <DialogFooter>
               <DialogClose asChild><Button variant="outline">Annuler</Button></DialogClose>
-              <Button onClick={() => void handleCreateUser()} disabled={usersActionInProgress === 'create'}>Creer l'utilisateur</Button>
+              <Button onClick={() => void handleCreateUser()} disabled={usersActionInProgress === 'create'}>Créer l'utilisateur</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -384,7 +613,7 @@ export function AppAdminUserDialogsSection({
 
       {canManageUsers && (
         <Dialog open={editUserDialogOpen} onOpenChange={setEditUserDialogOpen}>
-          <DialogContent className="sm:max-w-[560px]">
+          <DialogContent className="sm:max-w-140">
             <DialogHeader>
               <DialogTitle>Modifier un utilisateur</DialogTitle>
               <DialogDescription>Mettez a jour toutes les informations du compte.</DialogDescription>
@@ -402,7 +631,13 @@ export function AppAdminUserDialogsSection({
               </div>
               <div className="space-y-2">
                 <Label>Email</Label>
-                <Input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} placeholder="@siliconeconnect.com" />
+                <Input
+                  type="email"
+                  value={editEmail}
+                  onChange={(e) => setEditEmail(e.target.value)}
+                  placeholder={`ex: utilisateur@${editPlaceholderDomain}`}
+                />
+                <p className="text-xs text-muted-foreground">Domaines actifs: {activeDomainsLabel || 'aucun'}</p>
               </div>
               <div className="space-y-2">
                 <Label>Pseudo (optionnel)</Label>
@@ -483,7 +718,7 @@ export function AppAdminUserDialogsSection({
           setDeleteConfirmationInput('');
         }
       }}>
-        <DialogContent className="sm:max-w-[450px]">
+          <DialogContent className="sm:max-w-112.5">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-destructive">
               <AlertTriangle className="w-5 h-5" />
@@ -545,7 +780,7 @@ export function AppAdminUserDialogsSection({
 
       {isSuperAdmin(user) && (
         <Dialog open={auditLogDialogOpen} onOpenChange={setAuditLogDialogOpen}>
-          <DialogContent className="sm:max-w-[1000px] max-h-[85vh]">
+          <DialogContent className="sm:max-w-250 max-h-[85vh]">
             <DialogHeader>
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
@@ -675,3 +910,4 @@ export function AppAdminUserDialogsSection({
     </>
   );
 }
+

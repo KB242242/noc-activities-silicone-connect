@@ -30,6 +30,22 @@ export function AppAdminUsersTabSection(props: AppAdminUsersTabSectionProps) {
         handleDeleteUser={props.handleDeleteUser}
         isSuperAdmin={props.isSuperAdmin}
         auditLogs={props.auditLogs}
+        ticketAdminSettings={props.ticketAdminSettings}
+        setTicketAdminSettings={props.setTicketAdminSettings}
+        ticketAdminSettingsLoading={props.ticketAdminSettingsLoading}
+        ticketAdminSettingsSaving={props.ticketAdminSettingsSaving}
+        ticketAdminEmailsInput={props.ticketAdminEmailsInput}
+        setTicketAdminEmailsInput={props.setTicketAdminEmailsInput}
+        loadTicketAdminSettings={props.loadTicketAdminSettings}
+        saveTicketAdminSettings={props.saveTicketAdminSettings}
+        TICKET_ADMIN_CATEGORY_KEYS={props.TICKET_ADMIN_CATEGORY_KEYS}
+        SECTION_LABELS={props.SECTION_LABELS}
+        sectionAccess={props.sectionAccess}
+        setSectionAccess={props.setSectionAccess}
+        ALERT_TYPE_CONFIG={props.ALERT_TYPE_CONFIG}
+        SHIFTS_DATA={props.SHIFTS_DATA}
+        SHIFT_CYCLE_START={props.SHIFT_CYCLE_START}
+        getShiftColor={props.getShiftColor}
       />
     </motion.div>
   );

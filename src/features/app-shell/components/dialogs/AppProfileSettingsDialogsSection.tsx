@@ -1,5 +1,6 @@
-import { format } from 'date-fns';
+﻿import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Activity,
   Calendar,
@@ -90,6 +91,18 @@ type AppProfileSettingsDialogsSectionProps = {
   setTheme: (value: string) => void;
 };
 
+type EmailDomainConfig = {
+  id: string;
+  domain: string;
+  isActive: boolean;
+  isDefault: boolean;
+};
+
+type UserDomainPolicy = {
+  mode?: 'default' | 'custom' | 'allow_any';
+  customDomains?: string[];
+};
+
 export function AppProfileSettingsDialogsSection({
   restDialogOpen,
   setRestDialogOpen,
@@ -136,6 +149,89 @@ export function AppProfileSettingsDialogsSection({
   theme,
   setTheme,
 }: AppProfileSettingsDialogsSectionProps) {
+  const [emailDomains, setEmailDomains] = useState<EmailDomainConfig[]>([]);
+  const [selfDomainPolicy, setSelfDomainPolicy] = useState<UserDomainPolicy | null>(null);
+
+  const loadEmailDomains = async () => {
+    try {
+      const response = await fetch('/api/users/email-domains', { cache: 'no-store' });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data?.success || !Array.isArray(data?.domains)) {
+        return;
+      }
+      setEmailDomains(data.domains);
+    } catch {
+      // Keep fallback placeholder when domain settings are not reachable.
+    }
+  };
+
+  const loadSelfDomainPolicy = async () => {
+    if (!user?.id) return;
+    try {
+      const response = await fetch(
+        `/api/users/domain-policy?actorId=${encodeURIComponent(user.id)}&userId=${encodeURIComponent(user.id)}`,
+        { cache: 'no-store' }
+      );
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data?.success || !data?.policy) {
+        return;
+      }
+      setSelfDomainPolicy(data.policy as UserDomainPolicy);
+    } catch {
+      // Keep default mode when policy endpoint is not reachable.
+    }
+  };
+
+  useEffect(() => {
+    void loadEmailDomains();
+    void loadSelfDomainPolicy();
+  }, []);
+
+  useEffect(() => {
+    const onDomainsUpdated = () => {
+      void loadEmailDomains();
+      void loadSelfDomainPolicy();
+    };
+    window.addEventListener('noc-email-domains-updated', onDomainsUpdated);
+    return () => window.removeEventListener('noc-email-domains-updated', onDomainsUpdated);
+  }, []);
+
+  useEffect(() => {
+    void loadSelfDomainPolicy();
+  }, [user?.id]);
+
+  const profileEmailPlaceholder = useMemo(() => {
+    const currentEmail = String(editEmail || '').trim().toLowerCase();
+    const atIndex = currentEmail.lastIndexOf('@');
+    if (atIndex > 0 && atIndex < currentEmail.length - 1) {
+      return `votre.email@${currentEmail.slice(atIndex + 1)}`;
+    }
+
+    const activeDomains = emailDomains.filter((entry) => entry.isActive).map((entry) => entry.domain);
+
+    if (selfDomainPolicy?.mode === 'allow_any') {
+      return 'votre.email@exemple.com';
+    }
+
+    if (selfDomainPolicy?.mode === 'custom' && Array.isArray(selfDomainPolicy.customDomains)) {
+      const firstCustom = selfDomainPolicy.customDomains.find((domain) => {
+        const normalized = String(domain ?? '').trim().toLowerCase().replace(/^@+/, '');
+        return normalized.length > 0;
+      });
+      if (firstCustom) {
+        const normalized = String(firstCustom).trim().toLowerCase().replace(/^@+/, '');
+        return `votre.email@${normalized}`;
+      }
+    }
+
+    const defaultDomain =
+      emailDomains.find((entry) => entry.isDefault && entry.isActive)?.domain
+      ?? activeDomains[0]
+      ?? 'siliconeconnect.com';
+
+    return `votre.email@${defaultDomain}`;
+  }, [editEmail, emailDomains, selfDomainPolicy]);
+
   return (
     <>
       <Dialog open={restDialogOpen} onOpenChange={setRestDialogOpen}>
@@ -150,11 +246,11 @@ export function AppProfileSettingsDialogsSection({
                 <h4 className="font-medium flex items-center gap-2"><Coffee className="w-4 h-4" /> Repos Individuel</h4>
                 <div className="p-3 rounded-lg bg-muted">
                   {userRestInfo.isOnIndividualRest ? (
-                    <p className="text-green-600 font-medium">Vous etes en repos aujourd'hui</p>
+                    <p className="text-green-600 font-medium">Vous êtes en repos aujourd'hui</p>
                   ) : (
                     <div>
                       <p className="text-sm text-muted-foreground">Prochain repos :</p>
-                      <p className="font-bold">{userRestInfo.nextIndividualRest ? format(userRestInfo.nextIndividualRest, 'EEEE d MMMM yyyy', { locale: fr }) : 'Non planifie'}</p>
+                      <p className="font-bold">{userRestInfo.nextIndividualRest ? format(userRestInfo.nextIndividualRest, 'EEEE d MMMM yyyy', { locale: fr }) : 'Non planifié'}</p>
                     </div>
                   )}
                 </div>
@@ -167,7 +263,7 @@ export function AppProfileSettingsDialogsSection({
                   ) : (
                     <div>
                       <p className="text-sm text-muted-foreground">Prochain repos collectif :</p>
-                      <p className="font-bold">{userRestInfo.nextCollectiveRestStart ? format(userRestInfo.nextCollectiveRestStart, 'EEEE d MMMM yyyy', { locale: fr }) : 'Non planifie'}</p>
+                      <p className="font-bold">{userRestInfo.nextCollectiveRestStart ? format(userRestInfo.nextCollectiveRestStart, 'EEEE d MMMM yyyy', { locale: fr }) : 'Non planifié'}</p>
                     </div>
                   )}
                 </div>
@@ -281,7 +377,7 @@ export function AppProfileSettingsDialogsSection({
                 type="email"
                 value={editEmail}
                 onChange={(e) => setEditEmail(e.target.value)}
-                placeholder="votre.email@siliconeconnect.com"
+                placeholder={profileEmailPlaceholder}
               />
             </div>
             <div className="space-y-2">
@@ -316,7 +412,7 @@ export function AppProfileSettingsDialogsSection({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Settings className="w-5 h-5" />
-              {isAdminPasswordResetMode ? 'Reinitialiser mot de passe' : 'Securiser mon compte'}
+              {isAdminPasswordResetMode ? 'Réinitialiser mot de passe' : 'Sécuriser mon compte'}
             </DialogTitle>
             <DialogDescription>
               {isAdminPasswordResetMode
@@ -400,7 +496,7 @@ export function AppProfileSettingsDialogsSection({
           <DialogFooter>
             <DialogClose asChild><Button variant="outline">Annuler</Button></DialogClose>
             <Button onClick={handleSaveSecurity} disabled={!validatePassword(editPassword).isValid || editPassword !== confirmPassword}>
-              {isAdminPasswordResetMode ? 'Reinitialiser' : 'Securiser'}
+              {isAdminPasswordResetMode ? 'Réinitialiser' : 'Sécuriser'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -411,7 +507,7 @@ export function AppProfileSettingsDialogsSection({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Calendar className="w-5 h-5" />
-              Definir mon shift
+              Définir mon shift
             </DialogTitle>
             <DialogDescription>Configurez votre shift et votre fonction</DialogDescription>
           </DialogHeader>
@@ -471,7 +567,7 @@ export function AppProfileSettingsDialogsSection({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Settings className="w-5 h-5" />
-              Parametres
+              Paramètres
             </DialogTitle>
             <DialogDescription>Personnalisez votre experience</DialogDescription>
           </DialogHeader>
@@ -499,7 +595,7 @@ export function AppProfileSettingsDialogsSection({
               <h4 className="text-sm font-medium">Session</h4>
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
-                  <p className="text-sm">Deconnexion automatique</p>
+                  <p className="text-sm">Déconnexion automatique</p>
                   <p className="text-xs text-muted-foreground">Apres 10 minutes d'inactivite</p>
                 </div>
                 <Badge variant="outline">Active</Badge>
@@ -527,3 +623,4 @@ export function AppProfileSettingsDialogsSection({
     </>
   );
 }
+
