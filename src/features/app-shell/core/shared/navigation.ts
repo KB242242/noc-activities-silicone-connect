@@ -24,7 +24,6 @@ export type AppSectionKey =
   | 'dashboard'
   | 'planning'
   | 'tasks'
-  | 'activities'
   | 'tickets'
   | 'overtime'
   | 'links'
@@ -58,7 +57,6 @@ export const DEFAULT_SECTION_ACCESS: Record<AppSectionKey, boolean> = {
   dashboard: true,
   planning: true,
   tasks: true,
-  activities: true,
   tickets: true,
   overtime: true,
   links: true,
@@ -82,7 +80,6 @@ export const SECTION_LABELS: Record<AppSectionKey, string> = {
   dashboard: 'Tableau de bord',
   planning: 'Planning',
   tasks: 'Mes Tâches',
-  activities: 'Activités',
   tickets: 'Gestion Tickets',
   overtime: 'Heures Sup.',
   links: 'Liens Externes',
@@ -112,4 +109,8 @@ export function isAppSectionKey(tab: string): tab is AppSectionKey {
 
 export function getCurrentTabStorageKey(userId: string) {
   return `noc_current_tab_${userId}`;
+}
+
+export function getPlanningFilterStorageKey(userId: string) {
+  return `noc_planning_filter_${userId}`;
 }

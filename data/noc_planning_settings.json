@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "enablePdfGeneration": true,
+    "pdfAllowedRoles": [
+      "TECHNICIEN_NO",
+      "RESPONSABLE",
+      "ADMIN",
+      "SUPER_ADMIN"
+    ]
+  },
+  "visibility": {
+    "individualRestVisibleRoles": [
+      "TECHNICIEN_NO",
+      "RESPONSABLE",
+      "ADMIN",
+      "SUPER_ADMIN"
+    ]
+  },
+  "updatedAt": "2026-06-18T21:28:22.623Z",
+  "updatedBy": null
+}

@@ -65,7 +65,6 @@ INSERT INTO users (id, email, name, role, isactive) VALUES
 INSERT INTO users (id, email, name, role, shiftid, isactive) VALUES
 ('agent-a1', 'alaine@siliconeconnect.com', 'Alaine', 'AGENT', 'shift-a', TRUE),
 ('agent-a2', 'casimir@siliconeconnect.com', 'Casimir', 'AGENT', 'shift-a', TRUE),
-('agent-a3', 'luca@siliconeconnect.com', 'Luca', 'AGENT', 'shift-a', TRUE),
-('agent-a4', 'jose@siliconeconnect.com', 'José', 'AGENT', 'shift-a', TRUE);
+('agent-a3', 'luca@siliconeconnect.com', 'Luca', 'AGENT', 'shift-a', TRUE);
 
 -- ...existing code for other inserts, all lowercased...

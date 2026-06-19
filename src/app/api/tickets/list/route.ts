@@ -752,6 +752,7 @@ export async function POST(req: NextRequest) {
       const assignedLocality = allLocalities[0] ?? '';
       const ticketNumber = numero.startsWith('#') ? numero : `#${numero}`;
       const assignationSubject = buildAssignationSubject(ticketNumber, objet);
+      const nocCreationSubject = `[TICKET CREE] ${ticketNumber} - ${objet}`;
       const actionAt = new Date();
       const currentTicketDescription = String(description ?? '').trim() || 'Aucune description';
 
@@ -828,7 +829,7 @@ export async function POST(req: NextRequest) {
           receiver: adminRecipients.join(', '),
           cc: supportCopyEmail,
           fromOverride: nocFromAddress,
-          subjectOverride: `[COPIE ASSIGNATION] ${assignationSubject}`,
+          subjectOverride: nocCreationSubject,
           htmlBody: html,
           textBody: text,
         });

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
@@ -46,6 +46,7 @@ type AppDashboardPanelProps = {
   user: UserProfile | null;
   userRestInfo: DashboardRestInfo | null;
   tasks: Task[];
+  allUsers: any[];
   onRefresh: () => void;
 };
 
@@ -65,7 +66,17 @@ const DEFAULT_DASHBOARD_CONFIG: DashboardConfig = {
   showRecentActivityWidget: true,
 };
 
-export function AppDashboardPanel({ user, userRestInfo, tasks, onRefresh }: AppDashboardPanelProps) {
+export function AppDashboardPanel({ user, userRestInfo, tasks, allUsers, onRefresh }: AppDashboardPanelProps) {
+  const currentDayLabel = useMemo(() => {
+    return new Intl.DateTimeFormat('fr-FR', {
+      timeZone: 'Africa/Brazzaville',
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    }).format(new Date());
+  }, []);
+
   const [dashboardConfig, setDashboardConfig] = useState<DashboardConfig>(DEFAULT_DASHBOARD_CONFIG);
 
   const loadDashboardConfig = () => {
@@ -99,13 +110,47 @@ export function AppDashboardPanel({ user, userRestInfo, tasks, onRefresh }: AppD
   const showShiftSection = dashboardConfig.showShiftWidget;
   const showActivitySection = dashboardConfig.showRecentActivityWidget;
 
+  const liveMembersByShift = useMemo(() => {
+    const buckets: Record<string, string[]> = { A: [], B: [], C: [] };
+
+    allUsers
+      .filter((entry) => entry?.isActive && entry?.role === 'TECHNICIEN_NO')
+      .forEach((entry) => {
+        const shiftName = String(entry?.shift?.name ?? entry?.shiftId ?? '')
+          .replace(/^shift-/i, '')
+          .trim()
+          .toUpperCase();
+
+        if (shiftName === 'A' || shiftName === 'B' || shiftName === 'C') {
+          buckets[shiftName].push(String(entry?.name ?? '').trim());
+        }
+      });
+
+    return {
+      A: buckets.A.filter(Boolean).sort((a, b) => a.localeCompare(b, 'fr')),
+      B: buckets.B.filter(Boolean).sort((a, b) => a.localeCompare(b, 'fr')),
+      C: buckets.C.filter(Boolean).sort((a, b) => a.localeCompare(b, 'fr')),
+    };
+  }, [allUsers]);
+
+  const shiftPieData = useMemo(() => {
+    const values = [
+      { name: 'Shift A', value: liveMembersByShift.A.length, color: '#3B82F6' },
+      { name: 'Shift B', value: liveMembersByShift.B.length, color: '#EAB308' },
+      { name: 'Shift C', value: liveMembersByShift.C.length, color: '#22C55E' },
+    ];
+
+    const total = values.reduce((sum, entry) => sum + entry.value, 0);
+    return total > 0 ? values : values.map((entry) => ({ ...entry, value: 1 }));
+  }, [liveMembersByShift]);
+
   return (
     <motion.div key="dashboard" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl lg:text-3xl font-bold">Tableau de bord</h1>
           <p className="text-muted-foreground">
-            Bienvenue, {user?.firstName && user?.lastName ? `${user.firstName} ${user.lastName}` : user?.name}  -  {format(new Date(), 'EEEE d MMMM yyyy', { locale: fr })}
+            Bienvenue, {user?.firstName && user?.lastName ? `${user.firstName} ${user.lastName}` : user?.name}  -  {currentDayLabel}
           </p>
         </div>
         <Button variant="outline" onClick={onRefresh}>
@@ -239,11 +284,7 @@ export function AppDashboardPanel({ user, userRestInfo, tasks, onRefresh }: AppD
               <ResponsiveContainer width="100%" height={200}>
                 <PieChart>
                   <Pie
-                    data={[
-                      { name: 'Shift A', value: 35, color: '#3B82F6' },
-                      { name: 'Shift B', value: 33, color: '#EAB308' },
-                      { name: 'Shift C', value: 32, color: '#22C55E' },
-                    ]}
+                    data={shiftPieData}
                     cx="50%"
                     cy="50%"
                     innerRadius={50}
@@ -251,11 +292,7 @@ export function AppDashboardPanel({ user, userRestInfo, tasks, onRefresh }: AppD
                     dataKey="value"
                     label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                   >
-                    {[
-                      { name: 'Shift A', value: 35, color: '#3B82F6' },
-                      { name: 'Shift B', value: 33, color: '#EAB308' },
-                      { name: 'Shift C', value: 32, color: '#22C55E' },
-                    ].map((entry, index) => (
+                    {shiftPieData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
@@ -270,6 +307,9 @@ export function AppDashboardPanel({ user, userRestInfo, tasks, onRefresh }: AppD
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {Object.keys(SHIFTS_DATA).map((shiftName) => {
           const shiftData = SHIFTS_DATA[shiftName];
+          const members = liveMembersByShift[shiftName]?.length > 0
+            ? liveMembersByShift[shiftName]
+            : shiftData.members;
           const now = new Date();
           const schedule = getShiftScheduleForDate(shiftName, now);
           const isActive = schedule.isWorking;
@@ -289,7 +329,7 @@ export function AppDashboardPanel({ user, userRestInfo, tasks, onRefresh }: AppD
               </CardHeader>
               <CardContent className="pb-4">
                 <div className="flex -space-x-2 mb-2">
-                  {shiftData.members.map((member, idx) => {
+                  {members.map((member, idx) => {
                     const restInfo = getIndividualRestAgent(shiftName, now);
                     const isResting = restInfo?.agentName === member;
 
@@ -302,7 +342,7 @@ export function AppDashboardPanel({ user, userRestInfo, tasks, onRefresh }: AppD
                     );
                   })}
                 </div>
-                <p className="text-xs text-muted-foreground">{shiftData.members.join(', ')}</p>
+                <p className="text-xs text-muted-foreground">{members.join(', ')}</p>
                 <div className="mt-2 text-xs text-muted-foreground">Cycle {schedule.cycleNumber}  -  Jour {schedule.dayNumber || '-'}</div>
               </CardContent>
             </Card>

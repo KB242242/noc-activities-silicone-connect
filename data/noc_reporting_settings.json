@@ -1,0 +1,13 @@
+{
+  "timeZone": "Africa/Brazzaville",
+  "daily": {
+    "readyHour": 18,
+    "cutoffHour": 21
+  },
+  "night": {
+    "readyHour": 6,
+    "cutoffHour": 10
+  },
+  "updatedAt": "2026-06-12T03:17:11.866Z",
+  "updatedBy": null
+}

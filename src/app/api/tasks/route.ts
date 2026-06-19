@@ -1,5 +1,101 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
+
+const TASK_ALERT_WINDOW_MINUTES = 15;
+
+function buildTaskAlertPayload(task: { id: string; title: string; status?: string | null; priority?: string | null; estimatedEndTime?: Date | null }) {
+  const status = String(task.status ?? 'PENDING').trim().toUpperCase();
+  const priority = String(task.priority ?? 'MEDIUM').trim().toUpperCase();
+  const alerts: Array<{ type: 'WARNING' | 'CRITICAL' | 'INFO' | 'SUCCESS'; message: string; triggeredBy: string }> = [];
+
+  if (status === 'PENDING' && priority === 'CRITICAL') {
+    alerts.push({
+      type: 'CRITICAL',
+      message: `La tâche critique "${task.title}" n'a pas encore commencé`,
+      triggeredBy: 'critical_not_started',
+    });
+  }
+
+  if (task.estimatedEndTime && new Date() > task.estimatedEndTime && !['COMPLETED', 'CANCELLED'].includes(status)) {
+    alerts.push({
+      type: 'CRITICAL',
+      message: `La tâche "${task.title}" a dépassé son temps estimé`,
+      triggeredBy: 'overdue',
+    });
+  }
+
+  if (
+    task.estimatedEndTime &&
+    !['COMPLETED', 'CANCELLED'].includes(status) &&
+    task.estimatedEndTime.getTime() - Date.now() <= TASK_ALERT_WINDOW_MINUTES * 60000 &&
+    task.estimatedEndTime.getTime() > Date.now()
+  ) {
+    alerts.push({
+      type: 'WARNING',
+      message: `La tâche "${task.title}" approche de sa limite de temps`,
+      triggeredBy: 'time_limit',
+    });
+  }
+
+  return alerts;
+}
+
+async function upsertTaskAlerts(taskId: string, alerts: Array<{ type: 'WARNING' | 'CRITICAL' | 'INFO' | 'SUCCESS'; message: string; triggeredBy: string }>) {
+  if (alerts.length === 0) return;
+
+  const existingAlerts = await db.taskAlert.findMany({
+    where: { taskId },
+    select: { triggeredBy: true },
+  });
+  const existingTriggeredBy = new Set(existingAlerts.map((alert) => alert.triggeredBy));
+
+  const newAlerts = alerts.filter((alert) => !existingTriggeredBy.has(alert.triggeredBy));
+  if (newAlerts.length === 0) return;
+
+  await db.taskAlert.createMany({
+    data: newAlerts.map((alert) => ({
+      taskId,
+      type: alert.type,
+      message: alert.message,
+      triggeredBy: alert.triggeredBy,
+    })),
+  });
+}
+
+async function loadTaskById(taskId: string) {
+  return db.task.findUnique({
+    where: { id: taskId },
+    include: {
+      ticket: {
+        select: {
+          id: true,
+          numero: true,
+          objet: true,
+        },
+      },
+      user: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          shift: true,
+        },
+      },
+      comments: {
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      },
+      alerts: {
+        orderBy: { createdAt: 'desc' },
+      },
+      history: {
+        orderBy: { timestamp: 'desc' },
+        take: 20,
+      },
+    },
+  });
+}
 
 // GET /api/tasks - Get tasks with filters
 export async function GET(request: NextRequest) {
@@ -43,6 +139,13 @@ export async function GET(request: NextRequest) {
     const tasks = await db.task.findMany({
       where,
       include: {
+        ticket: {
+          select: {
+            id: true,
+            numero: true,
+            objet: true,
+          }
+        },
         user: {
           select: {
             id: true,
@@ -56,7 +159,11 @@ export async function GET(request: NextRequest) {
           take: 10
         },
         alerts: {
-          where: { isRead: false }
+          orderBy: { createdAt: 'desc' }
+        },
+        history: {
+          orderBy: { timestamp: 'desc' },
+          take: 20
         }
       },
       orderBy: { startTime: 'desc' }
@@ -81,8 +188,11 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    console.log('[TaskAPI POST] Received body:', body);
+    
     const {
       userId,
+      ticketId,
       title,
       description,
       category,
@@ -94,7 +204,10 @@ export async function POST(request: NextRequest) {
       tags
     } = body;
 
+    console.log('[TaskAPI POST] Validation check - userId:', userId, 'title:', title, 'startTime:', startTime);
+
     if (!userId || !title || !startTime) {
+      console.log('[TaskAPI POST] Validation failed');
       return NextResponse.json(
         { success: false, error: 'Utilisateur, titre et date de début requis' },
         { status: 400 }
@@ -112,6 +225,17 @@ export async function POST(request: NextRequest) {
         { success: false, error: 'Utilisateur non trouvé' },
         { status: 404 }
       );
+    }
+
+    let linkedTicket: { id: string } | null = null;
+    if (ticketId) {
+      linkedTicket = await db.ticket.findUnique({ where: { id: ticketId }, select: { id: true } });
+      if (!linkedTicket) {
+        return NextResponse.json(
+          { success: false, error: 'Ticket lié non trouvé' },
+          { status: 404 }
+        );
+      }
     }
 
     const duration = estimatedDuration || 60;
@@ -136,6 +260,13 @@ export async function POST(request: NextRequest) {
         isOverdue: false
       },
       include: {
+        ticket: {
+          select: {
+            id: true,
+            numero: true,
+            objet: true,
+          }
+        },
         user: {
           select: {
             id: true,
@@ -146,6 +277,18 @@ export async function POST(request: NextRequest) {
         }
       }
     });
+
+    if (linkedTicket?.id) {
+      try {
+        await db.$executeRaw(
+          Prisma.sql`UPDATE tasks SET ticket_id = ${linkedTicket.id} WHERE id = ${task.id}`
+        );
+      } catch (ticketLinkError) {
+        console.warn('Task created without ticket link:', ticketLinkError);
+      }
+    }
+
+    await upsertTaskAlerts(task.id, buildTaskAlertPayload(task));
 
     // Create history entry
     await db.taskHistory.create({
@@ -158,10 +301,12 @@ export async function POST(request: NextRequest) {
       }
     });
 
+    const createdTask = await loadTaskById(task.id);
+
     return NextResponse.json({
       success: true,
       message: 'Tâche créée avec succès',
-      task
+      task: createdTask
     });
 
   } catch (error) {
@@ -180,14 +325,19 @@ export async function PUT(request: NextRequest) {
     const {
       taskId,
       userId,
+      ticketId,
       title,
       description,
       status,
       category,
       priority,
+      startTime,
+      estimatedEndTime,
+      estimatedDuration,
       actualEndTime,
       actualDuration,
-      tags
+      tags,
+      transferToUserId
     } = body;
 
     if (!taskId) {
@@ -215,13 +365,28 @@ export async function PUT(request: NextRequest) {
     };
 
     if (title) updateData.title = title;
+    if (ticketId !== undefined) updateData.ticketId = ticketId || null;
     if (description !== undefined) updateData.description = description;
     if (status) updateData.status = status.toUpperCase();
     if (category) updateData.category = category.toUpperCase();
     if (priority) updateData.priority = priority.toUpperCase();
+    if (startTime) updateData.startTime = new Date(startTime);
+    if (estimatedEndTime) updateData.estimatedEndTime = new Date(estimatedEndTime);
+    if (estimatedDuration) updateData.estimatedDuration = estimatedDuration;
     if (actualEndTime) updateData.actualEndTime = new Date(actualEndTime);
     if (actualDuration) updateData.actualDuration = actualDuration;
     if (tags) updateData.tags = JSON.stringify(tags);
+    if (transferToUserId) updateData.userId = transferToUserId;
+
+    if (status && status.toUpperCase() !== 'COMPLETED') {
+      updateData.completedAt = null;
+      if (!actualEndTime) {
+        updateData.actualEndTime = null;
+      }
+      if (!actualDuration) {
+        updateData.actualDuration = null;
+      }
+    }
 
     // Handle status changes
     if (status === 'COMPLETED') {
@@ -239,11 +404,38 @@ export async function PUT(request: NextRequest) {
       updateData.isOverdue = task.estimatedEndTime ? new Date() > task.estimatedEndTime : false;
     }
 
+    if (transferToUserId && transferToUserId !== task.userId) {
+      const transferUser = await db.user.findUnique({ where: { id: transferToUserId } });
+      if (!transferUser) {
+        return NextResponse.json(
+          { success: false, error: 'Utilisateur cible non trouvé' },
+          { status: 404 }
+        );
+      }
+    }
+
+    if (ticketId) {
+      const linkedTicket = await db.ticket.findUnique({ where: { id: ticketId }, select: { id: true } });
+      if (!linkedTicket) {
+        return NextResponse.json(
+          { success: false, error: 'Ticket lié non trouvé' },
+          { status: 404 }
+        );
+      }
+    }
+
     // Update task
     const updatedTask = await db.task.update({
       where: { id: taskId },
       data: updateData,
       include: {
+        ticket: {
+          select: {
+            id: true,
+            numero: true,
+            objet: true,
+          }
+        },
         user: {
           select: {
             id: true,
@@ -254,26 +446,48 @@ export async function PUT(request: NextRequest) {
       }
     });
 
+    await upsertTaskAlerts(updatedTask.id, buildTaskAlertPayload(updatedTask));
+
     // Create history entry if user provided
-    if (user) {
+    if (user && !transferToUserId) {
       await db.taskHistory.create({
         data: {
           taskId: task.id,
           userId: user.id,
           userName: user.name,
-          action: status ? 'status_changed' : 'updated',
-          field: status ? 'status' : undefined,
-          oldValue: status ? task.status : undefined,
-          newValue: status ? status.toUpperCase() : undefined,
+          action: transferToUserId ? 'updated' : status ? 'status_changed' : 'updated',
+          field: transferToUserId ? 'userId' : status ? 'status' : undefined,
+          oldValue: transferToUserId ? task.userId : status ? task.status : undefined,
+          newValue: transferToUserId ? transferToUserId : status ? status.toUpperCase() : undefined,
           timestamp: new Date()
         }
       });
     }
 
+    if (transferToUserId && transferToUserId !== task.userId) {
+      const transferUser = await db.user.findUnique({ where: { id: transferToUserId } });
+      if (transferUser) {
+        await db.taskHistory.create({
+          data: {
+            taskId: task.id,
+            userId: transferUser.id,
+            userName: transferUser.name,
+            action: 'updated',
+            field: 'userId',
+            oldValue: task.userId,
+            newValue: transferUser.id,
+            timestamp: new Date()
+          }
+        });
+      }
+    }
+
+    const refreshedTask = await loadTaskById(taskId);
+
     return NextResponse.json({
       success: true,
       message: 'Tâche mise à jour',
-      task: updatedTask
+      task: refreshedTask ?? updatedTask
     });
 
   } catch (error) {

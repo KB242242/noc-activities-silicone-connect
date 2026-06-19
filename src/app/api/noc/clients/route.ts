@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { loadNocClientSettings } from '@/lib/noc/clientSettings';
 
 type ListRow = {
   id_client: number;
@@ -42,7 +43,11 @@ type FallbackRow = {
   liaisons_count: bigint;
 };
 
-async function canDeleteClient(actorId: string | null, actorRoleHint?: string | null): Promise<boolean> {
+async function canDeleteClient(
+  actorId: string | null,
+  actorRoleHint: string | null | undefined,
+  allowedDeleteRoles: string[]
+): Promise<boolean> {
   const normalizeRole = (value: string | null | undefined) =>
     String(value ?? '')
       .trim()
@@ -51,7 +56,7 @@ async function canDeleteClient(actorId: string | null, actorRoleHint?: string | 
 
   const isAllowedDeleteRole = (value: string | null | undefined) => {
     const role = normalizeRole(value);
-    return role === 'ADMIN' || role === 'SUPERADMIN' || role.startsWith('SUPER_ADMIN') || role.startsWith('SUPERVIS');
+    return allowedDeleteRoles.includes(role);
   };
 
   const hintedRole = normalizeRole(actorRoleHint);
@@ -98,6 +103,14 @@ async function appendHistory(params: {
 
 export async function GET(request: NextRequest) {
   try {
+    const settings = await loadNocClientSettings();
+    if (!settings.api.enableRead) {
+      return NextResponse.json(
+        { success: false, error: 'API clients desactivee par l\'administration.' },
+        { status: 503 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const q = (searchParams.get('q') ?? '').trim();
     const includeArchived = searchParams.get('includeArchived') === '1';
@@ -274,13 +287,33 @@ export async function GET(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const settings = await loadNocClientSettings();
+    if (!settings.api.enableWrite) {
+      return NextResponse.json(
+        { success: false, error: 'Modifications clients desactivees par l\'administration.' },
+        { status: 403 }
+      );
+    }
+    if (!settings.permissions.allowDelete) {
+      return NextResponse.json(
+        { success: false, error: 'Suppression clients desactivee par l\'administration.' },
+        { status: 403 }
+      );
+    }
+
     const body = (await request.json()) as { clientId?: number; actorId?: string | null; actorRole?: string | null };
 
     if (!body.clientId) {
       return NextResponse.json({ success: false, error: 'clientId est obligatoire.' }, { status: 400 });
     }
 
-    const authorized = await canDeleteClient(body.actorId ?? null, body.actorRole ?? null);
+    const normalizedDeleteRoles = settings.permissions.deleteRoles.map((role) =>
+      String(role ?? '')
+        .trim()
+        .toUpperCase()
+        .replace(/[-\s]+/g, '_')
+    );
+    const authorized = await canDeleteClient(body.actorId ?? null, body.actorRole ?? null, normalizedDeleteRoles);
     if (!authorized) {
       return NextResponse.json(
         { success: false, error: 'Suppression interdite. Action reservee aux roles ADMIN, SUPER_ADMIN et SUPERVISEUR.' },
@@ -356,6 +389,14 @@ export async function DELETE(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
+    const settings = await loadNocClientSettings();
+    if (!settings.api.enableWrite) {
+      return NextResponse.json(
+        { success: false, error: 'Modifications clients desactivees par l\'administration.' },
+        { status: 403 }
+      );
+    }
+
     const body = (await request.json()) as {
       clientId?: number;
       actorId?: string | null;
@@ -371,6 +412,13 @@ export async function PATCH(request: NextRequest) {
 
     const actorName = await getActorName(body.actorId ?? null);
     const action = body.action;
+
+    if (!settings.permissions.allowArchive) {
+      return NextResponse.json(
+        { success: false, error: 'Archivage clients desactive par l\'administration.' },
+        { status: 403 }
+      );
+    }
 
     if (action === 'archive') {
       await db.$executeRaw`

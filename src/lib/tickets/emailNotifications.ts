@@ -222,29 +222,24 @@ function buildLifecycleHtml(input: TicketLifecycleInput) {
 }
 
 function buildTransporter() {
-  const host = process.env.SMTP_HOST;
-  const port = Number(process.env.SMTP_PORT ?? '587');
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
+  const host = String(process.env.SMTP_HOST ?? 'localhost').trim() || 'localhost';
+  const port = Number(process.env.SMTP_PORT ?? '25');
+  const user = String(process.env.SMTP_USER ?? '').trim();
+  const pass = String(process.env.SMTP_PASS ?? '').trim();
   const secure = String(process.env.SMTP_SECURE ?? 'false').toLowerCase() === 'true';
 
-  if (!host || !user || !pass) {
-    const missing = [
-      !host ? 'SMTP_HOST' : null,
-      !user ? 'SMTP_USER' : null,
-      !pass ? 'SMTP_PASS' : null,
-    ].filter(Boolean).join(', ');
-
-    console.warn(`[ticket email notification] SMTP disabled, missing env: ${missing}`);
-    return null;
-  }
-
-  return nodemailer.createTransport({
+  const transportConfig: Parameters<typeof nodemailer.createTransport>[0] = {
     host,
     port,
     secure,
-    auth: { user, pass },
-  });
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 10000,
+    // Si user/pass sont fournis on s'authentifie, sinon Postfix local sans auth
+    ...(user && pass ? { auth: { user, pass } } : {}),
+  };
+
+  return nodemailer.createTransport(transportConfig);
 }
 
 export async function sendTicketLifecycleEmail(input: TicketLifecycleInput) {
@@ -252,7 +247,7 @@ export async function sendTicketLifecycleEmail(input: TicketLifecycleInput) {
     const transporter = buildTransporter();
     if (!transporter) return false;
 
-    const from = String(input.fromOverride ?? process.env.SMTP_FROM ?? process.env.SMTP_USER ?? 'noreply@siliconeconnect.com').trim();
+    const from = String(input.fromOverride ?? process.env.SMTP_FROM ?? process.env.SMTP_USER ?? 'noc@siliconeconnect.local').trim();
     const to = input.receiver ?? 'ange.bata@siliconeconnect.com';
     const actionLabelMap: Record<TicketLifecycleInput['action'], string> = {
       created: 'Creation',

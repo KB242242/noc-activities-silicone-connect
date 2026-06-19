@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { resolveTicketManagerFromActorId } from '@/lib/tickets/permissions';
+import { sendTicketLifecycleEmail } from '@/lib/tickets/emailNotifications';
 
 // API pour l'envoi d'emails de notification de tickets
 export async function POST(request: NextRequest) {
@@ -35,48 +36,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Dans un environnement de production, on utiliserait un service d'envoi d'email
-    // comme SendGrid, Mailgun, ou un serveur SMTP
-    // Pour cette démo, on simule l'envoi et on log les informations
-    
-    console.log('========================================');
-    console.log('EMAIL DE NOTIFICATION DE TICKET');
-    console.log('========================================');
-    console.log(`À: ${to}`);
-    console.log(`Sujet: ${subject}`);
-    console.log('--- Texte ---');
-    console.log(normalizedText || '[vide]');
-    if (normalizedHtml) {
-      console.log('--- HTML ---');
-      console.log(normalizedHtml);
-    }
-    console.log('========================================');
-
-    // Simuler un délai d'envoi
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    // En production, le code ressemblerait à ceci:
-    /*
-    const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.SENDGRID_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        personalizations: [{ to: [{ email: to }], subject }],
-        from: { email: 'noreply@siliconeconnect.com', name: 'NOC Silicone Connect' },
-        content: [{ type: 'text/plain', value: content }],
-      }),
+    const sent = await sendTicketLifecycleEmail({
+      action: (ticketData?.action as any) ?? 'created',
+      ticketNumber: String(ticketData?.ticketNumber ?? ''),
+      subject: String(subject ?? ''),
+      status: String(ticketData?.status ?? ''),
+      receiver: String(to),
+      htmlBody: normalizedHtml || undefined,
+      textBody: normalizedText || undefined,
+      subjectOverride: String(subject ?? ''),
     });
-    */
+
+    if (!sent) {
+      return NextResponse.json(
+        { error: 'Envoi SMTP echoue ou serveur mail injoignable. Verifiez votre service SMTP/Postfix local et les variables SMTP_*.' },
+        { status: 503 }
+      );
+    }
 
     return NextResponse.json({
       success: true,
       message: 'Email envoyé avec succès',
       sentTo: to,
       ticketId,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
 
   } catch (error) {

@@ -9,7 +9,7 @@ import {
   UserCircle2,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { AppAdminTabContent } from '@/features/app-shell/components/admin/AppAdminTabContent';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -70,10 +70,21 @@ type AppAdminUsersTabContentProps = {
   SHIFTS_DATA: Record<string, { members: string[] }>;
   SHIFT_CYCLE_START: Record<string, Date>;
   getShiftColor: (shiftName: string) => string;
+  allUsers: any[];
+  assignUserToShift: (userId: string, shiftName: 'A' | 'B' | 'C') => Promise<void>;
+  shiftAssignmentBusyUserId: string | null;
+  planningSettings: any;
+  setPlanningSettings: (updater: any) => void;
+  planningSettingsLoading: boolean;
+  planningSettingsSaving: boolean;
+  loadPlanningSettings: () => Promise<void>;
+  savePlanningSettings: () => Promise<void>;
+  availablePlanningRoles: string[];
 };
 
 type UserDomainPolicyMode = 'default' | 'custom' | 'allow_any';
 type UsersDisplayMode = 'table' | 'cards';
+type UserBlockedFilter = 'all' | 'blocked' | 'active';
 type AdminUsersTab = 'users' | 'history' | 'dashboard' | 'administration' | 'configuration';
 type HistoryEventGroup = 'all' | 'security' | 'password' | 'user-management' | 'profile' | 'access';
 type AdminConfigurationSubTab = 'domains' | 'interface';
@@ -105,6 +116,7 @@ const USERS_PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
 const DASHBOARD_CONFIG_STORAGE_KEY = 'noc_admin_users_dashboard_config';
 const USERS_DEFAULT_VIEW_STORAGE_KEY = 'noc_admin_users_default_view';
 const USERS_PAGE_SIZE_STORAGE_KEY = 'noc_admin_users_page_size';
+const USERS_BLOCKED_FILTER_STORAGE_KEY = 'noc_admin_users_blocked_filter';
 
 const DEFAULT_DASHBOARD_CONFIG: DashboardConfig = {
   showSlaWidget: true,
@@ -152,9 +164,20 @@ export function AppAdminUsersTabContent({
   SHIFTS_DATA,
   SHIFT_CYCLE_START,
   getShiftColor,
+  allUsers,
+  assignUserToShift,
+  shiftAssignmentBusyUserId,
+  planningSettings,
+  setPlanningSettings,
+  planningSettingsLoading,
+  planningSettingsSaving,
+  loadPlanningSettings,
+  savePlanningSettings,
+  availablePlanningRoles,
 }: AppAdminUsersTabContentProps) {
   const [activeTab, setActiveTab] = useState<AdminUsersTab>('users');
   const [displayMode, setDisplayMode] = useState<UsersDisplayMode>('table');
+  const [blockedFilter, setBlockedFilter] = useState<UserBlockedFilter>('all');
   const [usersPageSize, setUsersPageSize] = useState<number>(25);
   const [usersPage, setUsersPage] = useState<number>(1);
 
@@ -195,6 +218,11 @@ export function AppAdminUsersTabContent({
         setUsersPageSize(storedPageSize);
       }
 
+      const storedBlockedFilter = localStorage.getItem(USERS_BLOCKED_FILTER_STORAGE_KEY);
+      if (storedBlockedFilter === 'all' || storedBlockedFilter === 'blocked' || storedBlockedFilter === 'active') {
+        setBlockedFilter(storedBlockedFilter);
+      }
+
       const storedDashboardConfig = localStorage.getItem(DASHBOARD_CONFIG_STORAGE_KEY);
       if (storedDashboardConfig) {
         const parsed = JSON.parse(storedDashboardConfig) as Partial<DashboardConfig>;
@@ -212,6 +240,10 @@ export function AppAdminUsersTabContent({
   useEffect(() => {
     localStorage.setItem(USERS_PAGE_SIZE_STORAGE_KEY, String(usersPageSize));
   }, [usersPageSize]);
+
+  useEffect(() => {
+    localStorage.setItem(USERS_BLOCKED_FILTER_STORAGE_KEY, blockedFilter);
+  }, [blockedFilter]);
 
   useEffect(() => {
     localStorage.setItem(DASHBOARD_CONFIG_STORAGE_KEY, JSON.stringify(dashboardConfig));
@@ -242,13 +274,43 @@ export function AppAdminUsersTabContent({
     return configurationActiveDomains[0]?.domain ?? '';
   }, [configurationActiveDomains]);
 
+    const visibleUsers = useMemo(() => {
+      if (blockedFilter === 'blocked') {
+        return filteredUsers.filter((user) => Boolean(user?.isBlocked));
+      }
+
+      if (blockedFilter === 'active') {
+        return filteredUsers.filter((user) => !user?.isBlocked);
+      }
+
+      return filteredUsers;
+    }, [blockedFilter, filteredUsers]);
+
   const sortedUsers = useMemo(() => {
-    return [...filteredUsers].sort((a, b) => {
+      return [...visibleUsers].sort((a, b) => {
       const aName = String(a?.name || '').toLowerCase();
       const bName = String(b?.name || '').toLowerCase();
       return aName.localeCompare(bName);
     });
-  }, [filteredUsers]);
+    }, [visibleUsers]);
+
+  const usersActionTargetId = useMemo(() => {
+    if (!usersActionInProgress) return null;
+    const [actionType, ...rest] = usersActionInProgress.split(':');
+    if (actionType === 'create') return 'create';
+    if (rest.length === 0) return null;
+    return rest.join(':');
+  }, [usersActionInProgress]);
+
+  const isUserActionLocked = useCallback(
+    (targetUserId?: string | null) => {
+      if (!usersActionInProgress) return false;
+      if (usersActionInProgress === 'create') return true;
+      if (!targetUserId) return false;
+      return usersActionTargetId === targetUserId;
+    },
+    [usersActionInProgress, usersActionTargetId]
+  );
 
   const usersTotalPages = Math.max(1, Math.ceil(sortedUsers.length / usersPageSize));
   const normalizedUsersPage = Math.min(usersPage, usersTotalPages);
@@ -375,6 +437,15 @@ export function AppAdminUsersTabContent({
       setDetailsLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!detailsUser?.id) return;
+
+    const refreshedDetailsUser = allUsers.find((entry) => entry.id === detailsUser.id);
+    if (refreshedDetailsUser && refreshedDetailsUser !== detailsUser) {
+      setDetailsUser(refreshedDetailsUser);
+    }
+  }, [allUsers, detailsUser]);
 
   const loadConfigurationDomains = async () => {
     setConfigDomainsBusy(true);
@@ -576,6 +647,16 @@ export function AppAdminUsersTabContent({
                     <SelectItem value="USER">Utilisateur</SelectItem>
                   </SelectContent>
                 </Select>
+                <Select value={blockedFilter} onValueChange={(value) => setBlockedFilter(value as UserBlockedFilter)}>
+                  <SelectTrigger className="admin-glass-control">
+                    <SelectValue placeholder="Etat du compte" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tous les comptes</SelectItem>
+                    <SelectItem value="blocked">Utilisateurs bloqués</SelectItem>
+                    <SelectItem value="active">Utilisateurs actifs</SelectItem>
+                  </SelectContent>
+                </Select>
                 <div className="flex items-center gap-2">
                   <Select value={displayMode} onValueChange={(value) => setDisplayMode(value as UsersDisplayMode)}>
                     <SelectTrigger className="admin-glass-control">
@@ -639,7 +720,7 @@ export function AppAdminUsersTabContent({
                       ) : (
                         pagedUsers.map((u) => {
                           const presenceInfo = getPresenceInfo(u);
-                          const userIsLockedAction = Boolean(usersActionInProgress);
+                          const userIsLockedAction = isUserActionLocked(u.id);
                           return (
                             <TableRow key={u.id}>
                               <TableCell>
@@ -1008,6 +1089,16 @@ export function AppAdminUsersTabContent({
             SHIFTS_DATA={SHIFTS_DATA}
             SHIFT_CYCLE_START={SHIFT_CYCLE_START}
             getShiftColor={getShiftColor}
+                  allUsers={allUsers}
+                  assignUserToShift={assignUserToShift}
+                  shiftAssignmentBusyUserId={shiftAssignmentBusyUserId}
+                  planningSettings={planningSettings}
+                  setPlanningSettings={setPlanningSettings}
+                  planningSettingsLoading={planningSettingsLoading}
+                  planningSettingsSaving={planningSettingsSaving}
+                  loadPlanningSettings={loadPlanningSettings}
+                  savePlanningSettings={savePlanningSettings}
+                  availablePlanningRoles={availablePlanningRoles}
           />
         </TabsContent>
 

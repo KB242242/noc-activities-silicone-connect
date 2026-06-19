@@ -1,4 +1,5 @@
 import { AlertCircle, AlertTriangle, ClipboardList, Clock3, Search, Users } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -9,6 +10,8 @@ type AppTasksFiltersCardProps = {
   taskFilter: string;
   onSearchQueryChange: (value: string) => void;
   onTaskFilterChange: (value: string) => void;
+  compactSearch?: boolean;
+  extraControls?: ReactNode;
 };
 
 export function AppTasksFiltersCard({
@@ -16,11 +19,13 @@ export function AppTasksFiltersCard({
   taskFilter,
   onSearchQueryChange,
   onTaskFilterChange,
+  compactSearch = false,
+  extraControls,
 }: AppTasksFiltersCardProps) {
   return (
     <Card className="p-4">
       <div className="flex flex-col sm:flex-row gap-3">
-        <div className="flex-1 relative">
+        <div className={`relative ${compactSearch ? 'sm:max-w-md' : 'flex-1'}`}>
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             placeholder="Rechercher une tâche..."
@@ -29,7 +34,7 @@ export function AppTasksFiltersCard({
             onChange={(event) => onSearchQueryChange(event.target.value)}
           />
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Select value={taskFilter} onValueChange={onTaskFilterChange}>
             <SelectTrigger className="w-37.5">
               <SelectValue placeholder="Filtrer" />
@@ -62,6 +67,7 @@ export function AppTasksFiltersCard({
               </SelectItem>
             </SelectContent>
           </Select>
+          {extraControls}
         </div>
       </div>
     </Card>

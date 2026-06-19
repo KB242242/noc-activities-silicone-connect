@@ -1,0 +1,35 @@
+{
+  "idStyle": {
+    "prefix": "CLI",
+    "fixedYear": 2026,
+    "padding": 5,
+    "nextSequence": 66,
+    "allowManualRef": false
+  },
+  "permissions": {
+    "allowCreate": true,
+    "allowUpdate": true,
+    "allowDelete": true,
+    "allowArchive": true,
+    "deleteRoles": [
+      "ADMIN",
+      "SUPER_ADMIN",
+      "SUPERVISOR"
+    ]
+  },
+  "api": {
+    "enableRead": true,
+    "enableWrite": true,
+    "enableZabbixSync": true,
+    "enableLibreNmsFields": true
+  },
+  "ui": {
+    "defaultViewMode": "table",
+    "showLocality": true,
+    "showCountry": true,
+    "showClientType": true,
+    "showSatisfaction": true
+  },
+  "updatedAt": "2026-06-11T04:47:17.029Z",
+  "updatedBy": null
+}

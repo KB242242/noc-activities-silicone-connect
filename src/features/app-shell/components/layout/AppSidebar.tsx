@@ -1,6 +1,5 @@
 ﻿import { AnimatePresence, motion } from 'framer-motion';
 import {
-  Activity,
   AlignLeft,
   AlignRight,
   Calendar,
@@ -134,9 +133,6 @@ export function AppSidebar({
             )}
             <Button variant={currentTab === 'tasks' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => onSelectTab('tasks')}>
               <ClipboardList className="w-5 h-5" /> {!sidebarCollapsed && 'Mes Tâches'}
-            </Button>
-            <Button variant={currentTab === 'activities' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => onSelectTab('activities')}>
-              <Activity className="w-5 h-5" /> {!sidebarCollapsed && 'Activités'}
             </Button>
             <Button variant={currentTab === 'tickets' ? 'secondary' : 'ghost'} className={`w-full ${sidebarCollapsed ? 'lg:justify-center' : 'justify-start'} gap-3 h-10`} onClick={() => onSelectTab('tickets')}>
               <Ticket className="w-5 h-5" /> {!sidebarCollapsed && 'Gestion Tickets'}

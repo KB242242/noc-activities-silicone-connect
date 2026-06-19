@@ -78,6 +78,29 @@ bun start
 
 Accédez à l’application sur http://localhost:3000.
 
+## SMTP local (Postfix) pour CentOS Stream
+
+L'application est maintenant compatible avec un Postfix local sans authentification SMTP.
+Des fallbacks sont actifs pour la production:
+- SMTP_HOST = localhost (si non defini)
+- SMTP_PORT = 25 (si non defini)
+- SMTP_SECURE = false (si non defini)
+- SMTP_FROM = noc@siliconeconnect.local (si non defini)
+
+Configuration recommandee dans l'environnement de production:
+
+```env
+SMTP_HOST=localhost
+SMTP_PORT=25
+SMTP_SECURE=false
+SMTP_FROM=noc@votre-domaine.tld
+# Optionnel si relais authentifie:
+# SMTP_USER=
+# SMTP_PASS=
+```
+
+Quand Postfix est configure et actif sur le serveur, aucun changement de code supplementaire n'est necessaire.
+
 # Contact
 Pour toute question ou collaboration, vous pouvez me joindre à :
 kevinebauer7@gmail.com

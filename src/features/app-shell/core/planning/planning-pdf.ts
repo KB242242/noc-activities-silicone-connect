@@ -3,7 +3,21 @@ import { fr } from 'date-fns/locale';
 import jsPDF from 'jspdf';
 
 import { getIndividualRestAgent, getShiftScheduleForDate } from '@/features/app-shell/core/planning/planning-utils';
+import { SHIFTS_DATA } from '@/features/app-shell/core/planning/shifts';
 import type { UserProfile } from '@/features/app-shell/core/shared/types';
+
+function resolveShiftKey(value: unknown): 'A' | 'B' | 'C' | null {
+  const normalized = String(value ?? '').trim().toUpperCase();
+  if (!normalized) return null;
+  if (normalized === 'A' || normalized === 'B' || normalized === 'C') return normalized;
+
+  const shifted = normalized.replace(/^SHIFT[-_\s]*/i, '');
+  if (shifted === 'A' || shifted === 'B' || shifted === 'C') return shifted;
+
+  const match = normalized.match(/([ABC])$/);
+  if (!match) return null;
+  return match[1] as 'A' | 'B' | 'C';
+}
 
 export async function downloadOvertimePdf(params: {
   user: UserProfile;
@@ -226,8 +240,9 @@ export async function downloadOvertimePdf(params: {
 
 export async function downloadPlanningPdf(params: {
   currentMonth: Date;
+  allUsers?: UserProfile[];
 }): Promise<void> {
-  const { currentMonth } = params;
+  const { currentMonth, allUsers = [] } = params;
   const doc = new jsPDF('l', 'mm', 'a4');
   const monthNames = ['Janvier', 'Fevrier', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Aout', 'Septembre', 'Octobre', 'Novembre', 'Decembre'];
 
@@ -242,6 +257,7 @@ export async function downloadPlanningPdf(params: {
   const titleWidth = doc.getTextWidth(titleText);
   const totalHeaderWidth = logoWidth + 5 + titleWidth;
   const headerStartX = (pageWidth - totalHeaderWidth) / 2;
+  let planningLogoImg: HTMLImageElement | null = null;
 
   try {
     const logoImg = new Image();
@@ -252,6 +268,7 @@ export async function downloadPlanningPdf(params: {
     });
 
     if (logoImg.complete && logoImg.naturalWidth > 0) {
+      planningLogoImg = logoImg;
       doc.addImage(logoImg, 'PNG', headerStartX, 8, logoWidth, 18);
     }
   } catch {
@@ -271,6 +288,17 @@ export async function downloadPlanningPdf(params: {
   doc.setFontSize(12);
   doc.setFont('helvetica', 'normal');
   doc.text(`Mois de ${monthNames[currentMonth.getMonth()]} ${currentMonth.getFullYear()}`, pageWidth / 2, 43, { align: 'center' });
+
+  if (planningLogoImg) {
+    const watermarkWidth = 120;
+    const watermarkHeight = 120;
+    const watermarkX = (pageWidth - watermarkWidth) / 2;
+    const watermarkY = (pageHeight - watermarkHeight) / 2;
+
+    doc.setGState(new (doc as any).GState({ opacity: 0.07 }));
+    doc.addImage(planningLogoImg, 'PNG', watermarkX, watermarkY, watermarkWidth, watermarkHeight);
+    doc.setGState(new (doc as any).GState({ opacity: 1 }));
+  }
 
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(monthStart);
@@ -408,11 +436,30 @@ export async function downloadPlanningPdf(params: {
   doc.setFontSize(8);
   doc.setFont('helvetica', 'bold');
 
-  const teams = {
-    A: ['Alaine ODZONDO', 'Emma-Casimir NDONGO', 'Luca MOUSSOUNDA', 'Jose NGONKOLI'],
-    B: ['Sara MADY', 'Severin NDANDOU', 'Furys DIAMANA', 'Marly POUABOUD'],
-    C: ["Lapreuve N'SANA", 'Audrey NDINGA', 'BATA MADINGOU Ange Kevine', 'Lotti SEHOSSOLO'],
+  const teams: Record<'A' | 'B' | 'C', string[]> = {
+    A: [],
+    B: [],
+    C: [],
   };
+
+  allUsers
+    .filter((entry) => !entry?.isBlocked)
+    .filter((entry) => String(entry?.role || '').toUpperCase() === 'TECHNICIEN_NO')
+    .forEach((entry) => {
+      const shiftKey = resolveShiftKey(entry?.shift?.name ?? entry?.shiftId);
+      if (!shiftKey) return;
+      const fullName = `${String(entry?.lastName || '').trim()} ${String(entry?.firstName || '').trim()}`.trim();
+      if (fullName) {
+        teams[shiftKey].push(fullName);
+      }
+    });
+
+  (Object.keys(teams) as Array<'A' | 'B' | 'C'>).forEach((shiftKey) => {
+    const uniqueSorted = Array.from(new Set(teams[shiftKey].filter(Boolean))).sort((left, right) =>
+      left.localeCompare(right, 'fr', { sensitivity: 'base' })
+    );
+    teams[shiftKey] = uniqueSorted.length > 0 ? uniqueSorted : SHIFTS_DATA[shiftKey].members;
+  });
 
   Object.entries(teams).forEach(([shiftKey, members], idx) => {
     const x = margin + idx * teamWidth;
@@ -554,7 +601,7 @@ export async function downloadPlanningPdf(params: {
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(107, 114, 128);
 
-  doc.text(`Genere le ${format(now, 'dd/MM/yyyy')} a ${format(now, 'HH:mm')}`, margin, footerY);
+  doc.text(`Fait a Brazzaville le ${format(now, 'dd/MM/yyyy')}`, margin, footerY);
 
   doc.save(`planning_noc_${format(currentMonth, 'MM_yyyy')}.pdf`);
 }

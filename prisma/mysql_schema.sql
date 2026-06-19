@@ -251,21 +251,16 @@ INSERT INTO User (id, email, name, role, isActive) VALUES
 INSERT INTO User (id, email, name, role, shiftId, isActive) VALUES
 ('agent-a1', 'alaine@siliconeconnect.com', 'Alaine', 'AGENT', 'shift-a', TRUE),
 ('agent-a2', 'casimir@siliconeconnect.com', 'Casimir', 'AGENT', 'shift-a', TRUE),
-('agent-a3', 'luca@siliconeconnect.com', 'Luca', 'AGENT', 'shift-a', TRUE),
-('agent-a4', 'jose@siliconeconnect.com', 'José', 'AGENT', 'shift-a', TRUE);
+('agent-a3', 'luca@siliconeconnect.com', 'Luca', 'AGENT', 'shift-a', TRUE);
 
 -- Insert Shift B members
 INSERT INTO User (id, email, name, role, shiftId, isActive) VALUES
-('agent-b1', 'sahra@siliconeconnect.com', 'Sahra', 'AGENT', 'shift-b', TRUE),
-('agent-b2', 'severin@siliconeconnect.com', 'Severin', 'AGENT', 'shift-b', TRUE),
-('agent-b3', 'marly@siliconeconnect.com', 'Marly', 'AGENT', 'shift-b', TRUE),
+('agent-b2', 'wivine@siliconeconnect.com', 'Wivine MITSOMOY', 'AGENT', 'shift-b', TRUE),
 ('agent-b4', 'furys@siliconeconnect.com', 'Furys', 'AGENT', 'shift-b', TRUE);
 
 -- Insert Shift C members
 INSERT INTO User (id, email, name, role, shiftId, isActive) VALUES
 ('agent-c1', 'audrey@siliconeconnect.com', 'Audrey', 'AGENT', 'shift-c', TRUE),
-('agent-c2', 'lapreuve@siliconeconnect.com', 'Lapreuve', 'AGENT', 'shift-c', TRUE),
-('agent-c3', 'lotti@siliconeconnect.com', 'Lotti', 'AGENT', 'shift-c', TRUE),
 ('agent-c4', 'kevine@siliconeconnect.com', 'Kevine', 'AGENT', 'shift-c', TRUE);
 
 -- Insert External Links

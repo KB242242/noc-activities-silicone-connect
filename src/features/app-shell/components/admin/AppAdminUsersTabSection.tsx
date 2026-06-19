@@ -46,6 +46,16 @@ export function AppAdminUsersTabSection(props: AppAdminUsersTabSectionProps) {
         SHIFTS_DATA={props.SHIFTS_DATA}
         SHIFT_CYCLE_START={props.SHIFT_CYCLE_START}
         getShiftColor={props.getShiftColor}
+        allUsers={props.allUsers}
+        assignUserToShift={props.assignUserToShift}
+        shiftAssignmentBusyUserId={props.shiftAssignmentBusyUserId}
+        planningSettings={props.planningSettings}
+        setPlanningSettings={props.setPlanningSettings}
+        planningSettingsLoading={props.planningSettingsLoading}
+        planningSettingsSaving={props.planningSettingsSaving}
+        loadPlanningSettings={props.loadPlanningSettings}
+        savePlanningSettings={props.savePlanningSettings}
+        availablePlanningRoles={props.availablePlanningRoles}
       />
     </motion.div>
   );

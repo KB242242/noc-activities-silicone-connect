@@ -8,6 +8,8 @@ export function AppAdminManagementTabSection(props: AppAdminManagementTabSection
   return (
     <motion.div key="admin" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-4">
       <AppAdminTabContent
+        isUsersSyncing={props.isUsersSyncing}
+        syncUsersFromApi={props.syncUsersFromApi}
         setCurrentTabSafely={props.setCurrentTabSafely}
         ticketAdminSettings={props.ticketAdminSettings}
         setTicketAdminSettings={props.setTicketAdminSettings}
@@ -25,6 +27,16 @@ export function AppAdminManagementTabSection(props: AppAdminManagementTabSection
         SHIFTS_DATA={props.SHIFTS_DATA}
         SHIFT_CYCLE_START={props.SHIFT_CYCLE_START}
         getShiftColor={props.getShiftColor}
+        allUsers={props.allUsers}
+        assignUserToShift={props.assignUserToShift}
+        shiftAssignmentBusyUserId={props.shiftAssignmentBusyUserId}
+        planningSettings={props.planningSettings}
+        setPlanningSettings={props.setPlanningSettings}
+        planningSettingsLoading={props.planningSettingsLoading}
+        planningSettingsSaving={props.planningSettingsSaving}
+        loadPlanningSettings={props.loadPlanningSettings}
+        savePlanningSettings={props.savePlanningSettings}
+        availablePlanningRoles={props.availablePlanningRoles}
       />
     </motion.div>
   );

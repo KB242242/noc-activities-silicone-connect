@@ -138,6 +138,9 @@ export interface Task {
   id: string;
   userId: string;
   userName: string;
+  linkedTicketId?: string;
+  linkedTicketNumero?: string;
+  linkedTicketObjet?: string;
   title: string;
   description: string;
   status: TaskStatus;

@@ -180,10 +180,96 @@ type ClientAssetOverride = {
   equipmentImages?: Record<string, string>;
 };
 
+type ClientModuleSettings = {
+  idStyle: {
+    prefix: string;
+    fixedYear: number;
+    padding: number;
+    nextSequence: number;
+    allowManualRef: boolean;
+  };
+  permissions: {
+    allowCreate: boolean;
+    allowUpdate: boolean;
+    allowDelete: boolean;
+    allowArchive: boolean;
+    deleteRoles: string[];
+  };
+  api: {
+    enableRead: boolean;
+    enableWrite: boolean;
+    enableZabbixSync: boolean;
+    enableLibreNmsFields: boolean;
+  };
+  ui: {
+    defaultViewMode: ClientViewMode;
+    showLocality: boolean;
+    showCountry: boolean;
+    showClientType: boolean;
+    showSatisfaction: boolean;
+  };
+};
+
 type NocClientsPanelProps = {
   connectedUserRole?: string | null;
   connectedUserId?: string | null;
   connectedUserName?: string | null;
+};
+
+type TableColumnKey = 'ref' | 'logo' | 'name' | 'type' | 'locality' | 'country' | 'status' | 'action';
+
+const TABLE_COLUMN_MIN_WIDTHS: Record<TableColumnKey, number> = {
+  ref: 170,
+  logo: 78,
+  name: 220,
+  type: 150,
+  locality: 150,
+  country: 190,
+  status: 120,
+  action: 130,
+};
+
+const DEFAULT_TABLE_COLUMN_WIDTHS: Record<TableColumnKey, number> = {
+  ref: 210,
+  logo: 90,
+  name: 280,
+  type: 170,
+  locality: 180,
+  country: 220,
+  status: 130,
+  action: 150,
+};
+
+const CLIENT_TABLE_WIDTHS_STORAGE_KEY = 'noc_clients_table_column_widths_v1';
+
+const DEFAULT_CLIENT_SETTINGS: ClientModuleSettings = {
+  idStyle: {
+    prefix: 'CLI',
+    fixedYear: new Date().getFullYear(),
+    padding: 5,
+    nextSequence: 66,
+    allowManualRef: false,
+  },
+  permissions: {
+    allowCreate: true,
+    allowUpdate: true,
+    allowDelete: true,
+    allowArchive: true,
+    deleteRoles: ['ADMIN', 'SUPER_ADMIN', 'SUPERVISOR'],
+  },
+  api: {
+    enableRead: true,
+    enableWrite: true,
+    enableZabbixSync: true,
+    enableLibreNmsFields: true,
+  },
+  ui: {
+    defaultViewMode: 'table',
+    showLocality: true,
+    showCountry: true,
+    showClientType: true,
+    showSatisfaction: true,
+  },
 };
 
 const defaultClient = {
@@ -202,7 +288,7 @@ const defaultClient = {
   zabbixElement: '',
   librenmsDeviceId: '',
   libreNmsSysname: '',
-  slaTargetPercent: '99.90',
+  slaTargetPercent: '',
   serviceType: 'INTERNET' as ServiceType,
   bandwidthMbps: '',
   notes: '',
@@ -339,6 +425,20 @@ function getCityFromAddress(address?: string | null): string {
   return parts[parts.length - 1];
 }
 
+function resolveClientLocality(item: ClientListItem): string {
+  const direct = toStringSafe(item.locality).trim();
+  if (direct) return direct;
+
+  return getCityFromAddress(item.address);
+}
+
+function resolveClientCountry(item: ClientListItem): string {
+  const direct = toStringSafe(item.country).trim();
+  if (direct) return direct;
+
+  return '-';
+}
+
 function parseLiaisonNotes(rawNotes: string) {
   const fallback = {
     notes: rawNotes,
@@ -411,11 +511,16 @@ export function NocClientsPanel({ connectedUserRole, connectedUserId, connectedU
     .replace(/[-\s]+/g, '_');
   const effectiveUserId = connectedUserId ?? user?.id ?? storedUser?.id ?? null;
   const effectiveUserName = connectedUserName ?? user?.name ?? storedUser?.name ?? null;
+  const tableColumnWidthsStorageKey = useMemo(
+    () => `${CLIENT_TABLE_WIDTHS_STORAGE_KEY}:${effectiveUserId ?? 'anonymous'}`,
+    [effectiveUserId]
+  );
   const canDelete =
     userRole === 'ADMIN' ||
     userRole === 'SUPERADMIN' ||
     userRole.startsWith('SUPER_ADMIN') ||
     userRole.startsWith('SUPERVIS');
+  const isAdminUser = userRole === 'ADMIN' || userRole === 'SUPERADMIN' || userRole.startsWith('SUPER_ADMIN');
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -438,6 +543,11 @@ export function NocClientsPanel({ connectedUserRole, connectedUserId, connectedU
   const [documentTypeSelection, setDocumentTypeSelection] = useState<'ACCEPTANCE' | 'CONTRACT' | 'OTHER'>('CONTRACT');
   const [pageSize, setPageSize] = useState<25 | 50 | 100>(25);
   const [page, setPage] = useState(1);
+  const [tableColumnWidths, setTableColumnWidths] = useState<Record<TableColumnKey, number>>(DEFAULT_TABLE_COLUMN_WIDTHS);
+  const [tableColumnWidthsHydrated, setTableColumnWidthsHydrated] = useState(false);
+  const [moduleSettings, setModuleSettings] = useState<ClientModuleSettings>(DEFAULT_CLIENT_SETTINGS);
+  const [showAdminSettings, setShowAdminSettings] = useState(false);
+  const [savingModuleSettings, setSavingModuleSettings] = useState(false);
 
   const [showForm, setShowForm] = useState(false);
   const [interventionEditMode, setInterventionEditMode] = useState(false);
@@ -462,6 +572,8 @@ export function NocClientsPanel({ connectedUserRole, connectedUserId, connectedU
       items.map((item) => ({
         ...item,
         logo_url: clientAssetOverrides[item.client_ref]?.logoUrl ?? item.logo_url,
+        locality: toStringSafe(item.locality).trim() || item.locality,
+        country: toStringSafe(item.country).trim() || item.country,
       })),
     [clientAssetOverrides]
   );
@@ -471,7 +583,7 @@ export function NocClientsPanel({ connectedUserRole, connectedUserId, connectedU
     const filtered = clients.filter((item) => {
       if (statusFilter !== 'ALL' && item.status !== statusFilter) return false;
       if (serviceFilter !== 'ALL' && item.service_type !== serviceFilter) return false;
-      if (cityFilter !== 'ALL' && getCityFromAddress(item.address) !== cityFilter) return false;
+      if (cityFilter !== 'ALL' && resolveClientLocality(item) !== cityFilter) return false;
       if (!q) return true;
       const haystack = `${item.client_ref} ${item.client_name} ${item.contact_phone ?? ''} ${item.contact_email ?? ''} ${item.address ?? ''}`.toLowerCase();
       return haystack.includes(q);
@@ -487,7 +599,7 @@ export function NocClientsPanel({ connectedUserRole, connectedUserId, connectedU
 
   const cityOptions = useMemo(() => {
     const values = new Set<string>();
-    clients.forEach((item) => values.add(getCityFromAddress(item.address)));
+    clients.forEach((item) => values.add(resolveClientLocality(item)));
     return ['ALL', ...Array.from(values).sort((a, b) => a.localeCompare(b))];
   }, [clients]);
 
@@ -497,6 +609,46 @@ export function NocClientsPanel({ connectedUserRole, connectedUserId, connectedU
     const start = (safePage - 1) * pageSize;
     return filteredClients.slice(start, start + pageSize);
   }, [filteredClients, page, pageSize, totalPages]);
+
+  const getTableCellText = useCallback((item: ClientListItem, column: TableColumnKey): string => {
+    if (column === 'ref') return item.client_ref;
+    if (column === 'logo') return 'logo';
+    if (column === 'name') return `${item.client_name} ${item.ip_client ?? ''}`;
+    if (column === 'type') return item.client_type || item.service_type;
+    if (column === 'locality') return resolveClientLocality(item);
+    if (column === 'country') return resolveClientCountry(item);
+    if (column === 'status') return item.status;
+    return 'actions';
+  }, []);
+
+  const autoFitTableColumn = useCallback((column: TableColumnKey) => {
+    const maxChars = pagedClients.reduce((max, item) => Math.max(max, getTableCellText(item, column).length), 10);
+    const minWidth = TABLE_COLUMN_MIN_WIDTHS[column];
+    const nextWidth = Math.max(minWidth, Math.min(480, 34 + maxChars * 8));
+    setTableColumnWidths((prev) => ({ ...prev, [column]: nextWidth }));
+  }, [getTableCellText, pagedClients]);
+
+  const startTableColumnResize = useCallback((column: TableColumnKey, event: React.MouseEvent<HTMLSpanElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const startX = event.clientX;
+    const startWidth = tableColumnWidths[column];
+    const minWidth = TABLE_COLUMN_MIN_WIDTHS[column];
+
+    const onMove = (moveEvent: MouseEvent) => {
+      const next = Math.max(minWidth, startWidth + moveEvent.clientX - startX);
+      setTableColumnWidths((prev) => ({ ...prev, [column]: next }));
+    };
+
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [tableColumnWidths]);
 
   const resetForm = () => {
     setClient({ ...defaultClient });
@@ -540,9 +692,83 @@ export function NocClientsPanel({ connectedUserRole, connectedUserId, connectedU
     }
   }, [applyClientAssetOverrides, includeArchived]);
 
+  const loadModuleSettings = useCallback(async () => {
+    try {
+      const response = await fetch('/api/noc/client-settings');
+      const payload = await response.json();
+      if (!response.ok || !payload.success) throw new Error(payload.error || 'Configuration clients indisponible');
+      setModuleSettings((prev) => ({
+        ...prev,
+        ...(payload.settings ?? {}),
+        idStyle: { ...prev.idStyle, ...(payload.settings?.idStyle ?? {}) },
+        permissions: { ...prev.permissions, ...(payload.settings?.permissions ?? {}) },
+        api: { ...prev.api, ...(payload.settings?.api ?? {}) },
+        ui: { ...prev.ui, ...(payload.settings?.ui ?? {}) },
+      }));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Impossible de charger la configuration clients.');
+    }
+  }, []);
+
+  const saveModuleSettings = useCallback(async () => {
+    if (!isAdminUser || !effectiveUserId) {
+      toast.error('Configuration reservee aux admins.');
+      return;
+    }
+    setSavingModuleSettings(true);
+    try {
+      const response = await fetch('/api/noc/client-settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actorId: effectiveUserId, settings: moduleSettings }),
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload.success) throw new Error(payload.error || 'Echec sauvegarde configuration');
+      toast.success('Configuration clients enregistree.');
+      setModuleSettings((prev) => ({
+        ...prev,
+        ...(payload.settings ?? {}),
+        idStyle: { ...prev.idStyle, ...(payload.settings?.idStyle ?? {}) },
+        permissions: { ...prev.permissions, ...(payload.settings?.permissions ?? {}) },
+        api: { ...prev.api, ...(payload.settings?.api ?? {}) },
+        ui: { ...prev.ui, ...(payload.settings?.ui ?? {}) },
+      }));
+      await loadClients();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Echec sauvegarde configuration.');
+    } finally {
+      setSavingModuleSettings(false);
+    }
+  }, [effectiveUserId, isAdminUser, loadClients, moduleSettings]);
+
   useEffect(() => {
     saveToStorage('noc_client_asset_overrides', clientAssetOverrides);
   }, [clientAssetOverrides]);
+
+  useEffect(() => {
+    setTableColumnWidthsHydrated(false);
+
+    const stored = loadFromStorage<Partial<Record<TableColumnKey, number>>>(
+      tableColumnWidthsStorageKey,
+      {}
+    );
+
+    const keys = Object.keys(DEFAULT_TABLE_COLUMN_WIDTHS) as TableColumnKey[];
+    const nextWidths = keys.reduce<Record<TableColumnKey, number>>((acc, key) => {
+      const rawValue = Number(stored[key]);
+      const candidate = Number.isFinite(rawValue) ? rawValue : DEFAULT_TABLE_COLUMN_WIDTHS[key];
+      acc[key] = Math.max(TABLE_COLUMN_MIN_WIDTHS[key], Math.min(600, Math.round(candidate)));
+      return acc;
+    }, { ...DEFAULT_TABLE_COLUMN_WIDTHS });
+
+    setTableColumnWidths(nextWidths);
+    setTableColumnWidthsHydrated(true);
+  }, [tableColumnWidthsStorageKey]);
+
+  useEffect(() => {
+    if (!tableColumnWidthsHydrated) return;
+    saveToStorage(tableColumnWidthsStorageKey, tableColumnWidths);
+  }, [tableColumnWidths, tableColumnWidthsHydrated, tableColumnWidthsStorageKey]);
 
   const resolveEquipmentImage = (vendor: string, fallback?: string | null): string => {
     const key = vendor.trim().toUpperCase();
@@ -550,6 +776,10 @@ export function NocClientsPanel({ connectedUserRole, connectedUserId, connectedU
   };
 
   const archiveClient = async (clientId: number, action: 'archive' | 'unarchive') => {
+    if (!moduleSettings.permissions.allowArchive || !moduleSettings.api.enableWrite) {
+      toast.error('Archivage desactive par la configuration admin.');
+      return;
+    }
     try {
       const response = await fetch('/api/noc/clients', {
         method: 'PATCH',
@@ -801,6 +1031,10 @@ export function NocClientsPanel({ connectedUserRole, connectedUserId, connectedU
   };
 
   const deleteClient = async (clientId: number) => {
+    if (!moduleSettings.permissions.allowDelete || !moduleSettings.api.enableWrite) {
+      toast.error('Suppression desactivee par la configuration admin.');
+      return;
+    }
     if (!canDelete) {
       toast.error('Suppression reservee aux roles Admin/Super Admin/Supervisor.');
       return;
@@ -963,6 +1197,20 @@ export function NocClientsPanel({ connectedUserRole, connectedUserId, connectedU
   };
 
   const saveClient = async () => {
+    if (!moduleSettings.api.enableWrite) {
+      toast.error('Enregistrement desactive par la configuration admin.');
+      return;
+    }
+    const isUpdate = Boolean(client.idClient);
+    if (!isUpdate && !moduleSettings.permissions.allowCreate) {
+      toast.error('Creation client desactivee par la configuration admin.');
+      return;
+    }
+    if (isUpdate && !moduleSettings.permissions.allowUpdate) {
+      toast.error('Edition client desactivee par la configuration admin.');
+      return;
+    }
+
     if (!validateForm() || !checkRequiredFields()) return;
 
     setSaving(true);
@@ -1132,6 +1380,16 @@ export function NocClientsPanel({ connectedUserRole, connectedUserId, connectedU
   }, [loadClients]);
 
   useEffect(() => {
+    void loadModuleSettings();
+  }, [loadModuleSettings]);
+
+  useEffect(() => {
+    if (moduleSettings.ui.defaultViewMode) {
+      setViewMode(moduleSettings.ui.defaultViewMode);
+    }
+  }, [moduleSettings.ui.defaultViewMode]);
+
+  useEffect(() => {
     setPage(1);
   }, [search, statusFilter, serviceFilter, cityFilter, sortBy, pageSize]);
 
@@ -1153,11 +1411,18 @@ export function NocClientsPanel({ connectedUserRole, connectedUserId, connectedU
             </CardDescription>
           </div>
           <div className="flex gap-2">
+            {isAdminUser && (
+              <Button variant="outline" onClick={() => setShowAdminSettings((prev) => !prev)}>
+                <UserCog className="w-4 h-4 mr-2" />
+                {showAdminSettings ? 'Masquer config clients' : 'Configurer clients'}
+              </Button>
+            )}
             <Button variant="outline" onClick={() => void loadClients()} disabled={loading}>
               <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
               Actualiser
             </Button>
             <Button
+              disabled={!moduleSettings.api.enableWrite || !moduleSettings.permissions.allowCreate}
               onClick={() => {
                 resetForm();
                 setSelectedClientId(null);
@@ -1173,6 +1438,113 @@ export function NocClientsPanel({ connectedUserRole, connectedUserId, connectedU
         </CardHeader>
 
         <CardContent className="space-y-3">
+          {isAdminUser && showAdminSettings && (
+            <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
+              <p className="text-sm font-semibold">Configuration module clients</p>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <div className="space-y-1">
+                  <Label className="text-xs">Prefixe ID</Label>
+                  <Input
+                    value={moduleSettings.idStyle.prefix}
+                    onChange={(e) => setModuleSettings((prev) => ({
+                      ...prev,
+                      idStyle: { ...prev.idStyle, prefix: e.target.value.toUpperCase() },
+                    }))}
+                    placeholder="CLI"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Annee ID</Label>
+                  <Input
+                    type="number"
+                    min="2000"
+                    max="2999"
+                    value={moduleSettings.idStyle.fixedYear}
+                    onChange={(e) => setModuleSettings((prev) => ({
+                      ...prev,
+                      idStyle: { ...prev.idStyle, fixedYear: Number(e.target.value) || prev.idStyle.fixedYear },
+                    }))}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Padding sequence</Label>
+                  <Input
+                    type="number"
+                    min="3"
+                    max="8"
+                    value={moduleSettings.idStyle.padding}
+                    onChange={(e) => setModuleSettings((prev) => ({
+                      ...prev,
+                      idStyle: { ...prev.idStyle, padding: Number(e.target.value) || prev.idStyle.padding },
+                    }))}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Prochaine sequence</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    value={moduleSettings.idStyle.nextSequence}
+                    onChange={(e) => setModuleSettings((prev) => ({
+                      ...prev,
+                      idStyle: { ...prev.idStyle, nextSequence: Number(e.target.value) || prev.idStyle.nextSequence },
+                    }))}
+                  />
+                </div>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4 text-sm">
+                <label className="flex items-center gap-2"><input type="checkbox" checked={moduleSettings.permissions.allowCreate} onChange={(e) => setModuleSettings((prev) => ({ ...prev, permissions: { ...prev.permissions, allowCreate: e.target.checked } }))} />Autoriser creation</label>
+                <label className="flex items-center gap-2"><input type="checkbox" checked={moduleSettings.permissions.allowUpdate} onChange={(e) => setModuleSettings((prev) => ({ ...prev, permissions: { ...prev.permissions, allowUpdate: e.target.checked } }))} />Autoriser edition</label>
+                <label className="flex items-center gap-2"><input type="checkbox" checked={moduleSettings.permissions.allowDelete} onChange={(e) => setModuleSettings((prev) => ({ ...prev, permissions: { ...prev.permissions, allowDelete: e.target.checked } }))} />Autoriser suppression</label>
+                <label className="flex items-center gap-2"><input type="checkbox" checked={moduleSettings.permissions.allowArchive} onChange={(e) => setModuleSettings((prev) => ({ ...prev, permissions: { ...prev.permissions, allowArchive: e.target.checked } }))} />Autoriser archivage</label>
+                <label className="flex items-center gap-2"><input type="checkbox" checked={moduleSettings.api.enableRead} onChange={(e) => setModuleSettings((prev) => ({ ...prev, api: { ...prev.api, enableRead: e.target.checked } }))} />API lecture active</label>
+                <label className="flex items-center gap-2"><input type="checkbox" checked={moduleSettings.api.enableWrite} onChange={(e) => setModuleSettings((prev) => ({ ...prev, api: { ...prev.api, enableWrite: e.target.checked } }))} />API ecriture active</label>
+                <label className="flex items-center gap-2"><input type="checkbox" checked={moduleSettings.api.enableZabbixSync} onChange={(e) => setModuleSettings((prev) => ({ ...prev, api: { ...prev.api, enableZabbixSync: e.target.checked } }))} />Sync Zabbix active</label>
+                <label className="flex items-center gap-2"><input type="checkbox" checked={moduleSettings.api.enableLibreNmsFields} onChange={(e) => setModuleSettings((prev) => ({ ...prev, api: { ...prev.api, enableLibreNmsFields: e.target.checked } }))} />Champs LibreNMS actifs</label>
+                <label className="flex items-center gap-2"><input type="checkbox" checked={moduleSettings.ui.showClientType} onChange={(e) => setModuleSettings((prev) => ({ ...prev, ui: { ...prev.ui, showClientType: e.target.checked } }))} />Afficher type</label>
+                <label className="flex items-center gap-2"><input type="checkbox" checked={moduleSettings.ui.showLocality} onChange={(e) => setModuleSettings((prev) => ({ ...prev, ui: { ...prev.ui, showLocality: e.target.checked } }))} />Afficher localite</label>
+                <label className="flex items-center gap-2"><input type="checkbox" checked={moduleSettings.ui.showCountry} onChange={(e) => setModuleSettings((prev) => ({ ...prev, ui: { ...prev.ui, showCountry: e.target.checked } }))} />Afficher pays</label>
+                <label className="flex items-center gap-2"><input type="checkbox" checked={moduleSettings.ui.showSatisfaction} onChange={(e) => setModuleSettings((prev) => ({ ...prev, ui: { ...prev.ui, showSatisfaction: e.target.checked } }))} />Afficher satisfaction</label>
+              </div>
+              <div className="grid gap-3 md:grid-cols-3 items-end">
+                <div className="space-y-1">
+                  <Label className="text-xs">Vue par defaut</Label>
+                  <Select
+                    value={moduleSettings.ui.defaultViewMode}
+                    onValueChange={(value) => setModuleSettings((prev) => ({ ...prev, ui: { ...prev.ui, defaultViewMode: value as ClientViewMode } }))}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="table">Tableau</SelectItem>
+                      <SelectItem value="cards">Cartes</SelectItem>
+                      <SelectItem value="compact">Compact</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1 md:col-span-2">
+                  <Label className="text-xs">Roles autorises pour suppression (CSV)</Label>
+                  <Input
+                    value={moduleSettings.permissions.deleteRoles.join(',')}
+                    onChange={(e) => setModuleSettings((prev) => ({
+                      ...prev,
+                      permissions: {
+                        ...prev.permissions,
+                        deleteRoles: e.target.value.split(',').map((x) => x.trim().toUpperCase()).filter(Boolean),
+                      },
+                    }))}
+                    placeholder="ADMIN,SUPER_ADMIN,SUPERVISOR"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <Button onClick={() => void saveModuleSettings()} disabled={savingModuleSettings}>
+                  <Save className="w-4 h-4 mr-2" />
+                  {savingModuleSettings ? 'Sauvegarde...' : 'Sauvegarder la configuration'}
+                </Button>
+              </div>
+            </div>
+          )}
+
           <div className="grid gap-2 md:grid-cols-8">
             <Input
               value={search}
@@ -1298,7 +1670,10 @@ export function NocClientsPanel({ connectedUserRole, connectedUserId, connectedU
                         <p className="font-medium truncate">{item.client_name}</p>
                         <p className={`text-xs ${ipColor}`}>{item.ip_client || '-'}</p>
                         <p className="text-xs text-muted-foreground truncate">
-                          {item.client_ref} • {item.client_type || item.service_type} • {item.country || '-'} • {item.locality || getCityFromAddress(item.address)}
+                          {item.client_ref}
+                          {moduleSettings.ui.showClientType ? ` • ${item.client_type || item.service_type}` : ''}
+                          {moduleSettings.ui.showCountry ? ` • ${item.country || '-'}` : ''}
+                          {moduleSettings.ui.showLocality ? ` • ${item.locality || getCityFromAddress(item.address)}` : ''}
                         </p>
                         <p className="text-xs text-muted-foreground">
                           Statut: {item.status} • Tickets: {item.ticketsCount ?? 0} • Interventions: {item.interventionsCount ?? 0}
@@ -1381,7 +1756,11 @@ export function NocClientsPanel({ connectedUserRole, connectedUserId, connectedU
                         <>
                     <p className="font-medium text-sm truncate">{item.client_name}</p>
                     <p className={`text-xs ${ipColor} truncate`}>{item.ip_client || '-'}</p>
-                    <p className="text-xs text-muted-foreground truncate">{item.client_ref} • {item.status} • {item.service_type} • {getCityFromAddress(item.address)}</p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {item.client_ref} • {item.status}
+                      {moduleSettings.ui.showClientType ? ` • ${item.service_type}` : ''}
+                      {moduleSettings.ui.showLocality ? ` • ${getCityFromAddress(item.address)}` : ''}
+                    </p>
                         </>
                       );
                     })()}
@@ -1408,18 +1787,80 @@ export function NocClientsPanel({ connectedUserRole, connectedUserId, connectedU
           )}
 
           {viewMode === 'table' && (
-            <div className="overflow-x-auto rounded-md border">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/40">
+            <div className="overflow-x-auto rounded-xl border border-white/50 bg-white/60 shadow-sm backdrop-blur-sm dark:border-slate-700/60 dark:bg-slate-900/45 dark:shadow-[0_12px_40px_rgba(2,8,23,0.45)]">
+              <table className="text-sm table-fixed" style={{ minWidth: '1320px' }}>
+                <thead className="bg-white/55 backdrop-blur-sm dark:bg-slate-900/70">
                   <tr>
-                    <th className="text-left px-3 py-2">Ref</th>
-                    <th className="text-left px-3 py-2">Logo</th>
-                    <th className="text-left px-3 py-2">Nom</th>
-                    <th className="text-left px-3 py-2">Type</th>
-                    <th className="text-left px-3 py-2">Localite</th>
-                    <th className="text-left px-3 py-2">Pays</th>
-                    <th className="text-left px-3 py-2">Statut</th>
-                    <th className="text-center px-3 py-2">Action</th>
+                    <th
+                      className="relative text-left px-3 py-2"
+                      style={{ width: `${tableColumnWidths.ref}px` }}
+                      onDoubleClick={() => autoFitTableColumn('ref')}
+                    >
+                      Ref
+                      <span className="absolute right-0 top-0 h-full w-2 cursor-col-resize hover:bg-primary/15" onMouseDown={(e) => startTableColumnResize('ref', e)} />
+                    </th>
+                    <th
+                      className="relative text-left px-3 py-2"
+                      style={{ width: `${tableColumnWidths.logo}px` }}
+                      onDoubleClick={() => autoFitTableColumn('logo')}
+                    >
+                      Logo
+                      <span className="absolute right-0 top-0 h-full w-2 cursor-col-resize hover:bg-primary/15" onMouseDown={(e) => startTableColumnResize('logo', e)} />
+                    </th>
+                    <th
+                      className="relative text-left px-3 py-2"
+                      style={{ width: `${tableColumnWidths.name}px` }}
+                      onDoubleClick={() => autoFitTableColumn('name')}
+                    >
+                      Nom
+                      <span className="absolute right-0 top-0 h-full w-2 cursor-col-resize hover:bg-primary/15" onMouseDown={(e) => startTableColumnResize('name', e)} />
+                    </th>
+                    {moduleSettings.ui.showClientType && (
+                      <th
+                        className="relative text-left px-3 py-2"
+                        style={{ width: `${tableColumnWidths.type}px` }}
+                        onDoubleClick={() => autoFitTableColumn('type')}
+                      >
+                        Type
+                        <span className="absolute right-0 top-0 h-full w-2 cursor-col-resize hover:bg-primary/15" onMouseDown={(e) => startTableColumnResize('type', e)} />
+                      </th>
+                    )}
+                    {moduleSettings.ui.showLocality && (
+                      <th
+                        className="relative text-left px-3 py-2"
+                        style={{ width: `${tableColumnWidths.locality}px` }}
+                        onDoubleClick={() => autoFitTableColumn('locality')}
+                      >
+                        Localite
+                        <span className="absolute right-0 top-0 h-full w-2 cursor-col-resize hover:bg-primary/15" onMouseDown={(e) => startTableColumnResize('locality', e)} />
+                      </th>
+                    )}
+                    {moduleSettings.ui.showCountry && (
+                      <th
+                        className="relative text-left px-3 py-2"
+                        style={{ width: `${tableColumnWidths.country}px` }}
+                        onDoubleClick={() => autoFitTableColumn('country')}
+                      >
+                        Pays
+                        <span className="absolute right-0 top-0 h-full w-2 cursor-col-resize hover:bg-primary/15" onMouseDown={(e) => startTableColumnResize('country', e)} />
+                      </th>
+                    )}
+                    <th
+                      className="relative text-left px-3 py-2"
+                      style={{ width: `${tableColumnWidths.status}px` }}
+                      onDoubleClick={() => autoFitTableColumn('status')}
+                    >
+                      Statut
+                      <span className="absolute right-0 top-0 h-full w-2 cursor-col-resize hover:bg-primary/15" onMouseDown={(e) => startTableColumnResize('status', e)} />
+                    </th>
+                    <th
+                      className="relative text-center px-3 py-2"
+                      style={{ width: `${tableColumnWidths.action}px` }}
+                      onDoubleClick={() => autoFitTableColumn('action')}
+                    >
+                      Action
+                      <span className="absolute right-0 top-0 h-full w-2 cursor-col-resize hover:bg-primary/15" onMouseDown={(e) => startTableColumnResize('action', e)} />
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1427,8 +1868,8 @@ export function NocClientsPanel({ connectedUserRole, connectedUserId, connectedU
                     const ipColor = item.equipmentStatus === 'DOWN' || item.status !== 'ACTIVE' ? 'text-red-600' : 'text-blue-600';
                     return (
                     <tr key={item.id_client} className="group border-t hover:bg-muted/30">
-                      <td className="px-3 py-2 font-medium cursor-pointer hover:underline" onClick={() => void loadClientProfile(item.client_ref, item.id_client, 'view')}>{item.client_ref}</td>
-                      <td className="px-3 py-2">
+                      <td className="px-3 py-2 font-medium cursor-pointer hover:underline" style={{ width: `${tableColumnWidths.ref}px` }} onClick={() => void loadClientProfile(item.client_ref, item.id_client, 'view')}>{item.client_ref}</td>
+                      <td className="px-3 py-2" style={{ width: `${tableColumnWidths.logo}px` }}>
                         <img
                           src={item.logo_url || '/logo_sc_icon.png'}
                           alt={item.client_name}
@@ -1436,17 +1877,23 @@ export function NocClientsPanel({ connectedUserRole, connectedUserId, connectedU
                           onClick={() => void loadClientProfile(item.client_ref, item.id_client, 'view')}
                         />
                       </td>
-                      <td className="px-3 py-2 cursor-pointer hover:underline" onClick={() => void loadClientProfile(item.client_ref, item.id_client, 'view')}>
+                      <td className="px-3 py-2 cursor-pointer hover:underline" style={{ width: `${tableColumnWidths.name}px` }} onClick={() => void loadClientProfile(item.client_ref, item.id_client, 'view')}>
                         <div className="flex flex-col gap-0.5">
                           <p className="font-medium">{item.client_name}</p>
                           <p className={`text-xs ${ipColor}`}>{item.ip_client || '-'}</p>
                         </div>
                       </td>
-                      <td className="px-3 py-2 cursor-pointer hover:underline" onClick={() => void loadClientProfile(item.client_ref, item.id_client, 'view')}>{item.client_type || item.service_type}</td>
-                      <td className="px-3 py-2 cursor-pointer hover:underline" onClick={() => void loadClientProfile(item.client_ref, item.id_client, 'view')}>{item.locality || getCityFromAddress(item.address)}</td>
-                      <td className="px-3 py-2 cursor-pointer hover:underline" onClick={() => void loadClientProfile(item.client_ref, item.id_client, 'view')}>{item.country || '-'}</td>
-                      <td className="px-3 py-2 cursor-pointer hover:underline" onClick={() => void loadClientProfile(item.client_ref, item.id_client, 'view')}>{item.status}</td>
-                      <td className="px-3 py-2">
+                      {moduleSettings.ui.showClientType && (
+                        <td className="px-3 py-2 cursor-pointer hover:underline" style={{ width: `${tableColumnWidths.type}px` }} onClick={() => void loadClientProfile(item.client_ref, item.id_client, 'view')}>{item.client_type || item.service_type}</td>
+                      )}
+                      {moduleSettings.ui.showLocality && (
+                        <td className="px-3 py-2 cursor-pointer hover:underline" style={{ width: `${tableColumnWidths.locality}px` }} onClick={() => void loadClientProfile(item.client_ref, item.id_client, 'view')}>{resolveClientLocality(item)}</td>
+                      )}
+                      {moduleSettings.ui.showCountry && (
+                        <td className="px-3 py-2 cursor-pointer hover:underline" style={{ width: `${tableColumnWidths.country}px` }} onClick={() => void loadClientProfile(item.client_ref, item.id_client, 'view')}>{resolveClientCountry(item)}</td>
+                      )}
+                      <td className="px-3 py-2 cursor-pointer hover:underline" style={{ width: `${tableColumnWidths.status}px` }} onClick={() => void loadClientProfile(item.client_ref, item.id_client, 'view')}>{item.status}</td>
+                      <td className="px-3 py-2" style={{ width: `${tableColumnWidths.action}px` }}>
                         <div className="flex items-center justify-center gap-2">
                           <button
                             title="Ouvrir"
@@ -1614,12 +2061,12 @@ export function NocClientsPanel({ connectedUserRole, connectedUserId, connectedU
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <DetailItem label="Nom" value={client.clientName} />
               <DetailItem label="Reference" value={client.clientRef} />
-              <DetailItem label="Type" value={client.clientType || client.serviceType} />
-              <DetailItem label="Pays" value={client.country || '-'} />
-              <DetailItem label="Localite" value={client.locality || getCityFromAddress(client.address)} />
+              {moduleSettings.ui.showClientType && <DetailItem label="Type" value={client.clientType || client.serviceType} />}
+              {moduleSettings.ui.showCountry && <DetailItem label="Pays" value={client.country || '-'} />}
+              {moduleSettings.ui.showLocality && <DetailItem label="Localite" value={client.locality || getCityFromAddress(client.address)} />}
               <DetailItem label="Service" value={client.serviceType} />
               <DetailItem label="Statut" value={client.status} />
-              <DetailItem label="Satisfaction" value={client.satisfactionScore ? `${client.satisfactionScore}/5` : '-'} />
+              {moduleSettings.ui.showSatisfaction && <DetailItem label="Satisfaction" value={client.satisfactionScore ? `${client.satisfactionScore}/5` : '-'} />}
               <DetailItem label="Bande passante" value={client.bandwidthMbps ? `${client.bandwidthMbps} Mbps` : '-'} />
               <DetailItem label="Telephone" value={client.contactPhone || '-'} />
               <DetailItem label="Email" value={client.contactEmail || '-'} />
@@ -1628,7 +2075,7 @@ export function NocClientsPanel({ connectedUserRole, connectedUserId, connectedU
               <DetailItem label="Element Zabbix" value={client.zabbixElement || '-'} />
               <DetailItem label="Device ID LibreNMS" value={client.librenmsDeviceId || '-'} />
               <DetailItem label="Sysname LibreNMS" value={client.libreNmsSysname || '-'} />
-              <DetailItem label="SLA" value={`${client.slaTargetPercent || '0'}%`} />
+              <DetailItem label="SLA" value={client.slaTargetPercent ? `${client.slaTargetPercent}%` : 'Non renseigné'} />
               <DetailItem label="Adresse" value={client.address || '-'} />
             </div>
 
@@ -1834,29 +2281,39 @@ export function NocClientsPanel({ connectedUserRole, connectedUserId, connectedU
                   className={client.ipClient && !isValidIp(client.ipClient) ? 'border-red-300 bg-red-50/30' : ''}
                 />
               </div>
-              <div className="space-y-2">
-                <Label>SLA cible (%)</Label>
-                <Input value={client.slaTargetPercent} type="number" min="0" max="100" step="0.01" onChange={(e) => setClient((p) => ({ ...p, slaTargetPercent: e.target.value }))} />
-              </div>
+              {moduleSettings.ui.showSatisfaction && (
+                <div className="space-y-2">
+                  <Label>SLA cible (%) <span className="text-muted-foreground">(optionnel)</span></Label>
+                  <Input value={client.slaTargetPercent} type="number" min="0" max="100" step="0.01" placeholder="Optionnel" onChange={(e) => setClient((p) => ({ ...p, slaTargetPercent: e.target.value }))} />
+                </div>
+              )}
             </div>
 
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              <div className="space-y-2">
-                <Label>Pays</Label>
-                <Input value={client.country} onChange={(e) => setClient((p) => ({ ...p, country: e.target.value }))} />
-              </div>
-              <div className="space-y-2">
-                <Label>Localite</Label>
-                <Input value={client.locality} onChange={(e) => setClient((p) => ({ ...p, locality: e.target.value }))} />
-              </div>
-              <div className="space-y-2">
-                <Label>Satisfaction (/5)</Label>
-                <Input value={client.satisfactionScore} type="number" min="0" max="5" step="0.1" onChange={(e) => setClient((p) => ({ ...p, satisfactionScore: e.target.value }))} />
-              </div>
-              <div className="space-y-2">
-                <Label>Commentaire satisfaction</Label>
-                <Input value={client.satisfactionComment} onChange={(e) => setClient((p) => ({ ...p, satisfactionComment: e.target.value }))} />
-              </div>
+              {moduleSettings.ui.showCountry && (
+                <div className="space-y-2">
+                  <Label>Pays</Label>
+                  <Input value={client.country} onChange={(e) => setClient((p) => ({ ...p, country: e.target.value }))} />
+                </div>
+              )}
+              {moduleSettings.ui.showLocality && (
+                <div className="space-y-2">
+                  <Label>Localite</Label>
+                  <Input value={client.locality} onChange={(e) => setClient((p) => ({ ...p, locality: e.target.value }))} />
+                </div>
+              )}
+              {moduleSettings.ui.showSatisfaction && (
+                <div className="space-y-2">
+                  <Label>Satisfaction (/5)</Label>
+                  <Input value={client.satisfactionScore} type="number" min="0" max="5" step="0.1" onChange={(e) => setClient((p) => ({ ...p, satisfactionScore: e.target.value }))} />
+                </div>
+              )}
+              {moduleSettings.ui.showSatisfaction && (
+                <div className="space-y-2">
+                  <Label>Commentaire satisfaction</Label>
+                  <Input value={client.satisfactionComment} onChange={(e) => setClient((p) => ({ ...p, satisfactionComment: e.target.value }))} />
+                </div>
+              )}
             </div>
 
             <div className="grid gap-3 md:grid-cols-2">
@@ -1869,6 +2326,7 @@ export function NocClientsPanel({ connectedUserRole, connectedUserId, connectedU
                     setClient((p) => ({ ...p, hostidZabbix: val }));
                   }}
                   placeholder="ID host Zabbix (ex: 10583)" 
+                  disabled={!moduleSettings.api.enableZabbixSync}
                 />
                 <p className="text-xs text-muted-foreground">
                   Optionnel: utile seulement si vous souhaitez un lien direct avec Zabbix.
@@ -1882,6 +2340,7 @@ export function NocClientsPanel({ connectedUserRole, connectedUserId, connectedU
                     setClient((p) => ({ ...p, zabbixElement: e.target.value }));
                   }}
                   placeholder="Ex: SC-CLI-BRAZZAVILLE-CORE-01" 
+                  disabled={!moduleSettings.api.enableZabbixSync}
                 />
                 <p className="text-xs text-muted-foreground">
                   Identifiant metier optionnel pour fiabiliser la liaison dans Zabbix.
@@ -1898,6 +2357,7 @@ export function NocClientsPanel({ connectedUserRole, connectedUserId, connectedU
                   placeholder="Ex: 42 (ID numerique du device dans LibreNMS)"
                   type="number"
                   min="0"
+                  disabled={!moduleSettings.api.enableLibreNmsFields}
                 />
                 <p className="text-xs text-muted-foreground">
                   ID numerique visible dans l&apos;URL LibreNMS : /device/device=<strong>42</strong>/tab=overview
@@ -1909,6 +2369,7 @@ export function NocClientsPanel({ connectedUserRole, connectedUserId, connectedU
                   value={client.libreNmsSysname}
                   onChange={(e) => setClient((p) => ({ ...p, libreNmsSysname: e.target.value }))}
                   placeholder="Ex: bzv_sc_rtr_pam-entrepot"
+                  disabled={!moduleSettings.api.enableLibreNmsFields}
                 />
                 <p className="text-xs text-muted-foreground">
                   System Name SNMP du device (champ &quot;System Name&quot; dans la fiche LibreNMS).

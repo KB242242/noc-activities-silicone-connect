@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { useMemo } from 'react';
 
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -6,6 +7,7 @@ import { Card, CardContent } from '@/components/ui/card';
 
 type AppSupervisionTabContentProps = {
   SHIFTS_DATA: Record<string, { members: string[] }>;
+  allUsers: any[];
   getShiftScheduleForDate: (shiftName: string, date: Date) => { isWorking: boolean };
   getIndividualRestAgent: (shiftName: string, date: Date) => { agentName?: string } | null;
   getShiftColor: (shiftName: string) => string;
@@ -13,10 +15,34 @@ type AppSupervisionTabContentProps = {
 
 export function AppSupervisionTabContent({
   SHIFTS_DATA,
+  allUsers,
   getShiftScheduleForDate,
   getIndividualRestAgent,
   getShiftColor,
 }: AppSupervisionTabContentProps) {
+  const membersByShift = useMemo(() => {
+    const buckets: Record<string, string[]> = { A: [], B: [], C: [] };
+
+    allUsers
+      .filter((entry) => entry?.isActive && entry?.role === 'TECHNICIEN_NO')
+      .forEach((entry) => {
+        const shiftName = String(entry?.shift?.name ?? entry?.shiftId ?? '')
+          .replace(/^shift-/i, '')
+          .trim()
+          .toUpperCase();
+
+        if (shiftName === 'A' || shiftName === 'B' || shiftName === 'C') {
+          buckets[shiftName].push(String(entry?.name ?? '').trim());
+        }
+      });
+
+    return {
+      A: buckets.A.filter(Boolean).sort((a, b) => a.localeCompare(b, 'fr')),
+      B: buckets.B.filter(Boolean).sort((a, b) => a.localeCompare(b, 'fr')),
+      C: buckets.C.filter(Boolean).sort((a, b) => a.localeCompare(b, 'fr')),
+    };
+  }, [allUsers]);
+
   return (
     <motion.div key="supervision" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-4">
       <div>
@@ -28,8 +54,11 @@ export function AppSupervisionTabContent({
         {Object.keys(SHIFTS_DATA).flatMap((shiftName) => {
           const shiftData = SHIFTS_DATA[shiftName];
           const schedule = getShiftScheduleForDate(shiftName, new Date());
+          const members = membersByShift[shiftName]?.length > 0
+            ? membersByShift[shiftName]
+            : shiftData.members;
 
-          return shiftData.members.map((member, idx) => {
+          return members.map((member, idx) => {
             const restInfo = getIndividualRestAgent(shiftName, new Date());
             const isResting = restInfo?.agentName === member;
             const isOnDuty = schedule.isWorking && !isResting;
@@ -50,7 +79,7 @@ export function AppSupervisionTabContent({
                       <p className="font-medium text-sm truncate">{member}</p>
                       <div className="flex items-center gap-1">
                         <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getShiftColor(shiftName) }} />
-                        <span className="text-xs text-muted-foreground">S{shiftName}</span>
+                        <span className="text-xs text-muted-foreground">{shiftName}</span>
                       </div>
                     </div>
                   </div>

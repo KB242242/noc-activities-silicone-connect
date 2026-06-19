@@ -1,4 +1,4 @@
-// @ts-nocheck
+﻿// @ts-nocheck
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -56,7 +56,7 @@ type DayType = 'DAY_SHIFT' | 'NIGHT_SHIFT' | 'REST_DAY';
 type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'on_hold' | 'cancelled' | 'late';
 type ResponsibilityType = 'CALL_CENTER' | 'MONITORING' | 'REPORTING_1' | 'REPORTING_2';
 
-// Types pour le gestionnaire de tâches NOC
+// Types pour le gestionnaire de tÃ¢ches NOC
 type TaskPriority = 'low' | 'medium' | 'high' | 'critical';
 type TaskCategory = 'incident' | 'maintenance' | 'surveillance' | 'administrative' | 'other';
 type AlertType = 'warning' | 'critical' | 'info' | 'success';
@@ -83,7 +83,7 @@ interface AuditLogEntry {
   createdAt: Date;
 }
 
-// Commentaire de tâche
+// Commentaire de tÃ¢che
 interface TaskComment {
   id: string;
   taskId: string;
@@ -108,7 +108,7 @@ interface TaskAlert {
   triggeredBy: 'time_limit' | 'overdue' | 'critical_not_started' | 'suspended_too_long' | 'no_task_created' | 'too_many_pending';
 }
 
-// Historique des modifications de tâche
+// Historique des modifications de tÃ¢che
 interface TaskHistoryEntry {
   id: string;
   taskId: string;
@@ -134,12 +134,12 @@ interface AgentPerformance {
   avgCompletionTime: number; // en minutes
   inactivityMinutes: number;
   productivityRate: number; // pourcentage
-  onTimeRate: number; // pourcentage de tâches à l'heure
+  onTimeRate: number; // pourcentage de tÃ¢ches Ã  l'heure
   reliabilityScore: number; // 0-100
   badge?: 'exemplary' | 'reliable' | 'improving' | 'needs_attention';
 }
 
-// Détection d'inactivité
+// DÃ©tection d'inactivitÃ©
 interface InactivityEvent {
   id: string;
   userId: string;
@@ -250,7 +250,7 @@ type MessageFolder = 'inbox' | 'sent' | 'drafts' | 'spam' | 'trash' | 'starred';
 type MessageStatus = 'unread' | 'read' | 'important' | 'archived';
 type MessagePriority = 'normal' | 'important' | 'urgent';
 
-// Pièce jointe
+// PiÃ¨ce jointe
 interface EmailAttachment {
   id: string;
   messageId: string;
@@ -301,14 +301,14 @@ interface InternalMessage {
   createdAt: Date;
   updatedAt: Date;
   deletedAt?: Date;
-  scheduledAt?: Date; // Envoi planifié
+  scheduledAt?: Date; // Envoi planifiÃ©
   isDraft: boolean;
-  replyTo?: string; // ID du message auquel on répond
-  forwardedFrom?: string; // ID du message transféré
-  selected?: boolean; // Pour la sélection multiple
+  replyTo?: string; // ID du message auquel on rÃ©pond
+  forwardedFrom?: string; // ID du message transfÃ©rÃ©
+  selected?: boolean; // Pour la sÃ©lection multiple
 }
 
-// Libellé personnalisé
+// LibellÃ© personnalisÃ©
 interface EmailLabel {
   id: string;
   name: string;
@@ -327,7 +327,7 @@ interface EmailSignature {
   createdAt: Date;
 }
 
-// Modèle de message
+// ModÃ¨le de message
 interface EmailTemplate {
   id: string;
   userId: string;
@@ -337,7 +337,7 @@ interface EmailTemplate {
   createdAt: Date;
 }
 
-// Accusé de lecture
+// AccusÃ© de lecture
 interface ReadReceipt {
   id: string;
   messageId: string;
@@ -357,14 +357,14 @@ interface MessageTracking {
 }
 
 // ============================================
-// TYPES MESSAGERIE INSTANTANÉE (WHATSAPP-STYLE)
+// TYPES MESSAGERIE INSTANTANÃ‰E (WHATSAPP-STYLE)
 // ============================================
 
 // Statut de message WhatsApp
 type ChatMessageStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
 type ChatMessageType = 'text' | 'image' | 'video' | 'audio' | 'document' | 'voice' | 'location' | 'contact';
 
-// Statut de présence
+// Statut de prÃ©sence
 type PresenceStatus = 'online' | 'offline' | 'away' | 'busy';
 
 // Message de chat
@@ -380,7 +380,7 @@ interface ChatMessage {
   mediaData?: string; // base64
   fileName?: string;
   fileSize?: number;
-  duration?: number; // pour audio/vidéo en secondes
+  duration?: number; // pour audio/vidÃ©o en secondes
   status: ChatMessageStatus;
   replyTo?: ChatMessage;
   isEdited: boolean;
@@ -429,7 +429,7 @@ interface Conversation {
   updatedAt: Date;
 }
 
-// Appel audio/vidéo
+// Appel audio/vidÃ©o
 interface CallHistory {
   id: string;
   conversationId: string;
@@ -475,9 +475,25 @@ const SHIFT_CYCLE_START: Record<string, Date> = {
 };
 
 const SHIFTS_DATA: Record<string, { name: string; color: string; colorCode: string; members: string[] }> = {
-  'A': { name: 'Shift A', color: 'blue', colorCode: '#3B82F6', members: ['Alaine', 'Casimir', 'Luca', 'José'] },
-  'B': { name: 'Shift B', color: 'yellow', colorCode: '#EAB308', members: ['Sahra', 'Severin', 'Marly', 'Furys'] },
-  'C': { name: 'Shift C', color: 'green', colorCode: '#22C55E', members: ['Audrey', 'Lapreuve', 'Lotti', 'Kevine'] }
+  'A': { name: 'Shift A', color: 'blue', colorCode: '#3B82F6', members: ['Alaine', 'Casimir', 'Luca'] },
+  'B': { name: 'Shift B', color: 'yellow', colorCode: '#EAB308', members: ['Sara', 'Fury', 'Wivine'] },
+  'C': { name: 'Shift C', color: 'green', colorCode: '#22C55E', members: ['Audrey', 'Kevine', 'Kevine'] }
+};
+
+const SHIFT_INDIVIDUAL_REST_MEMBERS: Record<string, string[]> = {
+  A: ['Casimir', 'Alaine', 'Luca'],
+  B: ['Sara', 'Fury', 'Wivine'],
+  C: ['Kevine', 'Kevine', 'Audrey'],
+};
+
+const SHIFT_INDIVIDUAL_REST_BASE_CYCLE: Record<string, number> = {
+  A: 13,
+  B: 14,
+  C: 14,
+};
+
+const SHIFT_INDIVIDUAL_REST_MEMBER_OVERRIDES: Record<string, Record<string, string[]>> = {
+  B: {},
 };
 
 const CYCLE_TOTAL_DAYS = 9;
@@ -503,8 +519,8 @@ const getShiftLightBg = (shiftName: string): string => {
 };
 
 const EXTERNAL_LINKS = [
-  { id: '1', name: 'Suivi véhicules', url: 'https://za.mixtelematics.com/#/login', category: 'vehicles', icon: Truck, description: 'MixTelematics' },
-  { id: '2', name: 'LibreNMS', url: 'http://192.168.2.25:6672/', category: 'monitoring', icon: Network, description: 'Monitoring réseau' },
+  { id: '1', name: 'Suivi vÃ©hicules', url: 'https://za.mixtelematics.com/#/login', category: 'vehicles', icon: Truck, description: 'MixTelematics' },
+  { id: '2', name: 'LibreNMS', url: 'http://192.168.2.25:6672/', category: 'monitoring', icon: Network, description: 'Monitoring rÃ©seau' },
   { id: '3', name: 'Zabbix', url: 'http://192.168.2.2:6672/', category: 'monitoring', icon: Activity, description: 'Suivi incidents' },
   { id: '4', name: 'Zoho Desk', url: 'https://desk.zoho.com/', category: 'tickets', icon: Ticket, description: 'Gestion tickets' },
   { id: '5', name: 'Tickets Sheets', url: 'https://docs.google.com/spreadsheets/d/1Z21eIjNuJVRvqTmj7DhQI4emVlqKBpia-eR--DviSj8/edit', category: 'tickets', icon: FileSpreadsheet, description: 'Liste tickets' },
@@ -513,7 +529,7 @@ const EXTERNAL_LINKS = [
 ];
 
 // ============================================
-// CONFIGURATION TÂCHES NOC
+// CONFIGURATION TÃ‚CHES NOC
 // ============================================
 
 const TASK_PRIORITIES: Record<TaskPriority, { label: string; color: string; bgColor: string }> = {
@@ -524,35 +540,35 @@ const TASK_PRIORITIES: Record<TaskPriority, { label: string; color: string; bgCo
 };
 
 const TASK_CATEGORIES: Record<TaskCategory, { label: string; icon: string }> = {
-  incident: { label: 'Incident', icon: '🚨' },
-  maintenance: { label: 'Maintenance', icon: '🔧' },
-  surveillance: { label: 'Surveillance', icon: '👁️' },
-  administrative: { label: 'Administratif', icon: '📋' },
-  other: { label: 'Autre', icon: '📌' }
+  incident: { label: 'Incident', icon: 'ðŸš¨' },
+  maintenance: { label: 'Maintenance', icon: 'ðŸ”§' },
+  surveillance: { label: 'Surveillance', icon: 'ðŸ‘ï¸' },
+  administrative: { label: 'Administratif', icon: 'ðŸ“‹' },
+  other: { label: 'Autre', icon: 'ðŸ“Œ' }
 };
 
 const TASK_STATUSES: Record<TaskStatus, { label: string; color: string; bgColor: string }> = {
   pending: { label: 'En attente', color: 'text-yellow-600', bgColor: 'bg-yellow-100 dark:bg-yellow-900/30' },
   in_progress: { label: 'En cours', color: 'text-blue-600', bgColor: 'bg-blue-100 dark:bg-blue-900/30' },
-  completed: { label: 'Terminée', color: 'text-green-600', bgColor: 'bg-green-100 dark:bg-green-900/30' },
+  completed: { label: 'TerminÃ©e', color: 'text-green-600', bgColor: 'bg-green-100 dark:bg-green-900/30' },
   on_hold: { label: 'Suspendue', color: 'text-orange-600', bgColor: 'bg-orange-100 dark:bg-orange-900/30' },
-  cancelled: { label: 'Annulée', color: 'text-slate-600', bgColor: 'bg-slate-100 dark:bg-slate-800' },
+  cancelled: { label: 'AnnulÃ©e', color: 'text-slate-600', bgColor: 'bg-slate-100 dark:bg-slate-800' },
   late: { label: 'En retard', color: 'text-red-600', bgColor: 'bg-red-100 dark:bg-red-900/30' }
 };
 
 const BADGE_CONFIG: Record<string, { label: string; icon: string; color: string }> = {
-  exemplary: { label: 'Agent Exemplaire', icon: '🏆', color: 'text-yellow-500' },
-  reliable: { label: 'Agent Fiable', icon: '⭐', color: 'text-blue-500' },
-  improving: { label: 'En Progression', icon: '📈', color: 'text-green-500' },
-  needs_attention: { label: 'À Surveiller', icon: '⚠️', color: 'text-orange-500' }
+  exemplary: { label: 'Agent Exemplaire', icon: 'ðŸ†', color: 'text-yellow-500' },
+  reliable: { label: 'Agent Fiable', icon: 'â­', color: 'text-blue-500' },
+  improving: { label: 'En Progression', icon: 'ðŸ“ˆ', color: 'text-green-500' },
+  needs_attention: { label: 'Ã€ Surveiller', icon: 'âš ï¸', color: 'text-orange-500' }
 };
 
 // Seuils d'alerte
 const ALERT_THRESHOLDS = {
   inactivityMinutes: 120, // 2 heures
-  taskApproachingMinutes: 30, // 30 min avant la fin estimée
+  taskApproachingMinutes: 30, // 30 min avant la fin estimÃ©e
   suspendedTooLongMinutes: 60, // 1 heure suspendue
-  noTaskCreatedAfterShiftStart: 60, // 1 heure après début shift
+  noTaskCreatedAfterShiftStart: 60, // 1 heure aprÃ¨s dÃ©but shift
   tooManyPendingEndShift: 60 // 1 heure avant fin shift
 };
 
@@ -560,32 +576,32 @@ const ACTIVITY_TYPES: Record<string, Array<{ value: string; label: string }>> = 
   'Monitoring': [
     { value: 'CLIENT_DOWN', label: 'Client Down' },
     { value: 'INTERFACE_UNSTABLE', label: 'Interface instable' },
-    { value: 'RECURRENT_PROBLEM', label: 'Problème récurrent' },
-    { value: 'EQUIPMENT_ALERT', label: 'Alerte équipement' }
+    { value: 'RECURRENT_PROBLEM', label: 'ProblÃ¨me rÃ©current' },
+    { value: 'EQUIPMENT_ALERT', label: 'Alerte Ã©quipement' }
   ],
   'Call Center': [
-    { value: 'TICKET_CREATED', label: 'Ticket créé' },
+    { value: 'TICKET_CREATED', label: 'Ticket crÃ©Ã©' },
     { value: 'CLIENT_CALL', label: 'Appel client' },
     { value: 'ESCALATION', label: 'Escalade' },
     { value: 'INCIDENT_FOLLOWUP', label: 'Suivi incident' }
   ],
   'Reporting 1': [
-    { value: 'GRAPH_SENT', label: 'Graphe envoyé' },
-    { value: 'ALERT_PUBLISHED', label: 'Alerte publiée' },
-    { value: 'HANDOVER_WRITTEN', label: 'Handover rédigé' }
+    { value: 'GRAPH_SENT', label: 'Graphe envoyÃ©' },
+    { value: 'ALERT_PUBLISHED', label: 'Alerte publiÃ©e' },
+    { value: 'HANDOVER_WRITTEN', label: 'Handover rÃ©digÃ©' }
   ],
   'Reporting 2': [
-    { value: 'REPORT_GENERATED', label: 'Rapport généré' },
-    { value: 'TICKET_UPDATED', label: 'Ticket mis à jour' },
-    { value: 'TICKET_CLOSED', label: 'Ticket clôturé' },
-    { value: 'RFO_CREATED', label: 'RFO créé' }
+    { value: 'REPORT_GENERATED', label: 'Rapport gÃ©nÃ©rÃ©' },
+    { value: 'TICKET_UPDATED', label: 'Ticket mis Ã  jour' },
+    { value: 'TICKET_CLOSED', label: 'Ticket clÃ´turÃ©' },
+    { value: 'RFO_CREATED', label: 'RFO crÃ©Ã©' }
   ]
 };
 
 const STATUS_COLORS: Record<TaskStatus, { bg: string; text: string }> = {
   pending: { bg: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400', text: 'En attente' },
   in_progress: { bg: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400', text: 'En cours' },
-  completed: { bg: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400', text: 'Terminé' },
+  completed: { bg: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400', text: 'TerminÃ©' },
   on_hold: { bg: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400', text: 'Suspendu' }
 };
 
@@ -664,13 +680,13 @@ const DEMO_USERS: Record<string, UserProfile> = {
     createdAt: new Date(),
     updatedAt: new Date()
   },
-  'lotti@siliconeconnect.com': { 
-    id: 'agent-c3', 
-    email: 'lotti@siliconeconnect.com', 
-    name: 'Lotti', 
-    firstName: 'Lotti',
+  'audrey@siliconeconnect.com': { 
+    id: 'agent-c1', 
+    email: 'audrey@siliconeconnect.com', 
+    name: 'Audrey', 
+    firstName: 'Audrey',
     lastName: '',
-    username: 'Lotti',
+    username: 'Audrey',
     passwordHash: '@Lotty*SC2026',
     role: 'TECHNICIEN_NO', 
     shiftId: 'shift-c', 
@@ -684,13 +700,13 @@ const DEMO_USERS: Record<string, UserProfile> = {
     createdAt: new Date(),
     updatedAt: new Date()
   },
-  'lapreuve@siliconeconnect.com': { 
-    id: 'agent-c2', 
-    email: 'lapreuve@siliconeconnect.com', 
-    name: 'Lapreuve', 
-    firstName: 'Lapreuve',
+  'kevine@siliconeconnect.com': { 
+    id: 'agent-c4', 
+    email: 'kevine@siliconeconnect.com', 
+    name: 'Kevine', 
+    firstName: 'Kevine',
     lastName: '',
-    username: 'Lapreuve',
+    username: 'Kevine',
     passwordHash: 'SC2026@LapNOC!',
     role: 'TECHNICIEN_NO', 
     shiftId: 'shift-c', 
@@ -724,13 +740,13 @@ const DEMO_USERS: Record<string, UserProfile> = {
     createdAt: new Date(),
     updatedAt: new Date()
   },
-  'jose@siliconeconnect.com': { 
-    id: 'agent-a4', 
-    email: 'jose@siliconeconnect.com', 
-    name: 'José', 
-    firstName: 'José',
+  'luca@siliconeconnect.com': { 
+    id: 'agent-a3', 
+    email: 'luca@siliconeconnect.com', 
+    name: 'Luca', 
+    firstName: 'Luca',
     lastName: '',
-    username: 'José',
+    username: 'Luca',
     passwordHash: 'J0se!2026_SC',
     role: 'TECHNICIEN_NO', 
     shiftId: 'shift-a', 
@@ -804,14 +820,14 @@ const DEMO_USERS: Record<string, UserProfile> = {
     createdAt: new Date(),
     updatedAt: new Date()
   },
-  'marly@siliconeconnect.com': { 
-    id: 'agent-b3', 
-    email: 'marly@siliconeconnect.com', 
-    name: 'Marly', 
-    firstName: 'Marly',
+  'furys@siliconeconnect.com': { 
+    id: 'agent-b4', 
+    email: 'furys@siliconeconnect.com', 
+    name: 'Furys', 
+    firstName: 'Furys',
     lastName: '',
-    username: 'Marly',
-    passwordHash: 'Marly_SC2026!',
+    username: 'Furys',
+    passwordHash: 'Furys_SC2026!',
     role: 'TECHNICIEN_NO', 
     shiftId: 'shift-b', 
     shift: { id: 'shift-b', name: 'B', color: 'yellow', colorCode: '#EAB308' }, 
@@ -824,14 +840,14 @@ const DEMO_USERS: Record<string, UserProfile> = {
     createdAt: new Date(),
     updatedAt: new Date()
   },
-  'sahra@siliconeconnect.com': { 
-    id: 'agent-b1', 
-    email: 'sahra@siliconeconnect.com', 
-    name: 'Sahra', 
-    firstName: 'Sahra',
+  'wivine@siliconeconnect.com': { 
+    id: 'agent-b2', 
+    email: 'wivine@siliconeconnect.com', 
+    name: 'Wivine MITSOMOY', 
+    firstName: 'Wivine MITSOMOY',
     lastName: '',
-    username: 'Sahra',
-    passwordHash: 'Sahra2026*SC',
+    username: 'Wivine MITSOMOY',
+    passwordHash: 'Wivine2026*SC',
     role: 'TECHNICIEN_NO', 
     shiftId: 'shift-b', 
     shift: { id: 'shift-b', name: 'B', color: 'yellow', colorCode: '#EAB308' }, 
@@ -844,13 +860,13 @@ const DEMO_USERS: Record<string, UserProfile> = {
     createdAt: new Date(),
     updatedAt: new Date()
   },
-  'severin@siliconeconnect.com': { 
+  'wivine@siliconeconnect.com': { 
     id: 'agent-b2', 
-    email: 'severin@siliconeconnect.com', 
-    name: 'Severin', 
-    firstName: 'Severin',
-    lastName: '',
-    username: 'Severin',
+    email: 'wivine@siliconeconnect.com', 
+    name: 'Wivine MITSOMOY', 
+    firstName: 'Wivine',
+    lastName: 'MITSOMOY',
+    username: 'Wivine',
     passwordHash: 'Sev2026_SC@rin',
     role: 'TECHNICIEN_NO', 
     shiftId: 'shift-b', 
@@ -884,7 +900,7 @@ const DEMO_USERS: Record<string, UserProfile> = {
 };
 
 // ============================================
-// FONCTIONS DE SÉCURITÉ
+// FONCTIONS DE SÃ‰CURITÃ‰
 // ============================================
 
 // Validation du mot de passe
@@ -907,7 +923,7 @@ function validatePassword(password: string): PasswordValidation {
   };
 }
 
-// Hashage simple (pour localStorage - en production utiliser bcrypt côté serveur)
+// Hashage simple (pour localStorage - en production utiliser bcrypt cÃ´tÃ© serveur)
 function hashPassword(password: string): string {
   let hash = 0;
   for (let i = 0; i < password.length; i++) {
@@ -918,22 +934,22 @@ function hashPassword(password: string): string {
   return `hash_${Math.abs(hash)}_${password.length}_${btoa(password.slice(0, 3))}`;
 }
 
-// Vérification du mot de passe
+// VÃ©rification du mot de passe
 function verifyPassword(password: string, hash: string): boolean {
   return hashPassword(password) === hash || password === hash; // Support anciens mots de passe en clair
 }
 
-// Génération d'ID unique
+// GÃ©nÃ©ration d'ID unique
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 }
 
-// Vérification si l'utilisateur est Super Admin
+// VÃ©rification si l'utilisateur est Super Admin
 function isSuperAdmin(user: UserProfile | null): boolean {
   return user?.role === 'SUPER_ADMIN';
 }
 
-// Vérification des permissions
+// VÃ©rification des permissions
 function hasPermission(user: UserProfile | null, permission: string): boolean {
   if (!user) return false;
   if (user.role === 'SUPER_ADMIN') return true;
@@ -950,17 +966,17 @@ function hasPermission(user: UserProfile | null, permission: string): boolean {
   return permissions[user.role]?.includes(permission) || false;
 }
 
-// Configuration des rôles
+// Configuration des rÃ´les
 const ROLE_CONFIG: Record<UserRole, { label: string; color: string; description: string }> = {
-  'SUPER_ADMIN': { label: 'Super Admin', color: 'bg-red-100 text-red-800', description: 'Accès complet à toutes les fonctionnalités' },
-  'ADMIN': { label: 'Administrateur', color: 'bg-orange-100 text-orange-800', description: 'Gestion des utilisateurs et paramètres' },
+  'SUPER_ADMIN': { label: 'Super Admin', color: 'bg-red-100 text-red-800', description: 'AccÃ¨s complet Ã  toutes les fonctionnalitÃ©s' },
+  'ADMIN': { label: 'Administrateur', color: 'bg-orange-100 text-orange-800', description: 'Gestion des utilisateurs et paramÃ¨tres' },
   'RESPONSABLE': { label: 'Responsable', color: 'bg-purple-100 text-purple-800', description: 'Supervision et rapports' },
-  'TECHNICIEN': { label: 'Technicien', color: 'bg-blue-100 text-blue-800', description: 'Opérations techniques' },
+  'TECHNICIEN': { label: 'Technicien', color: 'bg-blue-100 text-blue-800', description: 'OpÃ©rations techniques' },
   'TECHNICIEN_NO': { label: 'Technicien NOC', color: 'bg-green-100 text-green-800', description: 'Agent NOC - Shifts et monitoring' },
-  'USER': { label: 'Utilisateur', color: 'bg-gray-100 text-gray-800', description: 'Accès standard' }
+  'USER': { label: 'Utilisateur', color: 'bg-gray-100 text-gray-800', description: 'AccÃ¨s standard' }
 };
 
-// Configuration des responsabilités NOC
+// Configuration des responsabilitÃ©s NOC
 const RESPONSIBILITY_CONFIG: Record<ResponsibilityType, { label: string; icon: typeof Phone; color: string }> = {
   'CALL_CENTER': { label: 'Call Center', icon: Phone, color: 'text-blue-600' },
   'MONITORING': { label: 'Monitoring', icon: Activity, color: 'text-green-600' },
@@ -969,10 +985,10 @@ const RESPONSIBILITY_CONFIG: Record<ResponsibilityType, { label: string; icon: t
 };
 
 // ============================================
-// FONCTIONS UTILITAIRES TÂCHES NOC
+// FONCTIONS UTILITAIRES TÃ‚CHES NOC
 // ============================================
 
-// Créer une nouvelle tâche
+// CrÃ©er une nouvelle tÃ¢che
 function createNewTask(
   userId: string,
   userName: string,
@@ -988,7 +1004,7 @@ function createNewTask(
     id: generateId(),
     userId,
     userName,
-    title: taskData.title || 'Nouvelle tâche',
+    title: taskData.title || 'Nouvelle tÃ¢che',
     description: taskData.description || '',
     status: 'pending',
     category: taskData.category || 'other',
@@ -1015,30 +1031,30 @@ function createNewTask(
   };
 }
 
-// Calculer si une tâche est en retard
+// Calculer si une tÃ¢che est en retard
 function isTaskOverdue(task: Task): boolean {
   if (task.status === 'completed' || task.status === 'cancelled') return false;
   return new Date() > task.estimatedEndTime;
 }
 
-// Calculer la durée réelle d'une tâche
+// Calculer la durÃ©e rÃ©elle d'une tÃ¢che
 function calculateActualDuration(task: Task): number | undefined {
   if (!task.completedAt || !task.startTime) return undefined;
   return Math.round((task.completedAt.getTime() - task.startTime.getTime()) / 60000);
 }
 
-// Générer une alerte pour une tâche
+// GÃ©nÃ©rer une alerte pour une tÃ¢che
 function generateTaskAlert(
   task: Task,
   triggerType: TaskAlert['triggeredBy']
 ): TaskAlert {
   const messages: Record<TaskAlert['triggeredBy'], string> = {
-    time_limit: `La tâche "${task.title}" approche de sa limite de temps`,
-    overdue: `La tâche "${task.title}" a dépassé son temps estimé`,
-    critical_not_started: `La tâche critique "${task.title}" n'a pas encore commencé`,
-    suspended_too_long: `La tâche "${task.title}" est suspendue depuis trop longtemps`,
-    no_task_created: `Aucune tâche créée depuis le début du shift`,
-    too_many_pending: `Trop de tâches en attente avant la fin du shift`
+    time_limit: `La tÃ¢che "${task.title}" approche de sa limite de temps`,
+    overdue: `La tÃ¢che "${task.title}" a dÃ©passÃ© son temps estimÃ©`,
+    critical_not_started: `La tÃ¢che critique "${task.title}" n'a pas encore commencÃ©`,
+    suspended_too_long: `La tÃ¢che "${task.title}" est suspendue depuis trop longtemps`,
+    no_task_created: `Aucune tÃ¢che crÃ©Ã©e depuis le dÃ©but du shift`,
+    too_many_pending: `Trop de tÃ¢ches en attente avant la fin du shift`
   };
   
   const types: Record<TaskAlert['triggeredBy'], AlertType> = {
@@ -1088,7 +1104,7 @@ function calculateAgentPerformance(
     ? Math.round(((completed.length - late.length) / completed.length) * 100)
     : 0;
   
-  // Score de fiabilité basé sur plusieurs facteurs
+  // Score de fiabilitÃ© basÃ© sur plusieurs facteurs
   const reliabilityScore = Math.max(0, Math.min(100,
     productivityRate * 0.4 +
     onTimeRate * 0.3 +
@@ -1119,7 +1135,7 @@ function calculateAgentPerformance(
   };
 }
 
-// Vérifier si le temps d'inactivité dépasse le seuil
+// VÃ©rifier si le temps d'inactivitÃ© dÃ©passe le seuil
 function checkInactivity(
   lastActivityTime: Date,
   thresholdMinutes: number = ALERT_THRESHOLDS.inactivityMinutes
@@ -1134,7 +1150,7 @@ function checkInactivity(
   };
 }
 
-// Trier les tâches par priorité
+// Trier les tÃ¢ches par prioritÃ©
 function sortTasksByPriority(taskList: Task[]): Task[] {
   const priorityOrder: Record<TaskPriority, number> = {
     critical: 0,
@@ -1156,12 +1172,12 @@ function sortTasksByPriority(taskList: Task[]): Task[] {
     if (statusOrder[a.status] !== statusOrder[b.status]) {
       return statusOrder[a.status] - statusOrder[b.status];
     }
-    // Ensuite par priorité
+    // Ensuite par prioritÃ©
     return priorityOrder[a.priority] - priorityOrder[b.priority];
   });
 }
 
-// Formater la durée en heures et minutes
+// Formater la durÃ©e en heures et minutes
 function formatDuration(minutes: number): string {
   if (minutes < 60) return `${minutes}min`;
   const hours = Math.floor(minutes / 60);
@@ -1230,33 +1246,18 @@ function getScheduleFromPosition(cyclePosition: number, cycleNumber: number): {
 function getIndividualRestAgent(shiftName: string, targetDate: Date): { agentIndex: number; agentName: string } | null {
   const schedule = getShiftScheduleForDate(shiftName, targetDate);
   const shiftData = SHIFTS_DATA[shiftName];
+  const dateKey = format(targetDate, 'yyyy-MM-dd');
   
-  if (!shiftData || schedule.isCollectiveRest || schedule.dayNumber < 3) {
+  if (!shiftData || schedule.isCollectiveRest || schedule.dayType !== 'NIGHT_SHIFT') {
     return null;
   }
   
-  const members = shiftData.members;
-  const msPerDay = 1000 * 60 * 60 * 24;
-  const startDate = SHIFT_CYCLE_START[shiftName];
-  
-  if (!startDate) return null;
-  
-  const daysDiff = Math.floor((targetDate.getTime() - startDate.getTime()) / msPerDay);
-  const cycleNumber = Math.floor(daysDiff / CYCLE_TOTAL_DAYS) + 1;
-  const restPosition = schedule.dayNumber - 3;
-  
-  const rotationMatrix: Record<number, number[]> = {
-    1: [-1, 0, 2, 1],
-    2: [1, 3, 0, 2],
-    3: [2, 1, 3, 0],
-    4: [0, 2, 1, 3],
-    5: [3, 0, 2, 1],
-  };
-  
-  if (cycleNumber === 1 && restPosition === 0) return null;
-  
-  const effectiveCycle = ((cycleNumber - 1) % 5) + 1;
-  const agentIndex = rotationMatrix[effectiveCycle]?.[restPosition] ?? -1;
+  const overrideMembers = SHIFT_INDIVIDUAL_REST_MEMBER_OVERRIDES[shiftName]?.[dateKey];
+  const members = overrideMembers ?? SHIFT_INDIVIDUAL_REST_MEMBERS[shiftName] ?? shiftData.members.slice(0, 3);
+  const cycleAnchor = SHIFT_INDIVIDUAL_REST_BASE_CYCLE[shiftName] ?? 1;
+  const cycleOffset = ((schedule.cycleNumber - cycleAnchor) % members.length + members.length) % members.length;
+  const nightPosition = schedule.dayNumber - 4;
+  const agentIndex = (nightPosition + cycleOffset) % members.length;
   
   if (agentIndex === -1 || agentIndex >= members.length) return null;
   
@@ -1312,7 +1313,7 @@ function getAgentRestInfo(agentName: string, shiftName: string, targetDate: Date
 // ============================================
 
 export default function NOCActivityApp() {
-  // États principaux
+  // Ã‰tats principaux
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentTab, setCurrentTab] = useState('dashboard');
@@ -1331,20 +1332,20 @@ export default function NOCActivityApp() {
   const [activityDialogOpen, setActivityDialogOpen] = useState(false);
   const [newActivity, setNewActivity] = useState({ type: '', category: 'Monitoring', description: '' });
   
-  // États pour la gestion des utilisateurs et sécurité
+  // Ã‰tats pour la gestion des utilisateurs et sÃ©curitÃ©
   const [password, setPassword] = useState('');
   const [loginIdentifier, setLoginIdentifier] = useState(''); // Email ou Pseudo
-  const [showPassword, setShowPassword] = useState(false); // Toggle visibilité mot de passe
+  const [showPassword, setShowPassword] = useState(false); // Toggle visibilitÃ© mot de passe
   const [showPasswordField, setShowPasswordField] = useState(false);
   const [selectedUserForLogin, setSelectedUserForLogin] = useState<UserProfile | null>(null);
 
-  // États pour le suivi des tentatives de connexion et verrouillage progressif
+  // Ã‰tats pour le suivi des tentatives de connexion et verrouillage progressif
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [isLocked, setIsLocked] = useState(false);
   const [lockoutSeconds, setLockoutSeconds] = useState(0);
   const [showForgotMessage, setShowForgotMessage] = useState(false);
 
-  // États pour les champs focus (labels flottants)
+  // Ã‰tats pour les champs focus (labels flottants)
   const [pseudoFocused, setPseudoFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
   
@@ -1357,7 +1358,7 @@ export default function NOCActivityApp() {
   const [createUserDialogOpen, setCreateUserDialogOpen] = useState(false);
   const [auditLogDialogOpen, setAuditLogDialogOpen] = useState(false);
   
-  // États pour l'édition
+  // Ã‰tats pour l'Ã©dition
   const [editFirstName, setEditFirstName] = useState('');
   const [editLastName, setEditLastName] = useState('');
   const [editEmail, setEditEmail] = useState('');
@@ -1368,7 +1369,7 @@ export default function NOCActivityApp() {
   const [editResponsibility, setEditResponsibility] = useState<ResponsibilityType | ''>('');
   const [editRole, setEditRole] = useState<UserRole>('USER');
   
-  // États pour la gestion des utilisateurs (Super Admin)
+  // Ã‰tats pour la gestion des utilisateurs (Super Admin)
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
@@ -1376,10 +1377,10 @@ export default function NOCActivityApp() {
   const [roleFilter, setRoleFilter] = useState<string>('all');
   
   // ============================================
-  // États pour le module Tâches NOC
+  // Ã‰tats pour le module TÃ¢ches NOC
   // ============================================
   
-  // État des tâches avancées
+  // Ã‰tat des tÃ¢ches avancÃ©es
   const [nocTasks, setNocTasks] = useState<Task[]>([]);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [taskDetailOpen, setTaskDetailOpen] = useState(false);
@@ -1388,7 +1389,7 @@ export default function NOCActivityApp() {
   const [taskDateFilter, setTaskDateFilter] = useState<Date>(new Date());
   const [ganttView, setGanttView] = useState<'day' | 'week'>('day');
   
-  // Nouvelle tâche
+  // Nouvelle tÃ¢che
   const [newTask, setNewTask] = useState({
     title: '',
     description: '',
@@ -1409,7 +1410,7 @@ export default function NOCActivityApp() {
   const [alertSoundEnabled, setAlertSoundEnabled] = useState(true);
   const [dismissedAlerts, setDismissedAlerts] = useState<Set<string>>(new Set());
   
-  // Inactivité
+  // InactivitÃ©
   const [inactivityEvents, setInactivityEvents] = useState<InactivityEvent[]>([]);
   const [lastUserActivity, setLastUserActivity] = useState<Date>(new Date());
   const [isUserInactive, setIsUserInactive] = useState(false);
@@ -1427,7 +1428,7 @@ export default function NOCActivityApp() {
   const [selectedShiftFilter, setSelectedShiftFilter] = useState<string>('all');
   
   // ============================================
-  // États pour la Messagerie Interne (Gmail-like)
+  // Ã‰tats pour la Messagerie Interne (Gmail-like)
   // ============================================
   
   // Messages
@@ -1458,7 +1459,7 @@ export default function NOCActivityApp() {
   const [showBcc, setShowBcc] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState<'to' | 'cc' | 'bcc' | null>(null);
   
-  // Libellés
+  // LibellÃ©s
   const [emailLabels, setEmailLabels] = useState<EmailLabel[]>([]);
   const [labelDialogOpen, setLabelDialogOpen] = useState(false);
   const [newLabelName, setNewLabelName] = useState('');
@@ -1550,7 +1551,7 @@ export default function NOCActivityApp() {
   const emailsPerPage = 25;
 
   // ============================================
-  // États pour la Messagerie Instantanée (WhatsApp-Style)
+  // Ã‰tats pour la Messagerie InstantanÃ©e (WhatsApp-Style)
   // ============================================
   
   // Conversations
@@ -1758,7 +1759,7 @@ export default function NOCActivityApp() {
           void Promise.resolve().then(() => {
             setUser(parsed);
             setIsAuthenticated(true);
-            toast.success(`Bienvenue, ${parsed.name} !`, { description: 'Connexion réussie' });
+            toast.success(`Bienvenue, ${parsed.name} !`, { description: 'Connexion rÃ©ussie' });
           });
         } catch { /* ignore */ }
       }
@@ -1769,19 +1770,19 @@ export default function NOCActivityApp() {
     if (isAuthenticated && tasks.length === 0) {
       const timer = setTimeout(() => {
         setTasks([
-          { id: 't1', userId: 'agent-a1', userName: 'Alaine', title: 'Vérifier alarmes Zabbix', description: 'Monitoring alerts', status: 'in_progress', category: 'Monitoring', createdAt: new Date(), updatedAt: new Date(), scheduledTime: '08:00' },
+          { id: 't1', userId: 'agent-a1', userName: 'Alaine', title: 'VÃ©rifier alarmes Zabbix', description: 'Monitoring alerts', status: 'in_progress', category: 'Monitoring', createdAt: new Date(), updatedAt: new Date(), scheduledTime: '08:00' },
           { id: 't2', userId: 'agent-a1', userName: 'Alaine', title: 'Envoyer graphes 09h', description: 'Graphes trafic', status: 'completed', category: 'Reporting 1', createdAt: new Date(), updatedAt: new Date(), scheduledTime: '09:00', completedAt: new Date() },
-          { id: 't3', userId: 'agent-c2', userName: 'Lapreuve', title: 'Appel client ACME', description: 'Suivi incident', status: 'pending', category: 'Call Center', createdAt: new Date(), updatedAt: new Date(), scheduledTime: '10:30' },
+          { id: 't3', userId: 'agent-c4', userName: 'Kevine', title: 'Appel client ACME', description: 'Suivi incident', status: 'pending', category: 'Call Center', createdAt: new Date(), updatedAt: new Date(), scheduledTime: '10:30' },
         ]);
         setActivities([
-          { id: 'a1', userId: 'agent-c2', userName: 'Lapreuve', type: 'CLIENT_DOWN', category: 'Monitoring', description: 'Client ACME - Connexion perdue', createdAt: new Date(Date.now() - 3600000) },
-          { id: 'a2', userId: 'agent-b1', userName: 'Sahra', type: 'TICKET_CREATED', category: 'Call Center', description: 'Ticket #1234 créé', createdAt: new Date(Date.now() - 7200000) },
-          { id: 'a3', userId: 'agent-c1', userName: 'Audrey', type: 'GRAPH_SENT', category: 'Reporting 1', description: 'Graphes 09h envoyés', createdAt: new Date(Date.now() - 10800000) },
+          { id: 'a1', userId: 'agent-c4', userName: 'Kevine', type: 'CLIENT_DOWN', category: 'Monitoring', description: 'Client ACME - Connexion perdue', createdAt: new Date(Date.now() - 3600000) },
+          { id: 'a2', userId: 'agent-b2', userName: 'Wivine MITSOMOY', type: 'TICKET_CREATED', category: 'Call Center', description: 'Ticket #1234 crÃ©Ã©', createdAt: new Date(Date.now() - 7200000) },
+          { id: 'a3', userId: 'agent-c1', userName: 'Audrey', type: 'GRAPH_SENT', category: 'Reporting 1', description: 'Graphes 09h envoyÃ©s', createdAt: new Date(Date.now() - 10800000) },
         ]);
         setNotifications([
-          { id: '1', message: 'Incident critique détecté', type: 'warning', read: false, createdAt: new Date() },
-          { id: '2', message: 'Nouveau ticket assigné', type: 'info', read: false, createdAt: new Date() },
-          { id: '3', message: 'Handover validé', type: 'success', read: true, createdAt: new Date() },
+          { id: '1', message: 'Incident critique dÃ©tectÃ©', type: 'warning', read: false, createdAt: new Date() },
+          { id: '2', message: 'Nouveau ticket assignÃ©', type: 'info', read: false, createdAt: new Date() },
+          { id: '3', message: 'Handover validÃ©', type: 'success', read: true, createdAt: new Date() },
         ]);
       }, 0);
       return () => clearTimeout(timer);
@@ -1800,7 +1801,7 @@ export default function NOCActivityApp() {
           }
         } catch { /* ignore */ }
       } else {
-        // Initialiser avec les utilisateurs de démo
+        // Initialiser avec les utilisateurs de dÃ©mo
         const initialUsers = Object.values(DEMO_USERS);
         setAllUsers(initialUsers);
         localStorage.setItem('noc_all_users', JSON.stringify(initialUsers));
@@ -1817,16 +1818,16 @@ export default function NOCActivityApp() {
       }
     };
     
-    // Utiliser un timeout pour éviter le setState synchrone
+    // Utiliser un timeout pour Ã©viter le setState synchrone
     const timer = setTimeout(loadData, 0);
     return () => clearTimeout(timer);
   }, []);
 
-  // Initialiser les conversations de démo pour la messagerie WhatsApp
+  // Initialiser les conversations de dÃ©mo pour la messagerie WhatsApp
   useEffect(() => {
     if (isAuthenticated && user && conversations.length === 0) {
       const initDemoConversations = () => {
-        // Créer des conversations de démo avec les autres utilisateurs
+        // CrÃ©er des conversations de dÃ©mo avec les autres utilisateurs
         const otherUsers = Object.values(DEMO_USERS).filter(u => u.id !== user.id);
         const demoConversations: Conversation[] = otherUsers.slice(0, 5).map((u, index) => ({
           id: `conv-${index}`,
@@ -1844,12 +1845,12 @@ export default function NOCActivityApp() {
           updatedAt: new Date()
         }));
 
-        // Ajouter un groupe de démo
+        // Ajouter un groupe de dÃ©mo
         const shiftGroup: Conversation = {
           id: 'group-shift',
           type: 'group',
-          name: user.shift ? `Shift ${user.shift.name} - Équipe` : 'Équipe NOC',
-          description: 'Groupe de discussion de l\'équipe',
+          name: user.shift ? `Shift ${user.shift.name} - Ã‰quipe` : 'Ã‰quipe NOC',
+          description: 'Groupe de discussion de l\'Ã©quipe',
           participants: [
             { id: user.id, name: user.name, role: 'admin' as const, joinedAt: new Date() },
             ...otherUsers.slice(0, 3).map(u => ({ id: u.id, name: u.name, role: 'member' as const, joinedAt: new Date() }))
@@ -1863,7 +1864,7 @@ export default function NOCActivityApp() {
           updatedAt: new Date()
         };
 
-        // Contact spécial "Annonces" - géré par superviseur/admin
+        // Contact spÃ©cial "Annonces" - gÃ©rÃ© par superviseur/admin
         const annoncesConversation: Conversation = {
           id: 'conv-annonces',
           type: 'individual' as const,
@@ -1882,7 +1883,7 @@ export default function NOCActivityApp() {
 
         setConversations([annoncesConversation, shiftGroup, ...demoConversations]);
 
-        // Ajouter quelques messages de démo
+        // Ajouter quelques messages de dÃ©mo
         const demoMessages: ChatMessage[] = [
           {
             id: 'msg-annonce-1',
@@ -1909,7 +1910,7 @@ export default function NOCActivityApp() {
             senderId: otherUsers[0]?.id || '',
             senderName: otherUsers[0]?.name || 'User',
             type: 'text',
-            content: 'Bonjour à tous ! Prêts pour le shift ?',
+            content: 'Bonjour Ã  tous ! PrÃªts pour le shift ?',
             status: 'read',
             isEdited: false,
             isDeleted: false,
@@ -1927,14 +1928,14 @@ export default function NOCActivityApp() {
             senderId: user.id,
             senderName: user.name,
             type: 'text',
-            content: 'Oui, je suis prêt. On commence par le monitoring.',
+            content: 'Oui, je suis prÃªt. On commence par le monitoring.',
             status: 'read',
             isEdited: false,
             isDeleted: false,
             deletedForEveryone: false,
             isPinned: false,
             isArchived: false,
-            reactions: [{ userId: otherUsers[1]?.id || '', userName: otherUsers[1]?.name || '', emoji: '👍' }],
+            reactions: [{ userId: otherUsers[1]?.id || '', userName: otherUsers[1]?.name || '', emoji: 'ðŸ‘' }],
             readBy: [],
             createdAt: new Date(Date.now() - 3000000),
             updatedAt: new Date(Date.now() - 3000000)
@@ -1942,7 +1943,7 @@ export default function NOCActivityApp() {
         ];
         setChatMessages(demoMessages);
 
-        // Initialiser la présence des utilisateurs
+        // Initialiser la prÃ©sence des utilisateurs
         const presence: Record<string, PresenceStatus> = {};
         otherUsers.forEach((u, i) => {
           presence[u.id] = i < 3 ? 'online' : 'offline';
@@ -1956,12 +1957,12 @@ export default function NOCActivityApp() {
     }
   }, [isAuthenticated, user, conversations.length]);
 
-  // Mettre à jour l'activité sur les actions utilisateur
+  // Mettre Ã  jour l'activitÃ© sur les actions utilisateur
   const updateActivity = useCallback(() => {
     setLastActivity(new Date());
   }, []);
 
-  // Ajouter une entrée dans le journal d'audit
+  // Ajouter une entrÃ©e dans le journal d'audit
   const addAuditLog = useCallback((action: string, details: string, status: 'SUCCESS' | 'FAILURE' = 'SUCCESS') => {
     const log: AuditLogEntry = {
       id: generateId(),
@@ -1974,7 +1975,7 @@ export default function NOCActivityApp() {
       createdAt: new Date()
     };
     setAuditLogs(prev => {
-      const updated = [log, ...prev].slice(0, 500); // Garder les 500 dernières entrées
+      const updated = [log, ...prev].slice(0, 500); // Garder les 500 derniÃ¨res entrÃ©es
       localStorage.setItem('noc_audit_logs', JSON.stringify(updated));
       return updated;
     });
@@ -1983,19 +1984,19 @@ export default function NOCActivityApp() {
   // Fonction pour calculer le temps de verrouillage progressif
   const calculateLockoutTime = (attempts: number): number => {
     if (attempts < 3) return 0;
-    if (attempts === 3) return 30; // 30 secondes après 3 tentatives
+    if (attempts === 3) return 30; // 30 secondes aprÃ¨s 3 tentatives
     if (attempts === 4) return 30; // Encore 30 secondes
-    if (attempts >= 5) return 60; // 1 minute après 5 tentatives
-    return Math.min(60 + (attempts - 5) * 30, 300); // +30s par tentative supplémentaire, max 5 min
+    if (attempts >= 5) return 60; // 1 minute aprÃ¨s 5 tentatives
+    return Math.min(60 + (attempts - 5) * 30, 300); // +30s par tentative supplÃ©mentaire, max 5 min
   };
 
   // Handler pour la connexion avec suivi des tentatives
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Vérifier si le compte est verrouillé
+    // VÃ©rifier si le compte est verrouillÃ©
     if (isLocked) {
-      toast.error('Compte verrouillé', { description: `Veuillez attendre ${lockoutSeconds} secondes` });
+      toast.error('Compte verrouillÃ©', { description: `Veuillez attendre ${lockoutSeconds} secondes` });
       return;
     }
 
@@ -2004,17 +2005,17 @@ export default function NOCActivityApp() {
 
     await new Promise(resolve => setTimeout(resolve, 500));
 
-    // Chercher l'utilisateur par pseudo (insensible à la casse)
+    // Chercher l'utilisateur par pseudo (insensible Ã  la casse)
     const foundUser = Object.values(DEMO_USERS).find(
       u => u.username?.toLowerCase() === loginIdentifier.toLowerCase()
     );
 
-    // Fonction pour gérer l'échec de connexion
+    // Fonction pour gÃ©rer l'Ã©chec de connexion
     const handleFailedLogin = () => {
       const newAttempts = failedAttempts + 1;
       setFailedAttempts(newAttempts);
 
-      // Afficher le message d'oubli après 3 tentatives
+      // Afficher le message d'oubli aprÃ¨s 3 tentatives
       if (newAttempts >= 3) {
         setShowForgotMessage(true);
       }
@@ -2025,7 +2026,7 @@ export default function NOCActivityApp() {
         setIsLocked(true);
         setLockoutSeconds(lockoutTime);
         toast.error('Trop de tentatives', {
-          description: `Veuillez attendre ${lockoutTime} secondes avant de réessayer`
+          description: `Veuillez attendre ${lockoutTime} secondes avant de rÃ©essayer`
         });
       }
 
@@ -2039,21 +2040,21 @@ export default function NOCActivityApp() {
       return;
     }
 
-    // Vérifier si le compte est bloqué
+    // VÃ©rifier si le compte est bloquÃ©
     if (foundUser.isBlocked) {
-      setLoginError('Votre compte a été bloqué. Contactez l\'administrateur.');
+      setLoginError('Votre compte a Ã©tÃ© bloquÃ©. Contactez l\'administrateur.');
       setIsLoading(false);
-      toast.error('Compte bloqué', { description: 'Contactez la direction' });
+      toast.error('Compte bloquÃ©', { description: 'Contactez la direction' });
       return;
     }
 
-    // Vérifier le mot de passe
+    // VÃ©rifier le mot de passe
     if (foundUser.passwordHash !== password) {
       handleFailedLogin();
       return;
     }
 
-    // Connexion réussie - réinitialiser les tentatives
+    // Connexion rÃ©ussie - rÃ©initialiser les tentatives
     setFailedAttempts(0);
     setShowForgotMessage(false);
 
@@ -2068,17 +2069,17 @@ export default function NOCActivityApp() {
     localStorage.setItem('noc_user', JSON.stringify(updatedUser));
     setIsLoading(false);
 
-    // Alerte si mot de passe doit être changé
+    // Alerte si mot de passe doit Ãªtre changÃ©
     if (foundUser.mustChangePassword) {
-      toast.warning('Sécurité requise', {
-        description: 'Veuillez modifier votre mot de passe dans Mon profil → Sécuriser mon compte'
+      toast.warning('SÃ©curitÃ© requise', {
+        description: 'Veuillez modifier votre mot de passe dans Mon profil â†’ SÃ©curiser mon compte'
       });
     }
 
-    toast.success(`Bienvenue, ${foundUser.name} !`, { description: 'Connexion réussie' });
+    toast.success(`Bienvenue, ${foundUser.name} !`, { description: 'Connexion rÃ©ussie' });
   };
 
-  // Effect pour le compte à rebours du verrouillage
+  // Effect pour le compte Ã  rebours du verrouillage
   useEffect(() => {
     if (!isLocked || lockoutSeconds <= 0) return;
 
@@ -2099,7 +2100,7 @@ export default function NOCActivityApp() {
     setUser(null);
     setIsAuthenticated(false);
     localStorage.removeItem('noc_user');
-    toast.info('Déconnexion', { description: 'À bientôt !' });
+    toast.info('DÃ©connexion', { description: 'Ã€ bientÃ´t !' });
   };
 
   // Gmail Clone - Helper function to filter messages
@@ -2159,7 +2160,7 @@ export default function NOCActivityApp() {
           cc: [],
           bcc: [],
           subject: 'Bienvenue dans la messagerie interne',
-          body: `Bonjour ${user.name},\n\nBienvenue dans la nouvelle messagerie interne de Silicone Connect ! Cette plateforme vous permet de communiquer efficacement avec vos collègues.\n\nFonctionnalités principales:\n- Envoi et réception de messages\n- Pièces jointes\n- Libellés personnalisés\n- Recherche avancée\n- Mode confidentiel\n\nCordialement,\nL'équipe IT`,
+          body: `Bonjour ${user.name},\n\nBienvenue dans la nouvelle messagerie interne de Silicone Connect ! Cette plateforme vous permet de communiquer efficacement avec vos collÃ¨gues.\n\nFonctionnalitÃ©s principales:\n- Envoi et rÃ©ception de messages\n- PiÃ¨ces jointes\n- LibellÃ©s personnalisÃ©s\n- Recherche avancÃ©e\n- Mode confidentiel\n\nCordialement,\nL'Ã©quipe IT`,
           attachments: [],
           folder: 'inbox',
           status: 'unread',
@@ -2178,15 +2179,15 @@ export default function NOCActivityApp() {
           to: [{ id: user.id, name: user.name, email: user.email }],
           cc: [],
           bcc: [],
-          subject: 'Rappel : Réunion d\'équipe demain à 9h',
-          body: `Bonjour,\n\nJe vous rappelle que nous avons une réunion d'équipe demain matin à 9h00 dans la salle de conférence.\n\nOrdre du jour :\n1. Revue des incidents de la semaine\n2. Planning des vacations\n3. Points divers\n\nMerci de confirmer votre présence.\n\nCordialement,\nTheresia`,
+          subject: 'Rappel : RÃ©union d\'Ã©quipe demain Ã  9h',
+          body: `Bonjour,\n\nJe vous rappelle que nous avons une rÃ©union d'Ã©quipe demain matin Ã  9h00 dans la salle de confÃ©rence.\n\nOrdre du jour :\n1. Revue des incidents de la semaine\n2. Planning des vacations\n3. Points divers\n\nMerci de confirmer votre prÃ©sence.\n\nCordialement,\nTheresia`,
           attachments: [],
           folder: 'inbox',
           status: 'unread',
           priority: 'important',
           isStarred: true,
           isRead: false,
-          labels: ['Réunion'],
+          labels: ['RÃ©union'],
           receivedAt: new Date(Date.now() - 7200000),
           createdAt: new Date(Date.now() - 7200000),
           updatedAt: new Date(Date.now() - 7200000),
@@ -2194,12 +2195,12 @@ export default function NOCActivityApp() {
         },
         {
           id: 'email-3',
-          from: { id: 'monitoring', name: 'Système Monitoring', email: 'monitoring@siliconeconnect.com' },
+          from: { id: 'monitoring', name: 'SystÃ¨me Monitoring', email: 'monitoring@siliconeconnect.com' },
           to: [{ id: user.id, name: user.name, email: user.email }],
           cc: [],
           bcc: [],
           subject: 'Alerte : Client ACME - Interface instable',
-          body: `ALERTE MONITORING\n\nClient: ACME Corporation\nType: Interface Unstable\nSévérité: Moyenne\n\nDescription:\nL'interface vers le client ACME présente des fluctuations de connectivité depuis 2 heures.\n\nStatut: En cours d'investigation\n\nCette alerte a été générée automatiquement par le système de monitoring.`,
+          body: `ALERTE MONITORING\n\nClient: ACME Corporation\nType: Interface Unstable\nSÃ©vÃ©ritÃ©: Moyenne\n\nDescription:\nL'interface vers le client ACME prÃ©sente des fluctuations de connectivitÃ© depuis 2 heures.\n\nStatut: En cours d'investigation\n\nCette alerte a Ã©tÃ© gÃ©nÃ©rÃ©e automatiquement par le systÃ¨me de monitoring.`,
           attachments: [],
           folder: 'inbox',
           status: 'read',
@@ -2216,11 +2217,11 @@ export default function NOCActivityApp() {
         {
           id: 'email-4',
           from: { id: user.id, name: user.name, email: user.email },
-          to: [{ id: 'all', name: 'Équipe NOC', email: 'noc@siliconeconnect.com' }],
+          to: [{ id: 'all', name: 'Ã‰quipe NOC', email: 'noc@siliconeconnect.com' }],
           cc: [],
           bcc: [],
           subject: 'Handover - Fin de shift',
-          body: `Bonjour à tous,\n\nVoici le résumé du shift :\n\nIncidents traités: 3\nTickets créés: 5\nAppels clients: 12\n\nPoints d'attention:\n- Client ACME toujours en surveillance\n- Mise à jour Zabbix prévue ce soir\n\nBonne continuation à la prochaine équipe !`,
+          body: `Bonjour Ã  tous,\n\nVoici le rÃ©sumÃ© du shift :\n\nIncidents traitÃ©s: 3\nTickets crÃ©Ã©s: 5\nAppels clients: 12\n\nPoints d'attention:\n- Client ACME toujours en surveillance\n- Mise Ã  jour Zabbix prÃ©vue ce soir\n\nBonne continuation Ã  la prochaine Ã©quipe !`,
           attachments: [],
           folder: 'sent',
           status: 'read',
@@ -2239,8 +2240,8 @@ export default function NOCActivityApp() {
           to: [{ id: user.id, name: user.name, email: user.email }],
           cc: [{ id: 'audrey', name: 'Audrey', email: 'audrey@siliconeconnect.com' }],
           bcc: [],
-          subject: 'Documentation procédure escalation',
-          body: `Bonjour,\n\nVeuillez trouver ci-joint la documentation mise à jour concernant les procédures d'escalation.\n\nN'hésitez pas à me faire part de vos commentaires.\n\nMerci,\nKevine`,
+          subject: 'Documentation procÃ©dure escalation',
+          body: `Bonjour,\n\nVeuillez trouver ci-joint la documentation mise Ã  jour concernant les procÃ©dures d'escalation.\n\nN'hÃ©sitez pas Ã  me faire part de vos commentaires.\n\nMerci,\nKevine`,
           attachments: [
             {
               id: 'att-1',
@@ -2270,8 +2271,8 @@ export default function NOCActivityApp() {
           to: [{ id: user.id, name: user.name, email: user.email }],
           cc: [],
           bcc: [],
-          subject: 'Demande de congés',
-          body: `Bonjour,\n\nJe souhaite poser des congés du 15 au 20 mars.\n\nMerci de me confirmer si cela est possible.\n\nCordialement,\nLuca`,
+          subject: 'Demande de congÃ©s',
+          body: `Bonjour,\n\nJe souhaite poser des congÃ©s du 15 au 20 mars.\n\nMerci de me confirmer si cela est possible.\n\nCordialement,\nLuca`,
           attachments: [],
           folder: 'inbox',
           status: 'unread',
@@ -2291,14 +2292,14 @@ export default function NOCActivityApp() {
       // Initialize demo labels
       setEmailLabels([
         { id: 'label-1', name: 'Important', color: '#EF4444', userId: user.id, createdAt: new Date() },
-        { id: 'label-2', name: 'Réunion', color: '#3B82F6', userId: user.id, createdAt: new Date() },
+        { id: 'label-2', name: 'RÃ©union', color: '#3B82F6', userId: user.id, createdAt: new Date() },
         { id: 'label-3', name: 'Alerte', color: '#F59E0B', userId: user.id, createdAt: new Date() },
         { id: 'label-4', name: 'Documentation', color: '#22C55E', userId: user.id, createdAt: new Date() }
       ]);
     }
   }, [isAuthenticated, user, messages.length]);
 
-  // Session timeout - déconnexion automatique après 10 minutes d'inactivité
+  // Session timeout - dÃ©connexion automatique aprÃ¨s 10 minutes d'inactivitÃ©
   useEffect(() => {
     if (!isAuthenticated) return;
     
@@ -2307,15 +2308,15 @@ export default function NOCActivityApp() {
       const timeSinceLastActivity = now.getTime() - lastActivity.getTime();
       if (timeSinceLastActivity >= SESSION_TIMEOUT) {
         handleLogout();
-        toast.warning('Session expirée', { description: 'Vous avez été déconnecté pour inactivité' });
+        toast.warning('Session expirÃ©e', { description: 'Vous avez Ã©tÃ© dÃ©connectÃ© pour inactivitÃ©' });
       }
     };
     
-    const interval = setInterval(checkTimeout, 60000); // Vérifier chaque minute
+    const interval = setInterval(checkTimeout, 60000); // VÃ©rifier chaque minute
     return () => clearInterval(interval);
   }, [isAuthenticated, lastActivity]);
 
-  // Recording timer - incrémenter le temps d'enregistrement vocal
+  // Recording timer - incrÃ©menter le temps d'enregistrement vocal
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
     if (isRecording) {
@@ -2328,7 +2329,7 @@ export default function NOCActivityApp() {
     };
   }, [isRecording]);
 
-  // Call timer - incrémenter le temps d'appel (ringing shows countdown, connected shows duration)
+  // Call timer - incrÃ©menter le temps d'appel (ringing shows countdown, connected shows duration)
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
     if (callDialogOpen && activeCall) {
@@ -2364,7 +2365,7 @@ export default function NOCActivityApp() {
       setCallState('connected');
       setCallTimer(0); // Reset timer when connected
       setCallStartTime(new Date());
-      toast.success('Appel connecté');
+      toast.success('Appel connectÃ©');
     }, answerDelay);
 
     // Auto-hangup after 60 seconds if no answer
@@ -2374,7 +2375,7 @@ export default function NOCActivityApp() {
       setCallTimer(0);
       setCallState('ended');
       setCallParticipants([]);
-      toast.info('Pas de réponse', { description: 'L\'appel n\'a pas été répondu après 1 minute' });
+      toast.info('Pas de rÃ©ponse', { description: 'L\'appel n\'a pas Ã©tÃ© rÃ©pondu aprÃ¨s 1 minute' });
     }, 60000);
 
     callTimeoutRef.current = autoHangupTimeout;
@@ -2439,7 +2440,7 @@ export default function NOCActivityApp() {
         localStorage.setItem('noc_user', JSON.stringify(updatedUser));
         setProfilePhotoDialogOpen(false);
         setTempProfilePhoto(null);
-        toast.success('Photo mise à jour', { description: 'Votre photo de profil a été modifiée' });
+        toast.success('Photo mise Ã  jour', { description: 'Votre photo de profil a Ã©tÃ© modifiÃ©e' });
       };
       img.src = tempProfilePhoto;
     }
@@ -2478,7 +2479,7 @@ export default function NOCActivityApp() {
     } else {
       localStorage.removeItem('noc_chat_background');
     }
-    toast.success('Fond d\'écran mis à jour');
+    toast.success('Fond d\'Ã©cran mis Ã  jour');
   };
 
   const addNotification = (message: string, type: NotificationItem['type']) => {
@@ -2528,33 +2529,33 @@ export default function NOCActivityApp() {
     setUser(updatedUser);
     localStorage.setItem('noc_user', JSON.stringify(updatedUser));
     
-    // Mettre à jour dans allUsers
+    // Mettre Ã  jour dans allUsers
     setAllUsers(prev => {
       const updated = prev.map(u => u.id === user.id ? updatedUser : u);
       localStorage.setItem('noc_all_users', JSON.stringify(updated));
       return updated;
     });
     
-    addAuditLog('PROFILE_UPDATE', `Profil modifié: ${updatedUser.name}`);
+    addAuditLog('PROFILE_UPDATE', `Profil modifiÃ©: ${updatedUser.name}`);
     setEditProfileDialogOpen(false);
-    toast.success('Profil mis à jour', { description: 'Vos informations ont été enregistrées' });
+    toast.success('Profil mis Ã  jour', { description: 'Vos informations ont Ã©tÃ© enregistrÃ©es' });
   };
 
-  // Ouvrir le dialog de sécurité
+  // Ouvrir le dialog de sÃ©curitÃ©
   const openSecurityDialog = () => {
     setEditPassword('');
     setConfirmPassword('');
     setSecurityDialogOpen(true);
   };
 
-  // Sauvegarder les paramètres de sécurité
+  // Sauvegarder les paramÃ¨tres de sÃ©curitÃ©
   const handleSaveSecurity = () => {
     if (!user) return;
     
     // Validation du mot de passe
     const validation = validatePassword(editPassword);
     if (!validation.isValid) {
-      toast.error('Mot de passe invalide', { description: 'Le mot de passe doit contenir au moins 8 caractères, une majuscule, un chiffre et un caractère spécial' });
+      toast.error('Mot de passe invalide', { description: 'Le mot de passe doit contenir au moins 8 caractÃ¨res, une majuscule, un chiffre et un caractÃ¨re spÃ©cial' });
       return;
     }
     
@@ -2574,19 +2575,19 @@ export default function NOCActivityApp() {
     setUser(updatedUser);
     localStorage.setItem('noc_user', JSON.stringify(updatedUser));
     
-    // Mettre à jour dans allUsers
+    // Mettre Ã  jour dans allUsers
     setAllUsers(prev => {
       const updated = prev.map(u => u.id === user.id ? updatedUser : u);
       localStorage.setItem('noc_all_users', JSON.stringify(updated));
       return updated;
     });
     
-    addAuditLog('PASSWORD_CHANGE', 'Mot de passe modifié');
+    addAuditLog('PASSWORD_CHANGE', 'Mot de passe modifiÃ©');
     setSecurityDialogOpen(false);
-    toast.success('Sécurité mise à jour', { description: 'Votre mot de passe a été changé avec succès' });
+    toast.success('SÃ©curitÃ© mise Ã  jour', { description: 'Votre mot de passe a Ã©tÃ© changÃ© avec succÃ¨s' });
   };
 
-  // Ouvrir le dialog de définition du shift
+  // Ouvrir le dialog de dÃ©finition du shift
   const openShiftDialog = () => {
     if (user) {
       setEditShift(user.shift?.name || '');
@@ -2622,23 +2623,23 @@ export default function NOCActivityApp() {
       return updated;
     });
     
-    addAuditLog('SHIFT_UPDATE', `Shift modifié: ${editShift || 'Aucun'}, Fonction: ${editResponsibility || 'Aucune'}`);
+    addAuditLog('SHIFT_UPDATE', `Shift modifiÃ©: ${editShift || 'Aucun'}, Fonction: ${editResponsibility || 'Aucune'}`);
     setShiftDialogOpen(false);
-    toast.success('Shift mis à jour', { description: 'Votre shift et fonction ont été enregistrés' });
+    toast.success('Shift mis Ã  jour', { description: 'Votre shift et fonction ont Ã©tÃ© enregistrÃ©s' });
   };
 
-  // Créer un nouvel utilisateur (Super Admin uniquement)
+  // CrÃ©er un nouvel utilisateur (Super Admin uniquement)
   const handleCreateUser = () => {
     if (!isSuperAdmin(user)) return;
     
     if (!editEmail.endsWith('@siliconeconnect.com')) {
-      toast.error('Email invalide', { description: 'L\'email doit être @siliconeconnect.com' });
+      toast.error('Email invalide', { description: 'L\'email doit Ãªtre @siliconeconnect.com' });
       return;
     }
     
     const validation = validatePassword(editPassword);
     if (!validation.isValid) {
-      toast.error('Mot de passe invalide', { description: 'Le mot de passe doit respecter les critères de sécurité' });
+      toast.error('Mot de passe invalide', { description: 'Le mot de passe doit respecter les critÃ¨res de sÃ©curitÃ©' });
       return;
     }
     
@@ -2666,11 +2667,11 @@ export default function NOCActivityApp() {
       return updated;
     });
     
-    addAuditLog('USER_CREATED', `Utilisateur créé: ${newUser.name} (${newUser.role})`);
+    addAuditLog('USER_CREATED', `Utilisateur crÃ©Ã©: ${newUser.name} (${newUser.role})`);
     setCreateUserDialogOpen(false);
-    toast.success('Utilisateur créé', { description: `${newUser.name} a été ajouté avec succès` });
+    toast.success('Utilisateur crÃ©Ã©', { description: `${newUser.name} a Ã©tÃ© ajoutÃ© avec succÃ¨s` });
     
-    // Réinitialiser le formulaire
+    // RÃ©initialiser le formulaire
     setEditFirstName('');
     setEditLastName('');
     setEditEmail('');
@@ -2680,7 +2681,7 @@ export default function NOCActivityApp() {
     setEditRole('USER');
   };
 
-  // Bloquer/Débloquer un utilisateur
+  // Bloquer/DÃ©bloquer un utilisateur
   const handleToggleBlockUser = (targetUser: UserProfile) => {
     if (!isSuperAdmin(user)) return;
     
@@ -2696,11 +2697,11 @@ export default function NOCActivityApp() {
       return updated;
     });
     
-    addAuditLog('USER_BLOCK_TOGGLE', `Utilisateur ${updatedUser.isBlocked ? 'bloqué' : 'débloqué'}: ${targetUser.name}`);
-    toast.success(updatedUser.isBlocked ? 'Utilisateur bloqué' : 'Utilisateur débloqué');
+    addAuditLog('USER_BLOCK_TOGGLE', `Utilisateur ${updatedUser.isBlocked ? 'bloquÃ©' : 'dÃ©bloquÃ©'}: ${targetUser.name}`);
+    toast.success(updatedUser.isBlocked ? 'Utilisateur bloquÃ©' : 'Utilisateur dÃ©bloquÃ©');
   };
 
-  // Réinitialiser le mot de passe d'un utilisateur
+  // RÃ©initialiser le mot de passe d'un utilisateur
   const handleResetUserPassword = (targetUser: UserProfile, newPassword: string) => {
     if (!isSuperAdmin(user)) return;
     
@@ -2717,8 +2718,8 @@ export default function NOCActivityApp() {
       return updated;
     });
     
-    addAuditLog('PASSWORD_RESET', `Mot de passe réinitialisé pour: ${targetUser.name}`);
-    toast.success('Mot de passe réinitialisé', { description: `Le mot de passe de ${targetUser.name} a été réinitialisé` });
+    addAuditLog('PASSWORD_RESET', `Mot de passe rÃ©initialisÃ© pour: ${targetUser.name}`);
+    toast.success('Mot de passe rÃ©initialisÃ©', { description: `Le mot de passe de ${targetUser.name} a Ã©tÃ© rÃ©initialisÃ©` });
   };
 
   // Supprimer un utilisateur
@@ -2735,8 +2736,8 @@ export default function NOCActivityApp() {
       return updated;
     });
     
-    addAuditLog('USER_DELETED', `Utilisateur supprimé: ${targetUser.name}`);
-    toast.success('Utilisateur supprimé');
+    addAuditLog('USER_DELETED', `Utilisateur supprimÃ©: ${targetUser.name}`);
+    toast.success('Utilisateur supprimÃ©');
   };
 
   // Filtrer les utilisateurs
@@ -2751,31 +2752,31 @@ export default function NOCActivityApp() {
   // PDF Generation
   const generateOvertimePDF = useCallback(async () => {
     if (!user?.shift) {
-      toast.error('Erreur', { description: 'Aucun shift assigné' });
+      toast.error('Erreur', { description: 'Aucun shift assignÃ©' });
       return;
     }
 
-    // Vérification du nom et prénom complets
+    // VÃ©rification du nom et prÃ©nom complets
     const fullName = `${user.lastName || ''} ${user.firstName || ''}`.trim();
     if (!user.firstName || !user.lastName) {
       toast.error('Information manquante', {
-        description: 'Veuillez d\'abord renseigner votre nom et prénom complet dans "Modifier mes informations"'
+        description: 'Veuillez d\'abord renseigner votre nom et prÃ©nom complet dans "Modifier mes informations"'
       });
       return;
     }
 
     const doc = new jsPDF('p', 'mm', 'a4');
-    const monthNames = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+    const monthNames = ['Janvier', 'FÃ©vrier', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'AoÃ»t', 'Septembre', 'Octobre', 'Novembre', 'DÃ©cembre'];
     const dayNames = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
 
     const pageWidth = 210;
     const margin = 10;
 
     // ============================================
-    // 1. EN-TÊTE - Logo + Titre CENTRÉS
+    // 1. EN-TÃŠTE - Logo + Titre CENTRÃ‰S
     // ============================================
     
-    // Calculer la position centrée pour le logo + titre
+    // Calculer la position centrÃ©e pour le logo + titre
     const logoWidth = 18;
     const titleText = 'SILICONE CONNECT';
     doc.setFontSize(12);
@@ -2784,7 +2785,7 @@ export default function NOCActivityApp() {
     const totalHeaderWidth = logoWidth + 3 + titleWidth; // 3mm d'espace entre logo et titre
     const headerStartX = (pageWidth - totalHeaderWidth) / 2;
     
-    // Logo faicone_sc.png centré
+    // Logo faicone_sc.png centrÃ©
     try {
       const logoImg = new Image();
       logoImg.src = '/faicone_sc.png';
@@ -2794,7 +2795,7 @@ export default function NOCActivityApp() {
       });
       
       if (logoImg.complete && logoImg.naturalWidth > 0) {
-        // Logo centré (18mm x 18mm)
+        // Logo centrÃ© (18mm x 18mm)
         doc.addImage(logoImg, 'PNG', headerStartX, 10, logoWidth, 18);
       }
     } catch (e) {
@@ -2803,7 +2804,7 @@ export default function NOCActivityApp() {
       doc.roundedRect(headerStartX, 10, logoWidth, 18, 2, 2, 'F');
     }
 
-    // Titre SILICONE CONNECT (noir, plus petit, à côté du logo)
+    // Titre SILICONE CONNECT (noir, plus petit, Ã  cÃ´tÃ© du logo)
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
@@ -2833,7 +2834,7 @@ export default function NOCActivityApp() {
     }
 
     // ============================================
-    // 3. MOIS CENTRÉ
+    // 3. MOIS CENTRÃ‰
     // ============================================
     
     doc.setTextColor(0, 0, 0);
@@ -2842,7 +2843,7 @@ export default function NOCActivityApp() {
     doc.text(`MOIS : ${monthNames[overtimeMonth.getMonth()].toUpperCase()} ${overtimeMonth.getFullYear()}`, pageWidth / 2, 52, { align: 'center' });
 
     // ============================================
-    // 4. PRÉPARER LES DONNÉES
+    // 4. PRÃ‰PARER LES DONNÃ‰ES
     // ============================================
     
     const monthStart = startOfMonth(overtimeMonth);
@@ -2889,21 +2890,21 @@ export default function NOCActivityApp() {
     doc.setDrawColor(0, 0, 0);
     doc.setLineWidth(0.3);
     
-    // --- EN-TÊTE DU TABLEAU ---
+    // --- EN-TÃŠTE DU TABLEAU ---
     doc.setFillColor(168, 198, 238);
     doc.rect(margin, tableStartY, pageWidth - (margin * 2), headerHeight, 'F');
     
-    // Bordure de l'en-tête
+    // Bordure de l'en-tÃªte
     doc.rect(margin, tableStartY, pageWidth - (margin * 2), headerHeight);
     
-    // Texte de l'en-tête
+    // Texte de l'en-tÃªte
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(6);
     doc.setFont('helvetica', 'bold');
     
     let x = margin;
     for (let i = 0; i < headers.length; i++) {
-      // Ligne verticale de séparation dans l'en-tête
+      // Ligne verticale de sÃ©paration dans l'en-tÃªte
       if (i > 0) {
         doc.line(x, tableStartY, x, tableStartY + headerHeight);
       }
@@ -2914,11 +2915,11 @@ export default function NOCActivityApp() {
     // --- CORPS DU TABLEAU ---
     const bodyStartY = tableStartY + headerHeight;
     
-    // Fond alterné pour TOUTES les lignes SAUF la colonne NOM (colonne 0)
+    // Fond alternÃ© pour TOUTES les lignes SAUF la colonne NOM (colonne 0)
     for (let rowIndex = 0; rowIndex < records.length; rowIndex++) {
       if (rowIndex % 2 === 0) {
         doc.setFillColor(245, 247, 250);
-        // Fond pour les colonnes 1 à 8 (pas la colonne NOM)
+        // Fond pour les colonnes 1 Ã  8 (pas la colonne NOM)
         doc.rect(margin + colWidths[0], bodyStartY + (rowIndex * rowHeight), pageWidth - (margin * 2) - colWidths[0], rowHeight, 'F');
       }
     }
@@ -2928,17 +2929,17 @@ export default function NOCActivityApp() {
     // Une SEULE grande cellule rectangulaire vide
     // ============================================
     
-    // Fond de la colonne fusionnée
+    // Fond de la colonne fusionnÃ©e
     doc.setFillColor(245, 247, 250);
     doc.rect(margin, bodyStartY, colWidths[0], totalRowsHeight, 'F');
     
-    // Bordure de la grande cellule fusionnée
+    // Bordure de la grande cellule fusionnÃ©e
     doc.rect(margin, bodyStartY, colWidths[0], totalRowsHeight);
     
     // ============================================
     // DESSINER LES BORDURES DES AUTRES COLONNES
-    // IMPORTANT: Lignes horizontales SEULEMENT pour colonnes 1 à 8
-    // PAS de lignes dans la colonne NOM (colonne 0 fusionnée)
+    // IMPORTANT: Lignes horizontales SEULEMENT pour colonnes 1 Ã  8
+    // PAS de lignes dans la colonne NOM (colonne 0 fusionnÃ©e)
     // ============================================
     
     doc.setFont('helvetica', 'normal');
@@ -2951,11 +2952,11 @@ export default function NOCActivityApp() {
       const row = records[rowIndex];
       const currentY = bodyStartY + (rowIndex * rowHeight);
       
-      // Ligne horizontale SEULEMENT pour colonnes 1 à 8 (PAS dans colonne NOM)
-      // La ligne commence APRÈS la colonne NOM
+      // Ligne horizontale SEULEMENT pour colonnes 1 Ã  8 (PAS dans colonne NOM)
+      // La ligne commence APRÃˆS la colonne NOM
       doc.line(col0EndX, currentY + rowHeight, pageWidth - margin, currentY + rowHeight);
       
-      // Lignes verticales et texte pour colonnes 1 à 8
+      // Lignes verticales et texte pour colonnes 1 Ã  8
       x = col0EndX;
       for (let colIndex = 1; colIndex < 9; colIndex++) {
         doc.line(x, currentY, x, currentY + rowHeight);
@@ -2964,18 +2965,18 @@ export default function NOCActivityApp() {
       }
     }
     
-    // Bordure extérieure du corps (sans la colonne NOM qui a déjà sa bordure)
-    doc.line(col0EndX, bodyStartY, col0EndX, bodyStartY + totalRowsHeight); // Ligne verticale après NOM
+    // Bordure extÃ©rieure du corps (sans la colonne NOM qui a dÃ©jÃ  sa bordure)
+    doc.line(col0EndX, bodyStartY, col0EndX, bodyStartY + totalRowsHeight); // Ligne verticale aprÃ¨s NOM
     doc.line(pageWidth - margin, bodyStartY, pageWidth - margin, bodyStartY + totalRowsHeight); // Bordure droite
 
     // ============================================
-    // 6. NOM EN VERTICAL - ROTATION 90° DANS LA CELLULE FUSIONNÉE
-    // Positionnement précis
+    // 6. NOM EN VERTICAL - ROTATION 90Â° DANS LA CELLULE FUSIONNÃ‰E
+    // Positionnement prÃ©cis
     // ============================================
     
     const nomEmploye = fullName.toUpperCase();
     
-    // Dimensions de la zone fusionnée
+    // Dimensions de la zone fusionnÃ©e
     const cellX = margin;
     const cellY = bodyStartY;
     const cellWidth = colWidths[0];
@@ -2986,10 +2987,10 @@ export default function NOCActivityApp() {
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(0, 0, 0);
     
-    // Déplacer de gauche vers la droite dans la cellule
+    // DÃ©placer de gauche vers la droite dans la cellule
     const textX = cellX + (cellWidth / 2) + 13;
     
-    // Position Y centrée verticalement
+    // Position Y centrÃ©e verticalement
     const textY = cellY + (cellHeight / 2);
     
     doc.text(nomEmploye, textX, textY, { 
@@ -3019,10 +3020,10 @@ export default function NOCActivityApp() {
     doc.text(`${totalHours}:00:00`, pageWidth - margin - 45, totalY + 6.5, { align: 'center' });
 
     // ============================================
-    // 8. SIGNATURES - PLUS D'ESPACE (50mm après total)
+    // 8. SIGNATURES - PLUS D'ESPACE (50mm aprÃ¨s total)
     // ============================================
     
-    const signatureY = totalY + 50; // Augmenté de 25 à 50 pour plus d'espace
+    const signatureY = totalY + 50; // AugmentÃ© de 25 Ã  50 pour plus d'espace
     const sigWidth = (pageWidth - (margin * 2)) / 4;
     
     doc.setFontSize(7);
@@ -3043,7 +3044,7 @@ export default function NOCActivityApp() {
 
     // Sauvegarder
     doc.save(`heures_sup_${fullName.replace(/\s+/g, '_')}_${format(overtimeMonth, 'MM_yyyy')}.pdf`);
-    toast.success('PDF généré', { description: 'Le fichier a été téléchargé' });
+    toast.success('PDF gÃ©nÃ©rÃ©', { description: 'Le fichier a Ã©tÃ© tÃ©lÃ©chargÃ©' });
   }, [user, overtimeMonth]);
 
   // Planning generation
@@ -3089,7 +3090,7 @@ export default function NOCActivityApp() {
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 relative overflow-hidden">
-        {/* Animated background elements - subtil et élégant */}
+        {/* Animated background elements - subtil et Ã©lÃ©gant */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <motion.div
             animate={{
@@ -3131,9 +3132,9 @@ export default function NOCActivityApp() {
           className="w-full max-w-md mx-4 relative z-10"
         >
           <Card className="border border-slate-200/80 dark:border-slate-700/50 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.15)] dark:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)] bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl overflow-hidden">
-            {/* Header avec nouvelle image animée */}
+            {/* Header avec nouvelle image animÃ©e */}
             <div className="relative pt-10 pb-6 text-center bg-gradient-to-b from-slate-50/50 to-transparent dark:from-slate-800/30 dark:to-transparent">
-              {/* Glow effect derrière le logo */}
+              {/* Glow effect derriÃ¨re le logo */}
               <motion.div
                 animate={{
                   opacity: [0.3, 0.5, 0.3],
@@ -3165,7 +3166,7 @@ export default function NOCActivityApp() {
                 />
               </motion.div>
               
-              {/* Séparateur élégant */}
+              {/* SÃ©parateur Ã©lÃ©gant */}
               <motion.div
                 initial={{ scaleX: 0, opacity: 0 }}
                 animate={{ scaleX: 1, opacity: 1 }}
@@ -3182,7 +3183,7 @@ export default function NOCActivityApp() {
                 onSubmit={handleLogin}
                 className="space-y-5"
               >
-                {/* Champ Pseudo avec icône et label flottant */}
+                {/* Champ Pseudo avec icÃ´ne et label flottant */}
                 <motion.div
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
@@ -3219,7 +3220,7 @@ export default function NOCActivityApp() {
                   </label>
                 </motion.div>
 
-                {/* Champ Mot de passe avec icône et label flottant */}
+                {/* Champ Mot de passe avec icÃ´ne et label flottant */}
                 <motion.div
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
@@ -3288,7 +3289,7 @@ export default function NOCActivityApp() {
                   )}
                 </AnimatePresence>
 
-                {/* Compte à rebours si verrouillé */}
+                {/* Compte Ã  rebours si verrouillÃ© */}
                 <AnimatePresence mode="wait">
                   {isLocked && (
                     <motion.div
@@ -3312,7 +3313,7 @@ export default function NOCActivityApp() {
                   )}
                 </AnimatePresence>
 
-                {/* Bouton de connexion AVEC ICÔNE */}
+                {/* Bouton de connexion AVEC ICÃ”NE */}
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -3360,7 +3361,7 @@ export default function NOCActivityApp() {
                 </motion.div>
               </motion.form>
 
-              {/* Message d'oubli - AFFICHÉ SEULEMENT APRÈS 3 TENTATIVES */}
+              {/* Message d'oubli - AFFICHÃ‰ SEULEMENT APRÃˆS 3 TENTATIVES */}
               <AnimatePresence mode="wait">
                 {showForgotMessage && (
                   <motion.div
@@ -3379,10 +3380,10 @@ export default function NOCActivityApp() {
                       >
                         <Info className="w-5 h-5 text-amber-500 mx-auto mb-2" />
                         <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
-                          Si vous avez oublié votre mot de passe ou votre pseudo,
+                          Si vous avez oubliÃ© votre mot de passe ou votre pseudo,
                           <br />
                           merci de vous rapprocher de la <span className="font-semibold text-blue-600 dark:text-blue-400">Direction</span> ou
-                          contacter le <span className="font-semibold text-blue-600 dark:text-blue-400">Responsable Système</span>.
+                          contacter le <span className="font-semibold text-blue-600 dark:text-blue-400">Responsable SystÃ¨me</span>.
                         </p>
                       </motion.div>
                     </div>
@@ -3392,7 +3393,7 @@ export default function NOCActivityApp() {
             </CardContent>
           </Card>
 
-          {/* Footer élégant */}
+          {/* Footer Ã©lÃ©gant */}
           <motion.p
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -3400,7 +3401,7 @@ export default function NOCActivityApp() {
             className="text-center text-slate-400 dark:text-slate-500 text-xs mt-6 flex items-center justify-center gap-2"
           >
             <span className="w-8 h-[1px] bg-slate-300 dark:bg-slate-700" />
-            <span>© {new Date().getFullYear()} Silicone Connect</span>
+            <span>Â© {new Date().getFullYear()} Silicone Connect</span>
             <span className="w-8 h-[1px] bg-slate-300 dark:bg-slate-700" />
           </motion.p>
         </motion.div>
@@ -3513,7 +3514,7 @@ export default function NOCActivityApp() {
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={openShiftDialog} className="gap-2">
                   <Calendar className="w-4 h-4" />
-                  Définir mon shift
+                  DÃ©finir mon shift
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setRestDialogOpen(true)} className="gap-2">
                   <Coffee className="w-4 h-4" />
@@ -3522,11 +3523,11 @@ export default function NOCActivityApp() {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={openSecurityDialog} className="gap-2">
                   <Settings className="w-4 h-4" />
-                  Sécuriser mon compte
+                  SÃ©curiser mon compte
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setSettingsDialogOpen(true)} className="gap-2">
                   <Settings className="w-4 h-4" />
-                  Paramètres
+                  ParamÃ¨tres
                 </DropdownMenuItem>
                 {isSuperAdmin(user) && (
                   <>
@@ -3534,14 +3535,14 @@ export default function NOCActivityApp() {
                     <DropdownMenuLabel className="text-xs text-muted-foreground">Administration</DropdownMenuLabel>
                     <DropdownMenuItem onClick={() => setUsersManagementOpen(true)} className="gap-2">
                       <Users className="w-4 h-4" />
-                      Gérer les utilisateurs
+                      GÃ©rer les utilisateurs
                     </DropdownMenuItem>
                   </>
                 )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout} className="gap-2 text-destructive">
                   <LogOut className="w-4 h-4" />
-                  Déconnexion
+                  DÃ©connexion
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -3560,10 +3561,10 @@ export default function NOCActivityApp() {
                   <Calendar className="w-5 h-5" /> Planning
                 </Button>
                 <Button variant={currentTab === 'tasks' ? 'secondary' : 'ghost'} className="w-full justify-start gap-3 h-10" onClick={() => setCurrentTab('tasks')}>
-                  <ClipboardList className="w-5 h-5" /> Mes Tâches
+                  <ClipboardList className="w-5 h-5" /> Mes TÃ¢ches
                 </Button>
                 <Button variant={currentTab === 'activities' ? 'secondary' : 'ghost'} className="w-full justify-start gap-3 h-10" onClick={() => setCurrentTab('activities')}>
-                  <Activity className="w-5 h-5" /> Activités
+                  <Activity className="w-5 h-5" /> ActivitÃ©s
                 </Button>
                 <Button variant={currentTab === 'overtime' ? 'secondary' : 'ghost'} className="w-full justify-start gap-3 h-10" onClick={() => setCurrentTab('overtime')}>
                   <Clock className="w-5 h-5" /> Heures Sup.
@@ -3633,9 +3634,9 @@ export default function NOCActivityApp() {
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
                       <h1 className="text-2xl lg:text-3xl font-bold">Tableau de bord</h1>
-                      <p className="text-muted-foreground">Bienvenue, {user?.name} • {format(new Date(), 'EEEE d MMMM yyyy', { locale: fr })}</p>
+                      <p className="text-muted-foreground">Bienvenue, {user?.name} â€¢ {format(new Date(), 'EEEE d MMMM yyyy', { locale: fr })}</p>
                     </div>
-                    <Button variant="outline" onClick={() => toast.success('Données actualisées')}>
+                    <Button variant="outline" onClick={() => toast.success('DonnÃ©es actualisÃ©es')}>
                       <RefreshCw className="w-4 h-4 mr-2" /> Actualiser
                     </Button>
                   </div>
@@ -3653,13 +3654,13 @@ export default function NOCActivityApp() {
                           {userRestInfo.isOnIndividualRest ? (
                             <div className="flex items-center gap-2 text-green-600">
                               <CheckCircle2 className="w-5 h-5" />
-                              <span className="font-medium">Vous êtes en repos aujourd'hui</span>
+                              <span className="font-medium">Vous Ãªtes en repos aujourd'hui</span>
                             </div>
                           ) : (
                             <div>
                               <p className="text-sm text-muted-foreground">Prochain repos individuel :</p>
                               <p className="text-lg font-bold mt-1">
-                                {userRestInfo.nextIndividualRest ? format(userRestInfo.nextIndividualRest, 'EEEE d MMMM yyyy', { locale: fr }) : 'Non planifié'}
+                                {userRestInfo.nextIndividualRest ? format(userRestInfo.nextIndividualRest, 'EEEE d MMMM yyyy', { locale: fr }) : 'Non planifiÃ©'}
                               </p>
                             </div>
                           )}
@@ -3682,7 +3683,7 @@ export default function NOCActivityApp() {
                             <div>
                               <p className="text-sm text-muted-foreground">Prochain repos collectif :</p>
                               <p className="text-lg font-bold mt-1">
-                                {userRestInfo.nextCollectiveRestStart ? format(userRestInfo.nextCollectiveRestStart, 'EEEE d MMMM yyyy', { locale: fr }) : 'Non planifié'}
+                                {userRestInfo.nextCollectiveRestStart ? format(userRestInfo.nextCollectiveRestStart, 'EEEE d MMMM yyyy', { locale: fr }) : 'Non planifiÃ©'}
                               </p>
                             </div>
                           )}
@@ -3695,14 +3696,14 @@ export default function NOCActivityApp() {
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                     <Card className="p-3">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Taux présence</span>
+                        <span className="text-sm text-muted-foreground">Taux prÃ©sence</span>
                         <UserCheck className="w-4 h-4 text-green-500" />
                       </div>
                       <p className="text-2xl font-bold mt-1">98.5%</p>
                     </Card>
                     <Card className="p-3">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Tâches en cours</span>
+                        <span className="text-sm text-muted-foreground">TÃ¢ches en cours</span>
                         <Briefcase className="w-4 h-4 text-orange-500" />
                       </div>
                       <p className="text-2xl font-bold mt-1">{tasks.filter(t => t.status === 'in_progress').length}</p>
@@ -3727,7 +3728,7 @@ export default function NOCActivityApp() {
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     <Card>
                       <CardHeader className="pb-2 pt-4">
-                        <CardTitle className="text-base">Activité hebdomadaire</CardTitle>
+                        <CardTitle className="text-base">ActivitÃ© hebdomadaire</CardTitle>
                       </CardHeader>
                       <CardContent className="pb-4">
                         <ResponsiveContainer width="100%" height={200}>
@@ -3754,7 +3755,7 @@ export default function NOCActivityApp() {
                     
                     <Card>
                       <CardHeader className="pb-2 pt-4">
-                        <CardTitle className="text-base">Répartition par shift</CardTitle>
+                        <CardTitle className="text-base">RÃ©partition par shift</CardTitle>
                       </CardHeader>
                       <CardContent className="pb-4">
                         <ResponsiveContainer width="100%" height={200}>
@@ -3825,7 +3826,7 @@ export default function NOCActivityApp() {
                             </div>
                             <p className="text-xs text-muted-foreground">{shiftData.members.join(', ')}</p>
                             <div className="mt-2 text-xs text-muted-foreground">
-                              Cycle {schedule.cycleNumber} • Jour {schedule.dayNumber || '-'}
+                              Cycle {schedule.cycleNumber} â€¢ Jour {schedule.dayNumber || '-'}
                             </div>
                           </CardContent>
                         </Card>
@@ -3837,7 +3838,7 @@ export default function NOCActivityApp() {
                   <Card>
                     <CardHeader className="pb-2 pt-4">
                       <CardTitle className="text-base flex items-center gap-2">
-                        <ExternalLink className="w-5 h-5" /> Accès Rapide
+                        <ExternalLink className="w-5 h-5" /> AccÃ¨s Rapide
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="pb-4">
@@ -3913,7 +3914,7 @@ export default function NOCActivityApp() {
                                               : 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300'
                                         }`}>
                                           <div className="flex items-center justify-between">
-                                            <span className="font-medium">S{shift.name}</span>
+                                            <span className="font-medium">{shift.name}</span>
                                             <span className="opacity-70">
                                               {shift.schedule.isCollectiveRest ? 'R' : `${shift.schedule.dayType === 'DAY_SHIFT' ? 'J' : 'N'}${shift.schedule.dayNumber}`}
                                             </span>
@@ -3978,8 +3979,8 @@ export default function NOCActivityApp() {
                 <motion.div key="overtime" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-4">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
-                      <h1 className="text-2xl lg:text-3xl font-bold">Heures supplémentaires</h1>
-                      <p className="text-muted-foreground">2h automatiques par jour travaillé</p>
+                      <h1 className="text-2xl lg:text-3xl font-bold">Heures supplÃ©mentaires</h1>
+                      <p className="text-muted-foreground">2h automatiques par jour travaillÃ©</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <Button variant="outline" size="icon" onClick={() => setOvertimeMonth(subMonths(overtimeMonth, 1))}>
@@ -4017,7 +4018,7 @@ export default function NOCActivityApp() {
                             <p className="text-2xl font-bold mt-1">{totalHours}h</p>
                           </Card>
                           <Card className="p-3">
-                            <div className="flex items-center gap-2"><CalendarDays className="w-4 h-4 text-green-500" /><span className="text-sm text-muted-foreground">Jours travaillés</span></div>
+                            <div className="flex items-center gap-2"><CalendarDays className="w-4 h-4 text-green-500" /><span className="text-sm text-muted-foreground">Jours travaillÃ©s</span></div>
                             <p className="text-2xl font-bold mt-1">{workDays.length}</p>
                           </Card>
                           <Card className="p-3">
@@ -4025,7 +4026,7 @@ export default function NOCActivityApp() {
                             <p className="text-2xl font-bold mt-1">2h/jour</p>
                           </Card>
                           <Card className="p-3">
-                            <div className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-green-500" /><span className="text-sm text-muted-foreground">Approuvé par</span></div>
+                            <div className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-green-500" /><span className="text-sm text-muted-foreground">ApprouvÃ© par</span></div>
                             <p className="text-sm font-bold mt-1">Daddy AZUMY</p>
                           </Card>
                         </div>
@@ -4033,9 +4034,9 @@ export default function NOCActivityApp() {
                         <Card>
                           <CardHeader className="pb-2 pt-4">
                             <div className="flex items-center justify-between">
-                              <CardTitle className="text-base">Détail mensuel</CardTitle>
+                              <CardTitle className="text-base">DÃ©tail mensuel</CardTitle>
                               <Button onClick={generateOvertimePDF} className="gap-2">
-                                <FileDown className="w-4 h-4" /> Générer PDF
+                                <FileDown className="w-4 h-4" /> GÃ©nÃ©rer PDF
                               </Button>
                             </div>
                           </CardHeader>
@@ -4048,7 +4049,7 @@ export default function NOCActivityApp() {
                                     <th className="text-left p-2 font-medium">Date</th>
                                     <th className="text-left p-2 font-medium">Type</th>
                                     <th className="text-left p-2 font-medium">Horaires</th>
-                                    <th className="text-left p-2 font-medium">Durée</th>
+                                    <th className="text-left p-2 font-medium">DurÃ©e</th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -4086,7 +4087,7 @@ export default function NOCActivityApp() {
                 <motion.div key="links" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-4">
                   <div>
                     <h1 className="text-2xl lg:text-3xl font-bold">Liens Externes</h1>
-                    <p className="text-muted-foreground">Accès rapide aux outils NOC</p>
+                    <p className="text-muted-foreground">AccÃ¨s rapide aux outils NOC</p>
                   </div>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -4104,7 +4105,7 @@ export default function NOCActivityApp() {
                           <CardContent className="pb-4">
                             <a href={link.url} target="_blank" rel="noopener noreferrer">
                               <Button className="w-full gap-2" onClick={() => toast.success(`Ouverture de ${link.name}`)}>
-                                <ExternalLink className="w-4 h-4" /> Accéder
+                                <ExternalLink className="w-4 h-4" /> AccÃ©der
                               </Button>
                             </a>
                           </CardContent>
@@ -4115,7 +4116,7 @@ export default function NOCActivityApp() {
                 </motion.div>
               )}
               
-              {/* Messagerie Instantanée - Style WhatsApp */}
+              {/* Messagerie InstantanÃ©e - Style WhatsApp */}
               {currentTab === 'email' && (
                 <motion.div key="email" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="h-[calc(100vh-7rem)]">
                   <div className="flex h-full border rounded-xl overflow-hidden bg-white dark:bg-slate-900 shadow-lg">
@@ -4134,7 +4135,7 @@ export default function NOCActivityApp() {
                           </div>
                           <div className="flex items-center gap-1">
                             <Button variant="ghost" size="icon" className="text-white hover:bg-white/10" onClick={() => setNewConversationOpen(true)} title="Nouvelle discussion"><MessageCircle className="w-5 h-5" /></Button>
-                            <Button variant="ghost" size="icon" className="text-white hover:bg-white/10" onClick={() => setCreateGroupOpen(true)} title="Créer un groupe"><UserPlus className="w-5 h-5" /></Button>
+                            <Button variant="ghost" size="icon" className="text-white hover:bg-white/10" onClick={() => setCreateGroupOpen(true)} title="CrÃ©er un groupe"><UserPlus className="w-5 h-5" /></Button>
                           </div>
                         </div>
                         <div className="relative">
@@ -4238,7 +4239,7 @@ export default function NOCActivityApp() {
                             <p className="text-muted-foreground text-sm mb-4">Commencez une nouvelle conversation</p>
                             <div className="flex gap-2">
                               <Button onClick={() => setNewConversationOpen(true)} className="bg-cyan-500 hover:bg-cyan-600"><MessageCircle className="w-4 h-4 mr-2" />Nouvelle discussion</Button>
-                              <Button onClick={() => setCreateGroupOpen(true)} variant="outline"><Users className="w-4 h-4 mr-2" />Créer un groupe</Button>
+                              <Button onClick={() => setCreateGroupOpen(true)} variant="outline"><Users className="w-4 h-4 mr-2" />CrÃ©er un groupe</Button>
                             </div>
                           </div>
                         ) : (
@@ -4281,7 +4282,7 @@ export default function NOCActivityApp() {
                                       <span className="text-xs text-muted-foreground">{conversation.lastMessage ? format(conversation.lastMessage.createdAt, 'HH:mm') : ''}</span>
                                     </div>
                                     <div className="flex items-center justify-between mt-0.5">
-                                      <p className="text-xs text-muted-foreground truncate max-w-[180px]">{conversation.lastMessage?.deletedForEveryone ? 'Ce message a été supprimé' : conversation.lastMessage?.type === 'voice' ? '🎤 Message vocal' : conversation.lastMessage?.type === 'image' ? '📷 Image' : conversation.lastMessage?.type === 'video' ? '🎬 Vidéo' : conversation.lastMessage?.type === 'document' ? '📄 Document' : conversation.lastMessage?.content || 'Aucun message'}</p>
+                                      <p className="text-xs text-muted-foreground truncate max-w-[180px]">{conversation.lastMessage?.deletedForEveryone ? 'Ce message a Ã©tÃ© supprimÃ©' : conversation.lastMessage?.type === 'voice' ? 'ðŸŽ¤ Message vocal' : conversation.lastMessage?.type === 'image' ? 'ðŸ“· Image' : conversation.lastMessage?.type === 'video' ? 'ðŸŽ¬ VidÃ©o' : conversation.lastMessage?.type === 'document' ? 'ðŸ“„ Document' : conversation.lastMessage?.content || 'Aucun message'}</p>
                                       {conversation.unreadCount > 0 && <Badge className={`${isAnnonces ? 'bg-yellow-500' : 'bg-cyan-500'} text-white text-xs rounded-full px-2`}>{conversation.unreadCount}</Badge>}
                                     </div>
                                   </div>
@@ -4350,7 +4351,7 @@ export default function NOCActivityApp() {
                               </p>
                               <p className="text-xs text-white/70">
                                 {selectedConversation.participants.find(p => p.id !== user?.id)?.id === 'system-annonces' ? 'Canal d\'annonces officiel' :
-                                typingIndicators.find(t => t.conversationId === selectedConversation.id)?.isTyping ? "En train d'écrire..." : 
+                                typingIndicators.find(t => t.conversationId === selectedConversation.id)?.isTyping ? "En train d'Ã©crire..." : 
                                 selectedConversation.type === 'group' ? `${selectedConversation.participants.length} membres` : 
                                 userPresence[selectedConversation.participants.find(p => p.id !== user?.id)?.id || ''] === 'online' ? 'En ligne' : 'Hors ligne'}
                               </p>
@@ -4364,7 +4365,7 @@ export default function NOCActivityApp() {
                               <Search className="w-5 h-5" />
                             </Button>
                             {/* Settings button */}
-                            <Button variant="ghost" size="icon" className="text-white hover:bg-white/10" onClick={() => setBackgroundSettingsOpen(true)} title="Paramètres">
+                            <Button variant="ghost" size="icon" className="text-white hover:bg-white/10" onClick={() => setBackgroundSettingsOpen(true)} title="ParamÃ¨tres">
                               <Settings className="w-5 h-5" />
                             </Button>
                             <Button variant="ghost" size="icon" className="text-white hover:bg-white/10" onClick={() => { 
@@ -4418,9 +4419,9 @@ export default function NOCActivityApp() {
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="text-white hover:bg-white/10"><MoreVertical className="w-5 h-5" /></Button></DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => { setConversations(prev => prev.map(c => c.id === selectedConversation.id ? {...c, isPinned: !c.isPinned} : c)); toast.success(selectedConversation.isPinned ? 'Discussion désépinglée' : 'Discussion épinglée'); }}><Pin className="w-4 h-4 mr-2" />{selectedConversation.isPinned ? 'Désépingler' : 'Épingler'}</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => { setConversations(prev => prev.map(c => c.id === selectedConversation.id ? {...c, isMuted: !c.isMuted} : c)); toast.success(selectedConversation.isMuted ? 'Notifications réactivées' : 'Notifications désactivées'); }}><BellOff className="w-4 h-4 mr-2" />{selectedConversation.isMuted ? 'Réactiver' : 'Désactiver'}</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => { setConversations(prev => prev.map(c => c.id === selectedConversation.id ? {...c, isArchived: true} : c)); setSelectedConversation(null); toast.success('Discussion archivée'); }}><Archive className="w-4 h-4 mr-2" />Archiver</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => { setConversations(prev => prev.map(c => c.id === selectedConversation.id ? {...c, isPinned: !c.isPinned} : c)); toast.success(selectedConversation.isPinned ? 'Discussion dÃ©sÃ©pinglÃ©e' : 'Discussion Ã©pinglÃ©e'); }}><Pin className="w-4 h-4 mr-2" />{selectedConversation.isPinned ? 'DÃ©sÃ©pingler' : 'Ã‰pingler'}</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => { setConversations(prev => prev.map(c => c.id === selectedConversation.id ? {...c, isMuted: !c.isMuted} : c)); toast.success(selectedConversation.isMuted ? 'Notifications rÃ©activÃ©es' : 'Notifications dÃ©sactivÃ©es'); }}><BellOff className="w-4 h-4 mr-2" />{selectedConversation.isMuted ? 'RÃ©activer' : 'DÃ©sactiver'}</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => { setConversations(prev => prev.map(c => c.id === selectedConversation.id ? {...c, isArchived: true} : c)); setSelectedConversation(null); toast.success('Discussion archivÃ©e'); }}><Archive className="w-4 h-4 mr-2" />Archiver</DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </div>
@@ -4485,7 +4486,7 @@ export default function NOCActivityApp() {
                             {pinnedMessages.filter(m => m.conversationId === selectedConversation.id).length > 0 && (
                               <div className="bg-cyan-50 dark:bg-cyan-900/20 border-l-4 border-cyan-500 p-2 rounded mb-4">
                                 <p className="text-xs text-cyan-600 dark:text-cyan-400 font-medium mb-1 flex items-center gap-1">
-                                  <Pin className="w-3 h-3" /> Messages épinglés
+                                  <Pin className="w-3 h-3" /> Messages Ã©pinglÃ©s
                                 </p>
                                 {pinnedMessages.filter(m => m.conversationId === selectedConversation.id).map((msg) => (
                                   <div key={msg.id} className="text-sm text-muted-foreground truncate">
@@ -4501,10 +4502,10 @@ export default function NOCActivityApp() {
                               const isCurrentResult = searchResults[currentSearchIndex]?.id === message.id;
                               const renderMessageContent = () => {
                                 if (message.deletedForEveryone) {
-                                  return <p className="text-sm text-muted-foreground italic">Ce message a été supprimé</p>;
+                                  return <p className="text-sm text-muted-foreground italic">Ce message a Ã©tÃ© supprimÃ©</p>;
                                 }
                                 if (message.isDeleted) {
-                                  return <p className="text-sm text-muted-foreground italic">Message supprimé</p>;
+                                  return <p className="text-sm text-muted-foreground italic">Message supprimÃ©</p>;
                                 }
                                 if (message.type === 'voice' && message.mediaData) {
                                   const isPlaying = playingMessageId === message.id;
@@ -4759,7 +4760,7 @@ export default function NOCActivityApp() {
                                       )}
                                       
                                       <div className="flex items-center justify-end gap-1 mt-1">
-                                        {message.isEdited && <span className="text-[10px] text-muted-foreground italic mr-1">modifié</span>}
+                                        {message.isEdited && <span className="text-[10px] text-muted-foreground italic mr-1">modifiÃ©</span>}
                                         {message.isArchived && <Archive className="w-3 h-3 text-slate-400 mr-1" />}
                                         <span className="text-[10px] text-muted-foreground">{format(message.createdAt, 'HH:mm')}</span>
                                         {isOwn && !message.deletedForEveryone && !message.isDeleted && <span className="flex">{message.status === 'read' ? <CheckCheck className="w-3 h-3 text-cyan-500" /> : <CheckCheck className="w-3 h-3 text-slate-400" />}</span>}
@@ -4799,16 +4800,16 @@ export default function NOCActivityApp() {
                                 if (contextMenuMessage.isPinned) {
                                   setPinnedMessages(prev => prev.filter(m => m.id !== contextMenuMessage.id));
                                   setChatMessages(prev => prev.map(m => m.id === contextMenuMessage.id ? {...m, isPinned: false} : m));
-                                  toast.success('Message désépinglé');
+                                  toast.success('Message dÃ©sÃ©pinglÃ©');
                                 } else {
                                   setPinnedMessages(prev => [...prev, contextMenuMessage]);
                                   setChatMessages(prev => prev.map(m => m.id === contextMenuMessage.id ? {...m, isPinned: true} : m));
-                                  toast.success('Message épinglé');
+                                  toast.success('Message Ã©pinglÃ©');
                                 }
                                 setShowContextMenu(false);
                               }}
                             >
-                              <Pin className="w-4 h-4" /> {contextMenuMessage.isPinned ? 'Désépingler' : 'Épingler'}
+                              <Pin className="w-4 h-4" /> {contextMenuMessage.isPinned ? 'DÃ©sÃ©pingler' : 'Ã‰pingler'}
                             </button>
                             {contextMenuMessage.senderId === user?.id && (
                               <button 
@@ -4827,7 +4828,7 @@ export default function NOCActivityApp() {
                               className="w-full px-3 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2"
                               onClick={() => {
                                 setChatMessages(prev => prev.map(m => m.id === contextMenuMessage.id ? {...m, isDeleted: true} : m));
-                                toast.success('Message supprimé pour vous');
+                                toast.success('Message supprimÃ© pour vous');
                                 setShowContextMenu(false);
                               }}
                             >
@@ -4851,7 +4852,7 @@ export default function NOCActivityApp() {
                                       }
                                       return c;
                                     }));
-                                    toast.success('Message supprimé pour tous');
+                                    toast.success('Message supprimÃ© pour tous');
                                     setShowContextMenu(false);
                                   }}
                                 >
@@ -4861,9 +4862,9 @@ export default function NOCActivityApp() {
                                 <button 
                                   className="w-full px-3 py-2 text-left text-sm text-muted-foreground flex items-center gap-2 cursor-not-allowed"
                                   disabled
-                                  title="Disponible uniquement dans les 10 minutes après l'envoi"
+                                  title="Disponible uniquement dans les 10 minutes aprÃ¨s l'envoi"
                                 >
-                                  <Trash2 className="w-4 h-4" /> Supprimer pour tous (expiré)
+                                  <Trash2 className="w-4 h-4" /> Supprimer pour tous (expirÃ©)
                                 </button>
                               );
                             })()}
@@ -4874,7 +4875,7 @@ export default function NOCActivityApp() {
                                 setShowContextMenu(false);
                               }}
                             >
-                              <Reply className="w-4 h-4" /> Répondre
+                              <Reply className="w-4 h-4" /> RÃ©pondre
                             </button>
                           </div>
                         )}
@@ -4884,7 +4885,7 @@ export default function NOCActivityApp() {
                             <div className="flex items-center justify-between p-2 bg-cyan-100 dark:bg-cyan-900/30 rounded-lg mb-2">
                               <div className="flex items-center gap-2">
                                 <CheckSquare className="w-4 h-4 text-cyan-500" />
-                                <span className="text-sm font-medium">{selectedChatMessages.size} message(s) sélectionné(s)</span>
+                                <span className="text-sm font-medium">{selectedChatMessages.size} message(s) sÃ©lectionnÃ©(s)</span>
                               </div>
                               <div className="flex items-center gap-2">
                                 <Button
@@ -4895,7 +4896,7 @@ export default function NOCActivityApp() {
                                     setChatMessages(prev => prev.map(m => 
                                       selectedChatMessages.has(m.id) ? {...m, isArchived: true} : m
                                     ));
-                                    toast.success(`${messageIds.length} message(s) archivé(s)`);
+                                    toast.success(`${messageIds.length} message(s) archivÃ©(s)`);
                                     setSelectedChatMessages(new Set());
                                     setIsSelectionMode(false);
                                   }}
@@ -4913,7 +4914,7 @@ export default function NOCActivityApp() {
                                     setChatMessages(prev => prev.map(m => 
                                       selectedChatMessages.has(m.id) ? {...m, isDeleted: true} : m
                                     ));
-                                    toast.success(`${messageIds.length} message(s) supprimé(s)`);
+                                    toast.success(`${messageIds.length} message(s) supprimÃ©(s)`);
                                     setSelectedChatMessages(new Set());
                                     setIsSelectionMode(false);
                                   }}
@@ -5002,7 +5003,7 @@ export default function NOCActivityApp() {
                                   });
                                 }}
                               >
-                                Réinitialiser
+                                RÃ©initialiser
                               </Button>
                             </div>
                           )}
@@ -5012,7 +5013,7 @@ export default function NOCActivityApp() {
                             <div className="flex items-center gap-2 p-2 bg-slate-100 dark:bg-slate-700 rounded-lg mb-2">
                               <Reply className="w-4 h-4 text-cyan-500" />
                               <div className="flex-1 min-w-0">
-                                <p className="text-xs text-cyan-600 font-medium">Répondre à {replyingTo.senderName}</p>
+                                <p className="text-xs text-cyan-600 font-medium">RÃ©pondre Ã  {replyingTo.senderName}</p>
                                 <p className="text-xs text-muted-foreground truncate">{replyingTo.content}</p>
                               </div>
                               <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setReplyingTo(null)}><X className="w-4 h-4" /></Button>
@@ -5044,7 +5045,7 @@ export default function NOCActivityApp() {
                               <PopoverTrigger asChild><Button variant="ghost" size="icon" className="rounded-full text-slate-500 hover:text-cyan-500"><Smile className="w-6 h-6" /></Button></PopoverTrigger>
                               <PopoverContent className="w-72 p-2" align="start">
                                 <div className="grid grid-cols-8 gap-1">
-                                  {['😀', '😂', '😍', '🥰', '😎', '🤔', '👍', '👎', '❤️', '🔥', '🎉', '✅', '⏰', '📞', '📧', '💻', '🔧', '📊', '📈', '✨', '🌟', '💪', '🙏', '👋'].map((emoji) => (
+                                  {['ðŸ˜€', 'ðŸ˜‚', 'ðŸ˜', 'ðŸ¥°', 'ðŸ˜Ž', 'ðŸ¤”', 'ðŸ‘', 'ðŸ‘Ž', 'â¤ï¸', 'ðŸ”¥', 'ðŸŽ‰', 'âœ…', 'â°', 'ðŸ“ž', 'ðŸ“§', 'ðŸ’»', 'ðŸ”§', 'ðŸ“Š', 'ðŸ“ˆ', 'âœ¨', 'ðŸŒŸ', 'ðŸ’ª', 'ðŸ™', 'ðŸ‘‹'].map((emoji) => (
                                     <button key={emoji} onClick={() => { setNewMessage(prev => prev + emoji); setShowEmojiPicker(false); }} className="text-xl hover:bg-slate-100 dark:hover:bg-slate-700 rounded p-1">{emoji}</button>
                                   ))}
                                 </div>
@@ -5061,7 +5062,7 @@ export default function NOCActivityApp() {
                                   setSelectedChatMessages(new Set());
                                 }
                               }}
-                              title="Mode sélection"
+                              title="Mode sÃ©lection"
                             >
                               <CheckSquare className="w-5 h-5" />
                             </Button>
@@ -5079,7 +5080,7 @@ export default function NOCActivityApp() {
                               <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="rounded-full text-slate-500 hover:text-cyan-500"><Paperclip className="w-5 h-5" /></Button></DropdownMenuTrigger>
                               <DropdownMenuContent align="start">
                                 <DropdownMenuItem onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*'; input.onchange = (e) => { const file = (e.target as HTMLInputElement).files?.[0]; if (file) { const reader = new FileReader(); reader.onload = (e) => { setAttachmentPreview({ file, preview: e.target?.result as string, type: 'image' }); }; reader.readAsDataURL(file); } }; input.click(); }}><ImageIcon className="w-4 h-4 mr-2 text-purple-500" />Image</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'video/*'; input.onchange = (e) => { const file = (e.target as HTMLInputElement).files?.[0]; if (file) { const reader = new FileReader(); reader.onload = (e) => { setAttachmentPreview({ file, preview: e.target?.result as string, type: 'video' }); }; reader.readAsDataURL(file); } }; input.click(); }}><Film className="w-4 h-4 mr-2 text-red-500" />Vidéo</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'video/*'; input.onchange = (e) => { const file = (e.target as HTMLInputElement).files?.[0]; if (file) { const reader = new FileReader(); reader.onload = (e) => { setAttachmentPreview({ file, preview: e.target?.result as string, type: 'video' }); }; reader.readAsDataURL(file); } }; input.click(); }}><Film className="w-4 h-4 mr-2 text-red-500" />VidÃ©o</DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx'; input.onchange = (e) => { const file = (e.target as HTMLInputElement).files?.[0]; if (file) { const reader = new FileReader(); reader.onload = (e) => { setAttachmentPreview({ file, preview: null, type: 'document' }); }; reader.readAsDataURL(file); } }; input.click(); }}><File className="w-4 h-4 mr-2 text-blue-500" />Document</DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'audio/*'; input.onchange = (e) => { const file = (e.target as HTMLInputElement).files?.[0]; if (file) { const reader = new FileReader(); reader.onload = (e) => { setAttachmentPreview({ file, preview: e.target?.result as string, type: 'audio' }); }; reader.readAsDataURL(file); } }; input.click(); }}><Mic className="w-4 h-4 mr-2 text-green-500" />Audio</DropdownMenuItem>
                               </DropdownMenuContent>
@@ -5108,7 +5109,7 @@ export default function NOCActivityApp() {
                                 </div>
                               )}
                               <Input 
-                                placeholder="Écrire un message..." 
+                                placeholder="Ã‰crire un message..." 
                                 value={newMessage} 
                                 onChange={(e) => {
                                   const value = e.target.value;
@@ -5268,7 +5269,7 @@ export default function NOCActivityApp() {
                                       audio.play().catch(() => {});
                                     }
                                   } catch (err) {
-                                    toast.error('Erreur microphone', { description: 'Impossible d\'accéder au microphone' });
+                                    toast.error('Erreur microphone', { description: 'Impossible d\'accÃ©der au microphone' });
                                   }
                                 }} 
                                 onMouseUp={() => { 
@@ -5335,7 +5336,7 @@ export default function NOCActivityApp() {
                         <div className="text-center relative z-10">
                           <div className="w-64 h-64 mx-auto mb-6 rounded-full bg-cyan-500/10 flex items-center justify-center"><MessageCircle className="w-32 h-32 text-cyan-500" /></div>
                           <h2 className="text-2xl font-medium text-slate-700 dark:text-slate-200 mb-2">Silicone Connect Chat</h2>
-                          <p className="text-slate-500 dark:text-slate-400 max-w-md">Envoyez et recevez des messages avec vos collègues en temps réel.<br />Communication sécurisée et instantanée.</p>
+                          <p className="text-slate-500 dark:text-slate-400 max-w-md">Envoyez et recevez des messages avec vos collÃ¨gues en temps rÃ©el.<br />Communication sÃ©curisÃ©e et instantanÃ©e.</p>
                         </div>
                       </div>
                     )}
@@ -5372,7 +5373,7 @@ export default function NOCActivityApp() {
                               setEditingMessage(null);
                               setEditMessageContent('');
                               setEditMessageDialogOpen(false);
-                              toast.success('Message modifié');
+                              toast.success('Message modifiÃ©');
                             }
                           }}
                         >
@@ -5384,7 +5385,7 @@ export default function NOCActivityApp() {
                   
                   <Dialog open={createGroupOpen} onOpenChange={setCreateGroupOpen}>
                     <DialogContent className="max-w-md">
-                      <DialogHeader><DialogTitle className="flex items-center gap-2"><Users className="w-5 h-5 text-cyan-500" />Créer un groupe</DialogTitle></DialogHeader>
+                      <DialogHeader><DialogTitle className="flex items-center gap-2"><Users className="w-5 h-5 text-cyan-500" />CrÃ©er un groupe</DialogTitle></DialogHeader>
                       <div className="space-y-4 py-4">
                         <div className="grid gap-2"><Label>Nom du groupe *</Label><Input value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)} placeholder="Ex: Shift A Discussion" /></div>
                         <div className="grid gap-2"><Label>Description</Label><Textarea value={newGroupDescription} onChange={(e) => setNewGroupDescription(e.target.value)} placeholder="Description du groupe..." /></div>
@@ -5392,7 +5393,7 @@ export default function NOCActivityApp() {
                       </div>
                       <DialogFooter>
                         <DialogClose asChild><Button variant="outline">Annuler</Button></DialogClose>
-                        <Button className="bg-cyan-500 hover:bg-cyan-600" disabled={!newGroupName.trim() || selectedMembers.length === 0} onClick={() => { const conversation: Conversation = { id: generateId(), type: 'group', name: newGroupName, description: newGroupDescription, participants: [{ id: user?.id || '', name: user?.name || '', role: 'admin', joinedAt: new Date() }, ...selectedMembers.map(id => { const u = Object.values(DEMO_USERS).find(u => u.id === id); return { id, name: u?.name || '', role: 'member' as const, joinedAt: new Date() }; })], unreadCount: 0, isPinned: false, isMuted: false, isArchived: false, createdBy: user?.id || '', createdAt: new Date(), updatedAt: new Date() }; setConversations(prev => [conversation, ...prev]); setSelectedConversation(conversation); setNewGroupName(''); setNewGroupDescription(''); setSelectedMembers([]); setCreateGroupOpen(false); toast.success('Groupe créé'); }}>Créer le groupe</Button>
+                        <Button className="bg-cyan-500 hover:bg-cyan-600" disabled={!newGroupName.trim() || selectedMembers.length === 0} onClick={() => { const conversation: Conversation = { id: generateId(), type: 'group', name: newGroupName, description: newGroupDescription, participants: [{ id: user?.id || '', name: user?.name || '', role: 'admin', joinedAt: new Date() }, ...selectedMembers.map(id => { const u = Object.values(DEMO_USERS).find(u => u.id === id); return { id, name: u?.name || '', role: 'member' as const, joinedAt: new Date() }; })], unreadCount: 0, isPinned: false, isMuted: false, isArchived: false, createdBy: user?.id || '', createdAt: new Date(), updatedAt: new Date() }; setConversations(prev => [conversation, ...prev]); setSelectedConversation(conversation); setNewGroupName(''); setNewGroupDescription(''); setSelectedMembers([]); setCreateGroupOpen(false); toast.success('Groupe crÃ©Ã©'); }}>CrÃ©er le groupe</Button>
                       </DialogFooter>
                     </DialogContent>
                   </Dialog>
@@ -5404,7 +5405,7 @@ export default function NOCActivityApp() {
                         {/* Call type badge */}
                         <div className="flex justify-center mb-4">
                           <Badge variant="outline" className="bg-cyan-500/20 text-cyan-400 border-cyan-500/30">
-                            {activeCall?.type === 'video' ? 'Appel Vidéo' : 'Appel Audio'}
+                            {activeCall?.type === 'video' ? 'Appel VidÃ©o' : 'Appel Audio'}
                           </Badge>
                         </div>
                         
@@ -5438,7 +5439,7 @@ export default function NOCActivityApp() {
                               {Math.floor(callTimer / 60)}:{String(callTimer % 60).padStart(2, '0')}
                             </span>
                           )}
-                          {callState === 'ended' && 'Appel terminé'}
+                          {callState === 'ended' && 'Appel terminÃ©'}
                         </p>
                         
                         {/* Ringing animation */}
@@ -5544,7 +5545,7 @@ export default function NOCActivityApp() {
                               if (callTimeoutRef.current) {
                                 clearTimeout(callTimeoutRef.current);
                               }
-                              toast.info('Appel terminé'); 
+                              toast.info('Appel terminÃ©'); 
                             }}
                           >
                             <PhoneOff className="w-6 h-6" />
@@ -5563,7 +5564,7 @@ export default function NOCActivityApp() {
                           Ajouter des participants
                         </DialogTitle>
                         <DialogDescription>
-                          Ajoutez jusqu'à 12 participants à l'appel
+                          Ajoutez jusqu'Ã  12 participants Ã  l'appel
                         </DialogDescription>
                       </DialogHeader>
                       <ScrollArea className="h-[300px] py-4">
@@ -5584,7 +5585,7 @@ export default function NOCActivityApp() {
                                       isVideoOn: true,
                                       isSpeaking: false
                                     }]);
-                                    toast.success(`${u.name} ajouté à l'appel`);
+                                    toast.success(`${u.name} ajoutÃ© Ã  l'appel`);
                                   } else {
                                     toast.error('Maximum 12 participants atteint');
                                   }
@@ -5619,7 +5620,7 @@ export default function NOCActivityApp() {
                           Nouvelle discussion
                         </DialogTitle>
                         <DialogDescription>
-                          Sélectionnez un collègue pour démarrer une conversation
+                          SÃ©lectionnez un collÃ¨gue pour dÃ©marrer une conversation
                         </DialogDescription>
                       </DialogHeader>
                       <div className="py-4">
@@ -5701,7 +5702,7 @@ export default function NOCActivityApp() {
                                       </div>
                                       <div className="flex items-center gap-2">
                                         <p className="text-xs text-muted-foreground">{contact.role.replace('_', ' ')}</p>
-                                        {isOnline && <span className="text-xs text-green-600">• En ligne</span>}
+                                        {isOnline && <span className="text-xs text-green-600">â€¢ En ligne</span>}
                                       </div>
                                     </div>
                                     {existingConv && (
@@ -5716,16 +5717,16 @@ export default function NOCActivityApp() {
                     </DialogContent>
                   </Dialog>
                   
-                  {/* Dialog Paramètres Son et Fond */}
+                  {/* Dialog ParamÃ¨tres Son et Fond */}
                   <Dialog open={backgroundSettingsOpen} onOpenChange={setBackgroundSettingsOpen}>
                     <DialogContent className="max-w-md">
                       <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
                           <Settings className="w-5 h-5 text-cyan-500" />
-                          Paramètres du Chat
+                          ParamÃ¨tres du Chat
                         </DialogTitle>
                         <DialogDescription>
-                          Personnalisez votre expérience de messagerie
+                          Personnalisez votre expÃ©rience de messagerie
                         </DialogDescription>
                       </DialogHeader>
                       <div className="space-y-6 py-4">
@@ -5752,7 +5753,7 @@ export default function NOCActivityApp() {
                               />
                             </div>
                             <div className="flex items-center justify-between">
-                              <Label className="text-sm text-muted-foreground ml-4">Son réception message</Label>
+                              <Label className="text-sm text-muted-foreground ml-4">Son rÃ©ception message</Label>
                               <Checkbox 
                                 checked={soundOnReceive} 
                                 onCheckedChange={(checked) => setSoundOnReceive(checked as boolean)}
@@ -5776,7 +5777,7 @@ export default function NOCActivityApp() {
                         <div className="space-y-4">
                           <h4 className="text-sm font-medium flex items-center gap-2">
                             <ImageIcon className="w-4 h-4 text-cyan-500" />
-                            Fond d'écran
+                            Fond d'Ã©cran
                           </h4>
                           <div className="space-y-3">
                             <Button 
@@ -5808,7 +5809,7 @@ export default function NOCActivityApp() {
                               onClick={() => handleSetBackground(null)}
                             >
                               <RotateCcw className="w-4 h-4" />
-                              Réinitialiser (logo par défaut)
+                              RÃ©initialiser (logo par dÃ©faut)
                             </Button>
                             {/* Pattern options */}
                             <div className="grid grid-cols-4 gap-2 mt-2">
@@ -5840,13 +5841,13 @@ export default function NOCActivityApp() {
                       </div>
                       <DialogFooter>
                         <Button onClick={() => setBackgroundSettingsOpen(false)} className="bg-cyan-500 hover:bg-cyan-600">
-                          Terminé
+                          TerminÃ©
                         </Button>
                       </DialogFooter>
                     </DialogContent>
                   </Dialog>
                   
-                  {/* Dialog Recadrage Photo de Profil - AMÉLIORÉ */}
+                  {/* Dialog Recadrage Photo de Profil - AMÃ‰LIORÃ‰ */}
                   <Dialog open={profilePhotoDialogOpen} onOpenChange={setProfilePhotoDialogOpen}>
                     <DialogContent className="max-w-2xl">
                       <DialogHeader>
@@ -5855,7 +5856,7 @@ export default function NOCActivityApp() {
                           Ajuster votre photo de profil
                         </DialogTitle>
                         <DialogDescription>
-                          Déplacez l'image et ajustez le zoom. La zone circulaire représente votre photo de profil finale.
+                          DÃ©placez l'image et ajustez le zoom. La zone circulaire reprÃ©sente votre photo de profil finale.
                         </DialogDescription>
                       </DialogHeader>
                       <div className="py-4">
@@ -5902,7 +5903,7 @@ export default function NOCActivityApp() {
                                   }}
                                   draggable={false}
                                 />
-                                {/* Cercle de sélection */}
+                                {/* Cercle de sÃ©lection */}
                                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                                   <div className="w-[80%] aspect-square border-4 border-white rounded-full shadow-[0_0_0_9999px_rgba(0,0,0,0.5)]" />
                                 </div>
@@ -5918,9 +5919,9 @@ export default function NOCActivityApp() {
                               </div>
                             </div>
                             
-                            {/* Aperçu final */}
+                            {/* AperÃ§u final */}
                             <div className="space-y-3">
-                              <Label className="text-sm font-medium">Aperçu final</Label>
+                              <Label className="text-sm font-medium">AperÃ§u final</Label>
                               <div className="flex flex-col items-center gap-4">
                                 <Avatar className="w-32 h-32 ring-4 ring-cyan-500 ring-offset-4">
                                   <AvatarImage 
@@ -5977,7 +5978,7 @@ export default function NOCActivityApp() {
                               size="sm"
                               onClick={() => setCropArea({ x: 50, y: 50, size: 100 })}
                             >
-                              <RotateCcw className="w-4 h-4 mr-1" /> Réinitialiser
+                              <RotateCcw className="w-4 h-4 mr-1" /> RÃ©initialiser
                             </Button>
                             <Button 
                               variant="outline" 
@@ -6016,16 +6017,16 @@ export default function NOCActivityApp() {
                     </DialogContent>
                   </Dialog>
                   
-                  {/* Create Status Dialog - AMÉLIORÉ */}
+                  {/* Create Status Dialog - AMÃ‰LIORÃ‰ */}
                   <Dialog open={createStatusOpen} onOpenChange={setCreateStatusOpen}>
                     <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
                       <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
                           <Camera className="w-5 h-5 text-cyan-500" />
-                          Créer un status
+                          CrÃ©er un status
                         </DialogTitle>
                         <DialogDescription>
-                          Partagez un moment avec vos collègues (disparaît après 24h)
+                          Partagez un moment avec vos collÃ¨gues (disparaÃ®t aprÃ¨s 24h)
                         </DialogDescription>
                       </DialogHeader>
                       <div className="space-y-4 py-4">
@@ -6075,7 +6076,7 @@ export default function NOCActivityApp() {
                               input.click();
                             }}
                           >
-                            <Film className="w-4 h-4 text-red-500" /> Vidéo
+                            <Film className="w-4 h-4 text-red-500" /> VidÃ©o
                           </Button>
                         </div>
                         
@@ -6103,11 +6104,11 @@ export default function NOCActivityApp() {
                         
                         {/* Caption */}
                         <div className="space-y-2">
-                          <Label>Légende (optionnel)</Label>
+                          <Label>LÃ©gende (optionnel)</Label>
                           <Textarea 
                             value={statusCaption}
                             onChange={(e) => setStatusCaption(e.target.value)}
-                            placeholder="Ajouter une légende..."
+                            placeholder="Ajouter une lÃ©gende..."
                             className="resize-none"
                             rows={2}
                           />
@@ -6116,7 +6117,7 @@ export default function NOCActivityApp() {
                         {/* Privacy settings - Who can see */}
                         <div className="space-y-3">
                           <div className="flex items-center justify-between">
-                            <Label className="text-sm font-medium">Visibilité</Label>
+                            <Label className="text-sm font-medium">VisibilitÃ©</Label>
                             <span className="text-xs text-muted-foreground">
                               {statusBlockedContacts.length === 0 
                                 ? 'Tous les contacts' 
@@ -6183,7 +6184,7 @@ export default function NOCActivityApp() {
                               setStatusCaption('');
                               setStatusBlockedContacts([]);
                               setCreateStatusOpen(false);
-                              toast.success('Status publié', { description: 'Il sera visible pendant 24 heures' });
+                              toast.success('Status publiÃ©', { description: 'Il sera visible pendant 24 heures' });
                             }
                           }}
                         >
@@ -6202,14 +6203,14 @@ export default function NOCActivityApp() {
                           Mes statuts
                         </DialogTitle>
                         <DialogDescription>
-                          Gérez vos statuts publiés (disparaissent après 24h)
+                          GÃ©rez vos statuts publiÃ©s (disparaissent aprÃ¨s 24h)
                         </DialogDescription>
                       </DialogHeader>
                       <div className="py-4">
                         {statusList.filter(s => s.userId === user?.id).length === 0 ? (
                           <div className="text-center py-8">
                             <Camera className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600 mb-3" />
-                            <p className="text-muted-foreground">Aucun statut publié</p>
+                            <p className="text-muted-foreground">Aucun statut publiÃ©</p>
                             <Button 
                               variant="outline" 
                               size="sm" 
@@ -6219,7 +6220,7 @@ export default function NOCActivityApp() {
                                 setCreateStatusOpen(true);
                               }}
                             >
-                              <Plus className="w-4 h-4 mr-1" /> Créer un statut
+                              <Plus className="w-4 h-4 mr-1" /> CrÃ©er un statut
                             </Button>
                           </div>
                         ) : (
@@ -6240,7 +6241,7 @@ export default function NOCActivityApp() {
                                     </div>
                                     <div className="flex-1 min-w-0">
                                       <p className="text-xs text-muted-foreground">
-                                        {format(new Date(status.createdAt), "dd MMM yyyy 'à' HH:mm", { locale: fr })}
+                                        {format(new Date(status.createdAt), "dd MMM yyyy 'Ã ' HH:mm", { locale: fr })}
                                       </p>
                                       <p className="text-xs text-orange-600 dark:text-orange-400 mt-0.5">
                                         Expire dans {timeLeft}h
@@ -6278,7 +6279,7 @@ export default function NOCActivityApp() {
                                         className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
                                         onClick={() => {
                                           setStatusList(prev => prev.filter(s => s.id !== status.id));
-                                          toast.success('Statut supprimé');
+                                          toast.success('Statut supprimÃ©');
                                         }}
                                       >
                                         <Trash2 className="w-4 h-4" />
@@ -6307,7 +6308,7 @@ export default function NOCActivityApp() {
                     </DialogContent>
                   </Dialog>
                   
-                  {/* View Status Dialog - AMÉLIORÉ */}
+                  {/* View Status Dialog - AMÃ‰LIORÃ‰ */}
                   <Dialog open={statusViewOpen} onOpenChange={setStatusViewOpen}>
                     <DialogContent className="max-w-lg p-0 bg-black border-0 h-[85vh] max-h-[85vh]">
                       {viewingStatus && (
@@ -6349,7 +6350,7 @@ export default function NOCActivityApp() {
                                 size="icon"
                                 className="text-white hover:bg-black/50"
                                 onClick={() => setShowStatusDetails(!showStatusDetails)}
-                                title="Voir les détails"
+                                title="Voir les dÃ©tails"
                               >
                                 <Users className="w-5 h-5" />
                               </Button>
@@ -6540,25 +6541,25 @@ export default function NOCActivityApp() {
                     <div>
                       <h1 className="text-2xl lg:text-3xl font-bold flex items-center gap-2">
                         <ClipboardList className="w-7 h-7 text-blue-600" />
-                        Mes Tâches Journalières
+                        Mes TÃ¢ches JournaliÃ¨res
                       </h1>
-                      <p className="text-muted-foreground">Gestion intelligente et supervisée des tâches NOC</p>
+                      <p className="text-muted-foreground">Gestion intelligente et supervisÃ©e des tÃ¢ches NOC</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <Dialog open={taskDialogOpen} onOpenChange={setTaskDialogOpen}>
                         <DialogTrigger asChild>
                           <Button className="gap-2 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700">
-                            <Plus className="w-4 h-4" /> Nouvelle tâche
+                            <Plus className="w-4 h-4" /> Nouvelle tÃ¢che
                           </Button>
                         </DialogTrigger>
                         <DialogContent className="max-w-lg">
                           <DialogHeader>
                             <DialogTitle className="flex items-center gap-2">
                               <ClipboardList className="w-5 h-5 text-blue-600" />
-                              Créer une nouvelle tâche
+                              CrÃ©er une nouvelle tÃ¢che
                             </DialogTitle>
                             <DialogDescription>
-                              Remplissez les détails de votre tâche
+                              Remplissez les dÃ©tails de votre tÃ¢che
                             </DialogDescription>
                           </DialogHeader>
                           <div className="grid gap-4 py-4">
@@ -6566,7 +6567,7 @@ export default function NOCActivityApp() {
                               <Label htmlFor="task-title">Titre *</Label>
                               <Input 
                                 id="task-title" 
-                                placeholder="Titre de la tâche"
+                                placeholder="Titre de la tÃ¢che"
                                 value={newTask.title}
                                 onChange={(e) => setNewTask({...newTask, title: e.target.value})}
                               />
@@ -6575,41 +6576,41 @@ export default function NOCActivityApp() {
                               <Label htmlFor="task-desc">Description</Label>
                               <Textarea 
                                 id="task-desc" 
-                                placeholder="Description détaillée..."
+                                placeholder="Description dÃ©taillÃ©e..."
                                 value={newTask.description}
                                 onChange={(e) => setNewTask({...newTask, description: e.target.value})}
                               />
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                               <div className="grid gap-2">
-                                <Label>Priorité</Label>
+                                <Label>PrioritÃ©</Label>
                                 <Select value={newTask.priority} onValueChange={(v) => setNewTask({...newTask, priority: v as TaskPriority})}>
                                   <SelectTrigger><SelectValue /></SelectTrigger>
                                   <SelectContent>
-                                    <SelectItem value="low">🟢 Faible</SelectItem>
-                                    <SelectItem value="medium">🔵 Moyenne</SelectItem>
-                                    <SelectItem value="high">🟠 Haute</SelectItem>
-                                    <SelectItem value="critical">🔴 Critique</SelectItem>
+                                    <SelectItem value="low">ðŸŸ¢ Faible</SelectItem>
+                                    <SelectItem value="medium">ðŸ”µ Moyenne</SelectItem>
+                                    <SelectItem value="high">ðŸŸ  Haute</SelectItem>
+                                    <SelectItem value="critical">ðŸ”´ Critique</SelectItem>
                                   </SelectContent>
                                 </Select>
                               </div>
                               <div className="grid gap-2">
-                                <Label>Catégorie</Label>
+                                <Label>CatÃ©gorie</Label>
                                 <Select value={newTask.category} onValueChange={(v) => setNewTask({...newTask, category: v as TaskCategory})}>
                                   <SelectTrigger><SelectValue /></SelectTrigger>
                                   <SelectContent>
-                                    <SelectItem value="incident">🚨 Incident</SelectItem>
-                                    <SelectItem value="maintenance">🔧 Maintenance</SelectItem>
-                                    <SelectItem value="surveillance">👁️ Surveillance</SelectItem>
-                                    <SelectItem value="administrative">📋 Administratif</SelectItem>
-                                    <SelectItem value="other">📌 Autre</SelectItem>
+                                    <SelectItem value="incident">ðŸš¨ Incident</SelectItem>
+                                    <SelectItem value="maintenance">ðŸ”§ Maintenance</SelectItem>
+                                    <SelectItem value="surveillance">ðŸ‘ï¸ Surveillance</SelectItem>
+                                    <SelectItem value="administrative">ðŸ“‹ Administratif</SelectItem>
+                                    <SelectItem value="other">ðŸ“Œ Autre</SelectItem>
                                   </SelectContent>
                                 </Select>
                               </div>
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                               <div className="grid gap-2">
-                                <Label>Durée estimée (minutes)</Label>
+                                <Label>DurÃ©e estimÃ©e (minutes)</Label>
                                 <Select value={newTask.estimatedDuration.toString()} onValueChange={(v) => setNewTask({...newTask, estimatedDuration: parseInt(v)})}>
                                   <SelectTrigger><SelectValue /></SelectTrigger>
                                   <SelectContent>
@@ -6624,7 +6625,7 @@ export default function NOCActivityApp() {
                                 </Select>
                               </div>
                               <div className="grid gap-2">
-                                <Label>Heure de début</Label>
+                                <Label>Heure de dÃ©but</Label>
                                 <Input 
                                   type="time"
                                   value={format(newTask.startTime, 'HH:mm')}
@@ -6638,9 +6639,9 @@ export default function NOCActivityApp() {
                               </div>
                             </div>
                             <div className="grid gap-2">
-                              <Label>Tags (séparés par des virgules)</Label>
+                              <Label>Tags (sÃ©parÃ©s par des virgules)</Label>
                               <Input 
-                                placeholder="urgent, client, réseau..."
+                                placeholder="urgent, client, rÃ©seau..."
                                 value={newTask.tags}
                                 onChange={(e) => setNewTask({...newTask, tags: e.target.value})}
                               />
@@ -6678,9 +6679,9 @@ export default function NOCActivityApp() {
                                 tags: ''
                               });
                               setTaskDialogOpen(false);
-                              toast.success('Tâche créée', { description: 'La tâche a été ajoutée à votre liste' });
+                              toast.success('TÃ¢che crÃ©Ã©e', { description: 'La tÃ¢che a Ã©tÃ© ajoutÃ©e Ã  votre liste' });
                             }}>
-                              Créer la tâche
+                              CrÃ©er la tÃ¢che
                             </Button>
                           </DialogFooter>
                         </DialogContent>
@@ -6721,7 +6722,7 @@ export default function NOCActivityApp() {
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <CheckCircle2 className="w-4 h-4 text-green-500" />
-                            <span className="text-sm text-muted-foreground">Terminées</span>
+                            <span className="text-sm text-muted-foreground">TerminÃ©es</span>
                           </div>
                           <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
                             {nocTasks.filter(t => t.status === 'completed' && t.userId === user?.id).length}
@@ -6763,7 +6764,7 @@ export default function NOCActivityApp() {
                       <div className="flex-1 relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                         <Input 
-                          placeholder="Rechercher une tâche..." 
+                          placeholder="Rechercher une tÃ¢che..." 
                           className="pl-9"
                           value={searchQuery}
                           onChange={(e) => setSearchQuery(e.target.value)}
@@ -6775,11 +6776,11 @@ export default function NOCActivityApp() {
                             <SelectValue placeholder="Filtrer" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="my">📋 Mes tâches</SelectItem>
-                            <SelectItem value="all">👥 Toutes</SelectItem>
-                            <SelectItem value="pending">⏳ En attente</SelectItem>
-                            <SelectItem value="late">🔴 En retard</SelectItem>
-                            <SelectItem value="critical">⚡ Critiques</SelectItem>
+                            <SelectItem value="my">ðŸ“‹ Mes tÃ¢ches</SelectItem>
+                            <SelectItem value="all">ðŸ‘¥ Toutes</SelectItem>
+                            <SelectItem value="pending">â³ En attente</SelectItem>
+                            <SelectItem value="late">ðŸ”´ En retard</SelectItem>
+                            <SelectItem value="critical">âš¡ Critiques</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -6791,7 +6792,7 @@ export default function NOCActivityApp() {
                     <CardHeader className="pb-2 pt-4">
                       <CardTitle className="text-base flex items-center gap-2">
                         <ClipboardList className="w-5 h-5" />
-                        Liste des tâches
+                        Liste des tÃ¢ches
                         {nocTasks.length > 0 && (
                           <Badge variant="outline" className="ml-2">{nocTasks.length}</Badge>
                         )}
@@ -6802,12 +6803,12 @@ export default function NOCActivityApp() {
                         {nocTasks.length === 0 ? (
                           <div className="flex flex-col items-center justify-center py-12 text-center">
                             <ClipboardList className="w-16 h-16 text-muted-foreground/30 mb-4" />
-                            <h3 className="font-medium text-lg mb-2">Aucune tâche</h3>
+                            <h3 className="font-medium text-lg mb-2">Aucune tÃ¢che</h3>
                             <p className="text-muted-foreground text-sm mb-4">
-                              Commencez par créer votre première tâche
+                              Commencez par crÃ©er votre premiÃ¨re tÃ¢che
                             </p>
                             <Button onClick={() => setTaskDialogOpen(true)}>
-                              <Plus className="w-4 h-4 mr-2" /> Créer une tâche
+                              <Plus className="w-4 h-4 mr-2" /> CrÃ©er une tÃ¢che
                             </Button>
                           </div>
                         ) : (
@@ -6844,7 +6845,7 @@ export default function NOCActivityApp() {
                                       completedAt: checked ? new Date() : undefined,
                                       actualDuration: checked ? calculateActualDuration(t) : undefined
                                     } : t));
-                                    toast.success(checked ? 'Tâche terminée ✓' : 'Tâche réactivée');
+                                    toast.success(checked ? 'TÃ¢che terminÃ©e âœ“' : 'TÃ¢che rÃ©activÃ©e');
                                   }} 
                                   className="mt-1" 
                                 />
@@ -6870,7 +6871,7 @@ export default function NOCActivityApp() {
                                       {format(task.startTime, 'HH:mm')} - {format(task.estimatedEndTime, 'HH:mm')}
                                     </span>
                                     <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                      ⏱ {formatDuration(task.estimatedDuration)}
+                                      â± {formatDuration(task.estimatedDuration)}
                                     </span>
                                     {task.tags.length > 0 && (
                                       <div className="flex gap-1">
@@ -6890,7 +6891,7 @@ export default function NOCActivityApp() {
                                           size="sm"
                                           onClick={() => {
                                             setNocTasks(prev => prev.map(t => t.id === task.id ? {...t, status: 'in_progress'} : t));
-                                            toast.info('Tâche démarrée');
+                                            toast.info('TÃ¢che dÃ©marrÃ©e');
                                           }}
                                         >
                                           <Play className="w-4 h-4 text-blue-600" />
@@ -6902,7 +6903,7 @@ export default function NOCActivityApp() {
                                           size="sm"
                                           onClick={() => {
                                             setNocTasks(prev => prev.map(t => t.id === task.id ? {...t, status: 'on_hold'} : t));
-                                            toast.warning('Tâche suspendue');
+                                            toast.warning('TÃ¢che suspendue');
                                           }}
                                         >
                                           <Pause className="w-4 h-4 text-orange-600" />
@@ -6914,7 +6915,7 @@ export default function NOCActivityApp() {
                                           size="sm"
                                           onClick={() => {
                                             setNocTasks(prev => prev.map(t => t.id === task.id ? {...t, status: 'in_progress'} : t));
-                                            toast.info('Tâche reprise');
+                                            toast.info('TÃ¢che reprise');
                                           }}
                                         >
                                           <Play className="w-4 h-4 text-green-600" />
@@ -6936,9 +6937,9 @@ export default function NOCActivityApp() {
                                     variant="ghost" 
                                     size="sm"
                                     onClick={() => {
-                                      if (confirm('Supprimer cette tâche ?')) {
+                                      if (confirm('Supprimer cette tÃ¢che ?')) {
                                         setNocTasks(prev => prev.filter(t => t.id !== task.id));
-                                        toast.success('Tâche supprimée');
+                                        toast.success('TÃ¢che supprimÃ©e');
                                       }
                                     }}
                                   >
@@ -6969,15 +6970,15 @@ export default function NOCActivityApp() {
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                               <div className="text-center">
                                 <p className="text-2xl font-bold text-blue-600">{perf.productivityRate}%</p>
-                                <p className="text-sm text-muted-foreground">Productivité</p>
+                                <p className="text-sm text-muted-foreground">ProductivitÃ©</p>
                               </div>
                               <div className="text-center">
                                 <p className="text-2xl font-bold text-green-600">{perf.onTimeRate}%</p>
-                                <p className="text-sm text-muted-foreground">À l'heure</p>
+                                <p className="text-sm text-muted-foreground">Ã€ l'heure</p>
                               </div>
                               <div className="text-center">
                                 <p className="text-2xl font-bold text-cyan-600">{perf.tasksCompleted}/{perf.tasksCreated}</p>
-                                <p className="text-sm text-muted-foreground">Tâches</p>
+                                <p className="text-sm text-muted-foreground">TÃ¢ches</p>
                               </div>
                               <div className="text-center">
                                 <div className="flex items-center justify-center gap-1">
@@ -6999,22 +7000,22 @@ export default function NOCActivityApp() {
                 <motion.div key="activities" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h1 className="text-2xl lg:text-3xl font-bold">Suivi des Activités</h1>
+                      <h1 className="text-2xl lg:text-3xl font-bold">Suivi des ActivitÃ©s</h1>
                       <p className="text-muted-foreground">Enregistrez vos actions NOC</p>
                     </div>
                     <Dialog open={activityDialogOpen} onOpenChange={setActivityDialogOpen}>
                       <DialogTrigger asChild>
                         <Button>
-                          <Plus className="w-4 h-4 mr-2" /> Nouvelle activité
+                          <Plus className="w-4 h-4 mr-2" /> Nouvelle activitÃ©
                         </Button>
                       </DialogTrigger>
                       <DialogContent>
                         <DialogHeader>
-                          <DialogTitle>Enregistrer une activité</DialogTitle>
+                          <DialogTitle>Enregistrer une activitÃ©</DialogTitle>
                         </DialogHeader>
                         <div className="grid gap-4 py-4">
                           <div className="grid gap-2">
-                            <Label>Catégorie</Label>
+                            <Label>CatÃ©gorie</Label>
                             <Select value={newActivity.category} onValueChange={(v) => setNewActivity({ ...newActivity, category: v, type: '' })}>
                               <SelectTrigger><SelectValue /></SelectTrigger>
                               <SelectContent>
@@ -7028,7 +7029,7 @@ export default function NOCActivityApp() {
                           <div className="grid gap-2">
                             <Label>Type</Label>
                             <Select value={newActivity.type} onValueChange={(v) => setNewActivity({ ...newActivity, type: v })}>
-                              <SelectTrigger><SelectValue placeholder="Sélectionner" /></SelectTrigger>
+                              <SelectTrigger><SelectValue placeholder="SÃ©lectionner" /></SelectTrigger>
                               <SelectContent>
                                 {ACTIVITY_TYPES[newActivity.category]?.map(type => (
                                   <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
@@ -7057,7 +7058,7 @@ export default function NOCActivityApp() {
                               setActivities(prev => [activity, ...prev]);
                               setNewActivity({ type: '', category: 'Monitoring', description: '' });
                               setActivityDialogOpen(false);
-                              toast.success('Activité enregistrée');
+                              toast.success('ActivitÃ© enregistrÃ©e');
                             }
                           }}>Enregistrer</Button>
                         </DialogFooter>
@@ -7147,7 +7148,7 @@ export default function NOCActivityApp() {
                         <nav className="px-2 py-1 space-y-0.5">
                           {/* Primary Folders */}
                           {[
-                            { folder: 'inbox' as MessageFolder, icon: Inbox, label: 'Boîte de réception', count: messages.filter(m => m.folder === 'inbox' && !m.isRead).length },
+                            { folder: 'inbox' as MessageFolder, icon: Inbox, label: 'BoÃ®te de rÃ©ception', count: messages.filter(m => m.folder === 'inbox' && !m.isRead).length },
                             { folder: 'starred' as MessageFolder, icon: Star, label: 'Suivis', count: messages.filter(m => m.isStarred).length },
                           ].map((item) => (
                             <button
@@ -7198,7 +7199,7 @@ export default function NOCActivityApp() {
                           
                           {/* Other Folders */}
                           {[
-                            { folder: 'sent' as MessageFolder, icon: Send, label: 'Envoyés', count: messages.filter(m => m.folder === 'sent').length },
+                            { folder: 'sent' as MessageFolder, icon: Send, label: 'EnvoyÃ©s', count: messages.filter(m => m.folder === 'sent').length },
                             { folder: 'drafts' as MessageFolder, icon: FileText, label: 'Brouillons', count: messages.filter(m => m.folder === 'drafts').length },
                             { folder: 'spam' as MessageFolder, icon: AlertTriangle, label: 'Spam', count: messages.filter(m => m.folder === 'spam').length },
                             { folder: 'trash' as MessageFolder, icon: Trash2, label: 'Corbeille', count: messages.filter(m => m.folder === 'trash').length },
@@ -7233,7 +7234,7 @@ export default function NOCActivityApp() {
                         {!sidebarCollapsed && (
                           <div className="px-3 py-2 border-t mt-2">
                             <div className="flex items-center justify-between mb-2">
-                              <p className="text-xs font-medium text-muted-foreground">Libellés</p>
+                              <p className="text-xs font-medium text-muted-foreground">LibellÃ©s</p>
                               <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={() => setLabelDialogOpen(true)}>
                                 <Plus className="w-3 h-3" />
                               </Button>
@@ -7252,7 +7253,7 @@ export default function NOCActivityApp() {
                               </button>
                             ))}
                             {emailLabels.length === 0 && (
-                              <p className="text-xs text-muted-foreground px-2">Aucun libellé</p>
+                              <p className="text-xs text-muted-foreground px-2">Aucun libellÃ©</p>
                             )}
                           </div>
                         )}
@@ -7263,7 +7264,7 @@ export default function NOCActivityApp() {
                         <div className="p-3 border-t">
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <span>{messages.filter(m => m.folder === 'inbox').length} messages</span>
-                            <span>•</span>
+                            <span>â€¢</span>
                             <span>{messages.filter(m => m.folder === 'inbox' && !m.isRead).length} non lus</span>
                           </div>
                         </div>
@@ -7303,10 +7304,10 @@ export default function NOCActivityApp() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="start">
                             <DropdownMenuItem onClick={() => setSelectedMessages(new Set(getFilteredMessages().map(m => m.id)))}>
-                              Tout sélectionner
+                              Tout sÃ©lectionner
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => setSelectedMessages(new Set())}>
-                              Tout désélectionner
+                              Tout dÃ©sÃ©lectionner
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={() => setSelectedMessages(new Set(getFilteredMessages().filter(m => !m.isRead).map(m => m.id)))}>
@@ -7325,7 +7326,7 @@ export default function NOCActivityApp() {
                         </DropdownMenu>
                         
                         {/* Refresh */}
-                        <Button variant="ghost" size="sm" onClick={() => toast.success('Messages actualisés')}>
+                        <Button variant="ghost" size="sm" onClick={() => toast.success('Messages actualisÃ©s')}>
                           <RefreshCw className="w-4 h-4" />
                         </Button>
                         
@@ -7335,21 +7336,21 @@ export default function NOCActivityApp() {
                             <Button variant="ghost" size="sm" onClick={() => {
                               setMessages(prev => prev.map(m => selectedMessages.has(m.id) ? {...m, folder: 'trash'} : m));
                               setSelectedMessages(new Set());
-                              toast.success(`${selectedMessages.size} message(s) supprimé(s)`);
+                              toast.success(`${selectedMessages.size} message(s) supprimÃ©(s)`);
                             }}>
                               <Trash2 className="w-4 h-4" />
                             </Button>
                             <Button variant="ghost" size="sm" onClick={() => {
                               setMessages(prev => prev.map(m => selectedMessages.has(m.id) ? {...m, isRead: true} : m));
                               setSelectedMessages(new Set());
-                              toast.success('Messages marqués comme lus');
+                              toast.success('Messages marquÃ©s comme lus');
                             }}>
                               <Mail className="w-4 h-4" />
                             </Button>
                             <Button variant="ghost" size="sm" onClick={() => {
                               setMessages(prev => prev.map(m => selectedMessages.has(m.id) ? {...m, folder: 'spam'} : m));
                               setSelectedMessages(new Set());
-                              toast.success('Messages signalés comme spam');
+                              toast.success('Messages signalÃ©s comme spam');
                             }}>
                               <AlertTriangle className="w-4 h-4" />
                             </Button>
@@ -7384,14 +7385,14 @@ export default function NOCActivityApp() {
                                   <div className="grid gap-2">
                                     <Label className="text-xs">De</Label>
                                     <Input 
-                                      placeholder="Expéditeur..." 
+                                      placeholder="ExpÃ©diteur..." 
                                       value={advancedSearchFilters.from}
                                       onChange={(e) => setAdvancedSearchFilters(prev => ({...prev, from: e.target.value}))}
                                       className="h-8"
                                     />
                                   </div>
                                   <div className="grid gap-2">
-                                    <Label className="text-xs">À</Label>
+                                    <Label className="text-xs">Ã€</Label>
                                     <Input 
                                       placeholder="Destinataire..." 
                                       value={advancedSearchFilters.to}
@@ -7413,7 +7414,7 @@ export default function NOCActivityApp() {
                                       checked={advancedSearchFilters.hasAttachment}
                                       onCheckedChange={(checked) => setAdvancedSearchFilters(prev => ({...prev, hasAttachment: !!checked}))}
                                     />
-                                    <Label className="text-xs">Avec pièce jointe</Label>
+                                    <Label className="text-xs">Avec piÃ¨ce jointe</Label>
                                   </div>
                                   <div className="flex gap-2">
                                     <Button size="sm" onClick={() => setAdvancedSearchOpen(false)} className="flex-1">
@@ -7452,7 +7453,7 @@ export default function NOCActivityApp() {
                               <DropdownMenuItem onClick={() => setDisplayDensity('default')}>
                                 <div className="flex items-center gap-2">
                                   {displayDensity === 'default' && <Check className="w-4 h-4" />}
-                                  <span className={displayDensity === 'default' ? '' : 'ml-6'}>Par défaut</span>
+                                  <span className={displayDensity === 'default' ? '' : 'ml-6'}>Par dÃ©faut</span>
                                 </div>
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => setDisplayDensity('comfortable')}>
@@ -7464,7 +7465,7 @@ export default function NOCActivityApp() {
                               <DropdownMenuSeparator />
                               <DropdownMenuItem onClick={() => setGmailSettingsOpen(true)}>
                                 <Settings className="w-4 h-4 mr-2" />
-                                Paramètres
+                                ParamÃ¨tres
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -7529,7 +7530,7 @@ export default function NOCActivityApp() {
                               <DropdownMenuSeparator />
                               <DropdownMenuItem onClick={() => setGmailSettingsOpen(true)}>
                                 <Settings className="w-4 h-4 mr-2" />
-                                Paramètres
+                                ParamÃ¨tres
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => setProfileDialogOpen(true)}>
                                 <User className="w-4 h-4 mr-2" />
@@ -7538,7 +7539,7 @@ export default function NOCActivityApp() {
                               <DropdownMenuSeparator />
                               <DropdownMenuItem onClick={handleLogout}>
                                 <LogOut className="w-4 h-4 mr-2" />
-                                Déconnexion
+                                DÃ©connexion
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -7559,7 +7560,7 @@ export default function NOCActivityApp() {
                               <Button variant="ghost" size="sm" onClick={() => {
                                 const isArchived = selectedMessage.folder === 'archived';
                                 setMessages(prev => prev.map(m => m.id === selectedMessage.id ? {...m, folder: isArchived ? 'inbox' : 'archived'} : m));
-                                toast.success(isArchived ? 'Message désarchivé' : 'Message archivé');
+                                toast.success(isArchived ? 'Message dÃ©sarchivÃ©' : 'Message archivÃ©');
                               }}>
                                 <Archive className="w-4 h-4" />
                               </Button>
@@ -7578,7 +7579,7 @@ export default function NOCActivityApp() {
                                   newImportant.add(selectedMessage.id);
                                 }
                                 setImportantEmails(newImportant);
-                                toast.success(isImportant ? 'Marqué comme non important' : 'Marqué comme important');
+                                toast.success(isImportant ? 'MarquÃ© comme non important' : 'MarquÃ© comme important');
                               }}>
                                 <AlertCircle className={`w-4 h-4 ${importantEmails.has(selectedMessage.id) ? 'text-yellow-500 fill-yellow-500' : ''}`} />
                               </Button>
@@ -7605,30 +7606,30 @@ export default function NOCActivityApp() {
                                     setReplyToMessage(selectedMessage);
                                     setComposeOpen(true);
                                   }}>
-                                    <Reply className="w-4 h-4 mr-2" /> Répondre
+                                    <Reply className="w-4 h-4 mr-2" /> RÃ©pondre
                                   </DropdownMenuItem>
                                   <DropdownMenuItem onClick={() => {
                                     setForwardMessage(selectedMessage);
                                     setComposeOpen(true);
                                   }}>
-                                    <Forward className="w-4 h-4 mr-2" /> Transférer
+                                    <Forward className="w-4 h-4 mr-2" /> TransfÃ©rer
                                   </DropdownMenuItem>
                                   <DropdownMenuSeparator />
                                   <DropdownMenuItem onClick={() => {
                                     const snoozeDate = new Date(Date.now() + 3600000);
                                     setSnoozedEmails(prev => new Map(prev).set(selectedMessage.id, snoozeDate));
-                                    toast.success('Message reporté à ' + format(snoozeDate, 'HH:mm'));
+                                    toast.success('Message reportÃ© Ã  ' + format(snoozeDate, 'HH:mm'));
                                   }}>
                                     <Clock className="w-4 h-4 mr-2" /> Reporter
                                   </DropdownMenuItem>
                                   <DropdownMenuItem onClick={() => setLabelDialogOpen(true)}>
-                                    <Tag className="w-4 h-4 mr-2" /> Ajouter un libellé
+                                    <Tag className="w-4 h-4 mr-2" /> Ajouter un libellÃ©
                                   </DropdownMenuItem>
                                   <DropdownMenuSeparator />
                                   <DropdownMenuItem onClick={() => {
                                     setMessages(prev => prev.map(m => m.id === selectedMessage.id ? {...m, folder: 'trash'} : m));
                                     setSelectedMessage(null);
-                                    toast.success('Message supprimé');
+                                    toast.success('Message supprimÃ©');
                                   }} className="text-red-600">
                                     <Trash2 className="w-4 h-4 mr-2" /> Supprimer
                                   </DropdownMenuItem>
@@ -7652,7 +7653,7 @@ export default function NOCActivityApp() {
                                       <span className="text-sm text-muted-foreground">&lt;{selectedMessage.from.email}&gt;</span>
                                     </div>
                                     <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
-                                      <span>À: {selectedMessage.to.map(t => t.name).join(', ')}</span>
+                                      <span>Ã€: {selectedMessage.to.map(t => t.name).join(', ')}</span>
                                       {selectedMessage.cc.length > 0 && (
                                         <span>Cc: {selectedMessage.cc.map(c => c.name).join(', ')}</span>
                                       )}
@@ -7672,7 +7673,7 @@ export default function NOCActivityApp() {
                                   <div className="mt-6 pt-4 border-t">
                                     <p className="text-sm font-medium text-muted-foreground mb-3">
                                       <Paperclip className="w-4 h-4 inline mr-2" />
-                                      Pièces jointes ({selectedMessage.attachments.length})
+                                      PiÃ¨ces jointes ({selectedMessage.attachments.length})
                                     </p>
                                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                                       {selectedMessage.attachments.map((att) => (
@@ -7701,7 +7702,7 @@ export default function NOCActivityApp() {
                                     setComposeOpen(true);
                                   }}
                                 >
-                                  <Reply className="w-4 h-4" /> Répondre
+                                  <Reply className="w-4 h-4" /> RÃ©pondre
                                 </Button>
                                 <Button 
                                   variant="outline" 
@@ -7711,7 +7712,7 @@ export default function NOCActivityApp() {
                                     setComposeOpen(true);
                                   }}
                                 >
-                                  <Users className="w-4 h-4" /> Répondre à tous
+                                  <Users className="w-4 h-4" /> RÃ©pondre Ã  tous
                                 </Button>
                                 <Button 
                                   variant="outline" 
@@ -7721,7 +7722,7 @@ export default function NOCActivityApp() {
                                     setComposeOpen(true);
                                   }}
                                 >
-                                  <Forward className="w-4 h-4" /> Transférer
+                                  <Forward className="w-4 h-4" /> TransfÃ©rer
                                 </Button>
                               </div>
                             </div>
@@ -7906,7 +7907,7 @@ export default function NOCActivityApp() {
                         <div className="flex items-center justify-between">
                           <DialogTitle className="flex items-center gap-2">
                             <Mail className="w-5 h-5 text-cyan-500" />
-                            {replyToMessage ? 'Répondre' : forwardMessage ? 'Transférer' : 'Nouveau message'}
+                            {replyToMessage ? 'RÃ©pondre' : forwardMessage ? 'TransfÃ©rer' : 'Nouveau message'}
                           </DialogTitle>
                           <div className="flex items-center gap-1">
                             <Button variant="ghost" size="sm" onClick={() => setComposeMinimized(!composeMinimized)}>
@@ -7924,7 +7925,7 @@ export default function NOCActivityApp() {
                           <div className="flex-1 overflow-y-auto space-y-2 py-2">
                             {/* To field with autocomplete */}
                             <div className="flex items-center gap-2 border-b pb-2">
-                              <div className="w-16 text-sm text-muted-foreground flex-shrink-0">À</div>
+                              <div className="w-16 text-sm text-muted-foreground flex-shrink-0">Ã€</div>
                               <div className="flex-1 flex flex-wrap gap-1 items-center">
                                 {newEmail.to.map((recipient, i) => (
                                   <Badge key={i} variant="secondary" className="gap-1">
@@ -8158,7 +8159,7 @@ export default function NOCActivityApp() {
                             <Textarea
                               value={newEmail.body}
                               onChange={(e) => setNewEmail(prev => ({...prev, body: e.target.value}))}
-                              placeholder="Écrivez votre message..."
+                              placeholder="Ã‰crivez votre message..."
                               className={`min-h-[200px] flex-1 border-0 focus-visible:ring-0 resize-none ${richTextStyle.bold ? 'font-bold' : ''} ${richTextStyle.italic ? 'italic' : ''} ${richTextStyle.underline ? 'underline' : ''}`}
                               style={{ 
                                 fontFamily: richTextStyle.fontFamily, 
@@ -8215,7 +8216,7 @@ export default function NOCActivityApp() {
                                           tomorrow.setDate(tomorrow.getDate() + 1);
                                           tomorrow.setHours(8, 0, 0, 0);
                                           setNewEmail(prev => ({...prev, scheduledAt: tomorrow}));
-                                          toast.success('Envoi planifié pour demain 8h');
+                                          toast.success('Envoi planifiÃ© pour demain 8h');
                                         }}>
                                           Demain 8h
                                         </Button>
@@ -8224,7 +8225,7 @@ export default function NOCActivityApp() {
                                           monday.setDate(monday.getDate() + (1 + 7 - monday.getDay()) % 7);
                                           monday.setHours(9, 0, 0, 0);
                                           setNewEmail(prev => ({...prev, scheduledAt: monday}));
-                                          toast.success('Envoi planifié pour lundi 9h');
+                                          toast.success('Envoi planifiÃ© pour lundi 9h');
                                         }}>
                                           Lundi 9h
                                         </Button>
@@ -8250,7 +8251,7 @@ export default function NOCActivityApp() {
                                       <CheckCheck className="w-4 h-4" />
                                     </Button>
                                   </TooltipTrigger>
-                                  <TooltipContent>Accusé de réception</TooltipContent>
+                                  <TooltipContent>AccusÃ© de rÃ©ception</TooltipContent>
                                 </Tooltip>
                               </div>
                               
@@ -8278,7 +8279,7 @@ export default function NOCActivityApp() {
                                   };
                                   setMessages(prev => [draft, ...prev]);
                                   setComposeOpen(false);
-                                  toast.success('Brouillon enregistré');
+                                  toast.success('Brouillon enregistrÃ©');
                                 }}>
                                   Enregistrer
                                 </Button>
@@ -8345,7 +8346,7 @@ export default function NOCActivityApp() {
                                     });
                                     setReplyToMessage(null);
                                     setForwardMessage(null);
-                                    toast.success('Message envoyé');
+                                    toast.success('Message envoyÃ©');
                                   }}
                                 >
                                   <Send className="w-4 h-4 mr-2" /> Envoyer
@@ -8362,11 +8363,11 @@ export default function NOCActivityApp() {
                   <Dialog open={labelDialogOpen} onOpenChange={setLabelDialogOpen}>
                     <DialogContent className="max-w-sm">
                       <DialogHeader>
-                        <DialogTitle>Nouveau libellé</DialogTitle>
+                        <DialogTitle>Nouveau libellÃ©</DialogTitle>
                       </DialogHeader>
                       <div className="space-y-3 py-2">
                         <div className="grid gap-2">
-                          <Label>Nom du libellé</Label>
+                          <Label>Nom du libellÃ©</Label>
                           <Input value={newLabelName} onChange={(e) => setNewLabelName(e.target.value)} placeholder="Ex: Important" />
                         </div>
                         <div className="grid gap-2">
@@ -8400,10 +8401,10 @@ export default function NOCActivityApp() {
                             setNewLabelName('');
                             setNewLabelColor('#3B82F6');
                             setLabelDialogOpen(false);
-                            toast.success('Libellé créé');
+                            toast.success('LibellÃ© crÃ©Ã©');
                           }}
                         >
-                          Créer
+                          CrÃ©er
                         </Button>
                       </DialogFooter>
                     </DialogContent>
@@ -8413,7 +8414,7 @@ export default function NOCActivityApp() {
                   <Dialog open={gmailSettingsOpen} onOpenChange={setGmailSettingsOpen}>
                     <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
                       <DialogHeader>
-                        <DialogTitle>Paramètres de messagerie</DialogTitle>
+                        <DialogTitle>ParamÃ¨tres de messagerie</DialogTitle>
                       </DialogHeader>
                       <ScrollArea className="flex-1">
                         <div className="space-y-6 py-4">
@@ -8428,7 +8429,7 @@ export default function NOCActivityApp() {
                                 <Moon className="w-4 h-4 mr-2" /> Sombre
                               </Button>
                               <Button variant={theme === 'system' ? 'default' : 'outline'} size="sm" onClick={() => setTheme('system')}>
-                                <Monitor className="w-4 h-4 mr-2" /> Système
+                                <Monitor className="w-4 h-4 mr-2" /> SystÃ¨me
                               </Button>
                             </div>
                           </div>
@@ -8437,14 +8438,14 @@ export default function NOCActivityApp() {
                           
                           {/* Display Density */}
                           <div className="space-y-2">
-                            <h4 className="font-medium">Densité d'affichage</h4>
+                            <h4 className="font-medium">DensitÃ© d'affichage</h4>
                             <Select value={displayDensity} onValueChange={(v) => setDisplayDensity(v as 'compact' | 'default' | 'comfortable')}>
                               <SelectTrigger className="w-48">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="compact">Compact</SelectItem>
-                                <SelectItem value="default">Par défaut</SelectItem>
+                                <SelectItem value="default">Par dÃ©faut</SelectItem>
                                 <SelectItem value="comfortable">Confortable</SelectItem>
                               </SelectContent>
                             </Select>
@@ -8468,7 +8469,7 @@ export default function NOCActivityApp() {
                           {/* Vacation Responder */}
                           <div className="space-y-2">
                             <div className="flex items-center justify-between">
-                              <h4 className="font-medium">Répondeur d'absence</h4>
+                              <h4 className="font-medium">RÃ©pondeur d'absence</h4>
                               <Switch 
                                 checked={vacationResponder.enabled}
                                 onCheckedChange={(checked) => setVacationResponder(prev => ({...prev, enabled: checked}))}
@@ -8520,8 +8521,8 @@ export default function NOCActivityApp() {
                             <h4 className="font-medium">Raccourcis clavier</h4>
                             <div className="grid grid-cols-2 gap-2 text-sm">
                               <div className="flex justify-between"><span>Nouveau message</span><kbd className="bg-muted px-2 py-0.5 rounded text-xs">C</kbd></div>
-                              <div className="flex justify-between"><span>Répondre</span><kbd className="bg-muted px-2 py-0.5 rounded text-xs">R</kbd></div>
-                              <div className="flex justify-between"><span>Transférer</span><kbd className="bg-muted px-2 py-0.5 rounded text-xs">F</kbd></div>
+                              <div className="flex justify-between"><span>RÃ©pondre</span><kbd className="bg-muted px-2 py-0.5 rounded text-xs">R</kbd></div>
+                              <div className="flex justify-between"><span>TransfÃ©rer</span><kbd className="bg-muted px-2 py-0.5 rounded text-xs">F</kbd></div>
                               <div className="flex justify-between"><span>Supprimer</span><kbd className="bg-muted px-2 py-0.5 rounded text-xs">#</kbd></div>
                               <div className="flex justify-between"><span>Archiver</span><kbd className="bg-muted px-2 py-0.5 rounded text-xs">E</kbd></div>
                               <div className="flex justify-between"><span>Marquer comme lu</span><kbd className="bg-muted px-2 py-0.5 rounded text-xs">Shift+I</kbd></div>
@@ -8533,7 +8534,7 @@ export default function NOCActivityApp() {
                         <Button variant="outline" onClick={() => setGmailSettingsOpen(false)}>Annuler</Button>
                         <Button onClick={() => {
                           setGmailSettingsOpen(false);
-                          toast.success('Paramètres enregistrés');
+                          toast.success('ParamÃ¨tres enregistrÃ©s');
                         }}>
                           Enregistrer
                         </Button>
@@ -8547,8 +8548,8 @@ export default function NOCActivityApp() {
               {currentTab === 'supervision' && (user?.role === 'RESPONSABLE' || user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && (
                 <motion.div key="supervision" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-4">
                   <div>
-                    <h1 className="text-2xl lg:text-3xl font-bold">Supervision Temps Réel</h1>
-                    <p className="text-muted-foreground">Vue en direct de l'activité du NOC</p>
+                    <h1 className="text-2xl lg:text-3xl font-bold">Supervision Temps RÃ©el</h1>
+                    <p className="text-muted-foreground">Vue en direct de l'activitÃ© du NOC</p>
                   </div>
                   
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -8577,7 +8578,7 @@ export default function NOCActivityApp() {
                                   <p className="font-medium text-sm truncate">{member}</p>
                                   <div className="flex items-center gap-1">
                                     <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getShiftColor(shiftName) }} />
-                                    <span className="text-xs text-muted-foreground">S{shiftName}</span>
+                                    <span className="text-xs text-muted-foreground">{shiftName}</span>
                                   </div>
                                 </div>
                               </div>
@@ -8598,7 +8599,7 @@ export default function NOCActivityApp() {
                 <motion.div key="admin" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-4">
                   <div>
                     <h1 className="text-2xl lg:text-3xl font-bold">Administration</h1>
-                    <p className="text-muted-foreground">Gestion des utilisateurs et paramètres</p>
+                    <p className="text-muted-foreground">Gestion des utilisateurs et paramÃ¨tres</p>
                   </div>
                   
                   <Card>
@@ -8616,7 +8617,7 @@ export default function NOCActivityApp() {
                                   <div className="w-3 h-3 rounded" style={{ backgroundColor: getShiftColor(shiftName) }} />
                                   Shift {shiftName}
                                 </CardTitle>
-                                <CardDescription className="text-xs">Début: {format(SHIFT_CYCLE_START[shiftName], 'dd/MM/yyyy')}</CardDescription>
+                                <CardDescription className="text-xs">DÃ©but: {format(SHIFT_CYCLE_START[shiftName], 'dd/MM/yyyy')}</CardDescription>
                               </CardHeader>
                               <CardContent className="pb-4">
                                 <div className="space-y-1.5">
@@ -8655,11 +8656,11 @@ export default function NOCActivityApp() {
                   <h4 className="font-medium flex items-center gap-2"><Coffee className="w-4 h-4" /> Repos Individuel</h4>
                   <div className="p-3 rounded-lg bg-muted">
                     {userRestInfo.isOnIndividualRest ? (
-                      <p className="text-green-600 font-medium">Vous êtes en repos aujourd'hui</p>
+                      <p className="text-green-600 font-medium">Vous Ãªtes en repos aujourd'hui</p>
                     ) : (
                       <div>
                         <p className="text-sm text-muted-foreground">Prochain repos :</p>
-                        <p className="font-bold">{userRestInfo.nextIndividualRest ? format(userRestInfo.nextIndividualRest, 'EEEE d MMMM yyyy', { locale: fr }) : 'Non planifié'}</p>
+                        <p className="font-bold">{userRestInfo.nextIndividualRest ? format(userRestInfo.nextIndividualRest, 'EEEE d MMMM yyyy', { locale: fr }) : 'Non planifiÃ©'}</p>
                       </div>
                     )}
                   </div>
@@ -8672,7 +8673,7 @@ export default function NOCActivityApp() {
                     ) : (
                       <div>
                         <p className="text-sm text-muted-foreground">Prochain repos collectif :</p>
-                        <p className="font-bold">{userRestInfo.nextCollectiveRestStart ? format(userRestInfo.nextCollectiveRestStart, 'EEEE d MMMM yyyy', { locale: fr }) : 'Non planifié'}</p>
+                        <p className="font-bold">{userRestInfo.nextCollectiveRestStart ? format(userRestInfo.nextCollectiveRestStart, 'EEEE d MMMM yyyy', { locale: fr }) : 'Non planifiÃ©'}</p>
                       </div>
                     )}
                   </div>
@@ -8690,7 +8691,7 @@ export default function NOCActivityApp() {
           <DialogContent className="sm:max-w-[400px]">
             <DialogHeader>
               <DialogTitle>Photo de profil</DialogTitle>
-              <DialogDescription>Téléchargez votre photo de profil</DialogDescription>
+              <DialogDescription>TÃ©lÃ©chargez votre photo de profil</DialogDescription>
             </DialogHeader>
             <div className="flex flex-col items-center gap-4 py-4">
               <Avatar className="h-24 w-24">
@@ -8725,7 +8726,7 @@ export default function NOCActivityApp() {
                       const updatedUser = { ...user, avatar: undefined };
                       setUser(updatedUser);
                       localStorage.setItem('noc_user', JSON.stringify(updatedUser));
-                      toast.success('Photo supprimée');
+                      toast.success('Photo supprimÃ©e');
                     }
                   }}
                 >
@@ -8747,17 +8748,17 @@ export default function NOCActivityApp() {
                 <User className="w-5 h-5" />
                 Modifier mes informations
               </DialogTitle>
-              <DialogDescription>Mettez à jour vos informations professionnelles</DialogDescription>
+              <DialogDescription>Mettez Ã  jour vos informations professionnelles</DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="firstName">Prénom</Label>
+                  <Label htmlFor="firstName">PrÃ©nom</Label>
                   <Input
                     id="firstName"
                     value={editFirstName}
                     onChange={(e) => setEditFirstName(e.target.value)}
-                    placeholder="Votre prénom"
+                    placeholder="Votre prÃ©nom"
                   />
                 </div>
                 <div className="space-y-2">
@@ -8797,15 +8798,15 @@ export default function NOCActivityApp() {
           </DialogContent>
         </Dialog>
 
-        {/* Dialog Sécuriser le compte */}
+        {/* Dialog SÃ©curiser le compte */}
         <Dialog open={securityDialogOpen} onOpenChange={setSecurityDialogOpen}>
           <DialogContent className="sm:max-w-[450px]">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Settings className="w-5 h-5" />
-                Sécuriser mon compte
+                SÃ©curiser mon compte
               </DialogTitle>
-              <DialogDescription>Définissez votre mot de passe sécurisé</DialogDescription>
+              <DialogDescription>DÃ©finissez votre mot de passe sÃ©curisÃ©</DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
@@ -8815,7 +8816,7 @@ export default function NOCActivityApp() {
                   type="password"
                   value={editPassword}
                   onChange={(e) => setEditPassword(e.target.value)}
-                  placeholder="••••••••"
+                  placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
                 />
                 {editPassword && (
                   <div className="text-xs space-y-1 mt-2">
@@ -8824,7 +8825,7 @@ export default function NOCActivityApp() {
                         <CheckCircle2 className="w-3 h-3 text-green-500" /> : 
                         <XCircle className="w-3 h-3 text-red-500" />}
                       <span className={validatePassword(editPassword).hasMinLength ? 'text-green-600' : 'text-red-600'}>
-                        Minimum 8 caractères
+                        Minimum 8 caractÃ¨res
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
@@ -8848,7 +8849,7 @@ export default function NOCActivityApp() {
                         <CheckCircle2 className="w-3 h-3 text-green-500" /> : 
                         <XCircle className="w-3 h-3 text-red-500" />}
                       <span className={validatePassword(editPassword).hasSpecial ? 'text-green-600' : 'text-red-600'}>
-                        1 caractère spécial (!@#$%^&*)
+                        1 caractÃ¨re spÃ©cial (!@#$%^&*)
                       </span>
                     </div>
                     {editPassword.length >= 6 && (
@@ -8873,7 +8874,7 @@ export default function NOCActivityApp() {
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="••••••••"
+                  placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
                 />
                 {confirmPassword && editPassword !== confirmPassword && (
                   <p className="text-xs text-red-500">Les mots de passe ne correspondent pas</p>
@@ -8883,19 +8884,19 @@ export default function NOCActivityApp() {
             <DialogFooter>
               <DialogClose asChild><Button variant="outline">Annuler</Button></DialogClose>
               <Button onClick={handleSaveSecurity} disabled={!validatePassword(editPassword).isValid || editPassword !== confirmPassword}>
-                Sécuriser
+                SÃ©curiser
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
-        {/* Dialog Définir mon Shift */}
+        {/* Dialog DÃ©finir mon Shift */}
         <Dialog open={shiftDialogOpen} onOpenChange={setShiftDialogOpen}>
           <DialogContent className="sm:max-w-[450px]">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Calendar className="w-5 h-5" />
-                Définir mon shift
+                DÃ©finir mon shift
               </DialogTitle>
               <DialogDescription>Configurez votre shift et votre fonction</DialogDescription>
             </DialogHeader>
@@ -8904,7 +8905,7 @@ export default function NOCActivityApp() {
                 <Label>Shift</Label>
                 <Select value={editShift} onValueChange={setEditShift}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Sélectionner un shift" />
+                    <SelectValue placeholder="SÃ©lectionner un shift" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="A">
@@ -8932,13 +8933,13 @@ export default function NOCActivityApp() {
                 <Label>Fonction</Label>
                 <Select value={editResponsibility} onValueChange={(v) => setEditResponsibility(v as ResponsibilityType)}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Sélectionner une fonction" />
+                    <SelectValue placeholder="SÃ©lectionner une fonction" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="CALL_CENTER">📞 Call Center</SelectItem>
-                    <SelectItem value="MONITORING">📊 Monitoring</SelectItem>
-                    <SelectItem value="REPORTING_1">📈 Reporting 1</SelectItem>
-                    <SelectItem value="REPORTING_2">📋 Reporting 2</SelectItem>
+                    <SelectItem value="CALL_CENTER">ðŸ“ž Call Center</SelectItem>
+                    <SelectItem value="MONITORING">ðŸ“Š Monitoring</SelectItem>
+                    <SelectItem value="REPORTING_1">ðŸ“ˆ Reporting 1</SelectItem>
+                    <SelectItem value="REPORTING_2">ðŸ“‹ Reporting 2</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -8950,22 +8951,22 @@ export default function NOCActivityApp() {
           </DialogContent>
         </Dialog>
 
-        {/* Dialog Paramètres */}
+        {/* Dialog ParamÃ¨tres */}
         <Dialog open={settingsDialogOpen} onOpenChange={setSettingsDialogOpen}>
           <DialogContent className="sm:max-w-[500px]">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Settings className="w-5 h-5" />
-                Paramètres
+                ParamÃ¨tres
               </DialogTitle>
-              <DialogDescription>Personnalisez votre expérience</DialogDescription>
+              <DialogDescription>Personnalisez votre expÃ©rience</DialogDescription>
             </DialogHeader>
             <div className="space-y-6 py-4">
               <div className="space-y-4">
                 <h4 className="text-sm font-medium">Apparence</h4>
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
-                    <p className="text-sm">Thème sombre</p>
+                    <p className="text-sm">ThÃ¨me sombre</p>
                     <p className="text-xs text-muted-foreground">Activer le mode sombre</p>
                   </div>
                   <Button
@@ -8984,10 +8985,10 @@ export default function NOCActivityApp() {
                 <h4 className="text-sm font-medium">Session</h4>
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
-                    <p className="text-sm">Déconnexion automatique</p>
-                    <p className="text-xs text-muted-foreground">Après 10 minutes d'inactivité</p>
+                    <p className="text-sm">DÃ©connexion automatique</p>
+                    <p className="text-xs text-muted-foreground">AprÃ¨s 10 minutes d'inactivitÃ©</p>
                   </div>
-                  <Badge variant="outline">Activé</Badge>
+                  <Badge variant="outline">ActivÃ©</Badge>
                 </div>
               </div>
               
@@ -9000,7 +9001,7 @@ export default function NOCActivityApp() {
                     <p className="text-sm">Notifications push</p>
                     <p className="text-xs text-muted-foreground">Recevoir les alertes importantes</p>
                   </div>
-                  <Badge variant="outline">Activé</Badge>
+                  <Badge variant="outline">ActivÃ©</Badge>
                 </div>
               </div>
             </div>
@@ -9017,9 +9018,9 @@ export default function NOCActivityApp() {
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
                   <Users className="w-5 h-5" />
-                  Gérer les utilisateurs
+                  GÃ©rer les utilisateurs
                 </DialogTitle>
-                <DialogDescription>Gérez tous les comptes utilisateurs</DialogDescription>
+                <DialogDescription>GÃ©rez tous les comptes utilisateurs</DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="flex gap-4">
@@ -9032,10 +9033,10 @@ export default function NOCActivityApp() {
                   </div>
                   <Select value={roleFilter} onValueChange={setRoleFilter}>
                     <SelectTrigger className="w-[180px]">
-                      <SelectValue placeholder="Filtrer par rôle" />
+                      <SelectValue placeholder="Filtrer par rÃ´le" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">Tous les rôles</SelectItem>
+                      <SelectItem value="all">Tous les rÃ´les</SelectItem>
                       <SelectItem value="SUPER_ADMIN">Super Admin</SelectItem>
                       <SelectItem value="ADMIN">Admin</SelectItem>
                       <SelectItem value="RESPONSABLE">Responsable</SelectItem>
@@ -9045,7 +9046,7 @@ export default function NOCActivityApp() {
                     </SelectContent>
                   </Select>
                   <Button onClick={() => setCreateUserDialogOpen(true)}>
-                    <Plus className="w-4 h-4 mr-2" /> Créer
+                    <Plus className="w-4 h-4 mr-2" /> CrÃ©er
                   </Button>
                 </div>
                 
@@ -9066,10 +9067,10 @@ export default function NOCActivityApp() {
                             {ROLE_CONFIG[u.role].label}
                           </Badge>
                           {u.isBlocked && (
-                            <Badge variant="destructive">Bloqué</Badge>
+                            <Badge variant="destructive">BloquÃ©</Badge>
                           )}
                           {u.mustChangePassword && (
-                            <Badge variant="outline" className="text-yellow-600">Mot de passe à changer</Badge>
+                            <Badge variant="outline" className="text-yellow-600">Mot de passe Ã  changer</Badge>
                           )}
                         </div>
                         <div className="flex items-center gap-2">
@@ -9079,7 +9080,7 @@ export default function NOCActivityApp() {
                             onClick={() => handleToggleBlockUser(u)}
                             disabled={u.role === 'SUPER_ADMIN'}
                           >
-                            {u.isBlocked ? 'Débloquer' : 'Bloquer'}
+                            {u.isBlocked ? 'DÃ©bloquer' : 'Bloquer'}
                           </Button>
                           <Button
                             variant="outline"
@@ -9091,7 +9092,7 @@ export default function NOCActivityApp() {
                             }}
                             disabled={u.role === 'SUPER_ADMIN' && user?.id !== u.id}
                           >
-                            Réinitialiser MDP
+                            RÃ©initialiser MDP
                           </Button>
                           <Button
                             variant="destructive"
@@ -9109,7 +9110,7 @@ export default function NOCActivityApp() {
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setAuditLogDialogOpen(true)}>
-                  <FileText className="w-4 h-4 mr-2" /> Journal d'activité
+                  <FileText className="w-4 h-4 mr-2" /> Journal d'activitÃ©
                 </Button>
                 <DialogClose asChild><Button>Fermer</Button></DialogClose>
               </DialogFooter>
@@ -9117,18 +9118,18 @@ export default function NOCActivityApp() {
           </Dialog>
         )}
 
-        {/* Dialog Créer un utilisateur */}
+        {/* Dialog CrÃ©er un utilisateur */}
         {isSuperAdmin(user) && (
           <Dialog open={createUserDialogOpen} onOpenChange={setCreateUserDialogOpen}>
             <DialogContent className="sm:max-w-[500px]">
               <DialogHeader>
-                <DialogTitle>Créer un nouvel utilisateur</DialogTitle>
+                <DialogTitle>CrÃ©er un nouvel utilisateur</DialogTitle>
                 <DialogDescription>Remplissez les informations du nouveau compte</DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Prénom</Label>
+                    <Label>PrÃ©nom</Label>
                     <Input value={editFirstName} onChange={(e) => setEditFirstName(e.target.value)} />
                   </div>
                   <div className="space-y-2">
@@ -9145,7 +9146,7 @@ export default function NOCActivityApp() {
                   <Input value={editUsername} onChange={(e) => setEditUsername(e.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Rôle</Label>
+                  <Label>RÃ´le</Label>
                   <Select value={editRole} onValueChange={(v) => setEditRole(v as UserRole)}>
                     <SelectTrigger>
                       <SelectValue />
@@ -9160,34 +9161,34 @@ export default function NOCActivityApp() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Mot de passe par défaut</Label>
+                  <Label>Mot de passe par dÃ©faut</Label>
                   <Input type="password" value={editPassword} onChange={(e) => setEditPassword(e.target.value)} />
-                  <p className="text-xs text-muted-foreground">L'utilisateur devra changer ce mot de passe à sa première connexion</p>
+                  <p className="text-xs text-muted-foreground">L'utilisateur devra changer ce mot de passe Ã  sa premiÃ¨re connexion</p>
                 </div>
               </div>
               <DialogFooter>
                 <DialogClose asChild><Button variant="outline">Annuler</Button></DialogClose>
-                <Button onClick={handleCreateUser}>Créer l'utilisateur</Button>
+                <Button onClick={handleCreateUser}>CrÃ©er l'utilisateur</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
         )}
 
-        {/* Dialog Journal d'activité */}
+        {/* Dialog Journal d'activitÃ© */}
         {isSuperAdmin(user) && (
           <Dialog open={auditLogDialogOpen} onOpenChange={setAuditLogDialogOpen}>
             <DialogContent className="sm:max-w-[900px] max-h-[80vh]">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
                   <FileText className="w-5 h-5" />
-                  Journal d'activité (Audit Log)
+                  Journal d'activitÃ© (Audit Log)
                 </DialogTitle>
                 <DialogDescription>Historique de toutes les actions</DialogDescription>
               </DialogHeader>
               <ScrollArea className="h-[500px]">
                 <div className="space-y-2">
                   {auditLogs.length === 0 ? (
-                    <p className="text-center text-muted-foreground py-8">Aucune activité enregistrée</p>
+                    <p className="text-center text-muted-foreground py-8">Aucune activitÃ© enregistrÃ©e</p>
                   ) : (
                     auditLogs.map((log) => (
                       <div key={log.id} className="flex items-center justify-between p-3 rounded-lg border bg-card">
@@ -9247,7 +9248,7 @@ export default function NOCActivityApp() {
               
               {/* To field */}
               <div className="flex items-center px-4 py-2 border-b min-h-[40px]">
-                <span className="text-sm text-gray-500 w-8">À:</span>
+                <span className="text-sm text-gray-500 w-8">Ã€:</span>
                 <div className="flex-1 flex flex-wrap items-center gap-1">
                   {newEmail.to.map((recipient, index) => (
                     <span key={index} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded text-sm">
@@ -9365,7 +9366,7 @@ export default function NOCActivityApp() {
                     <SelectItem value="1">Petit</SelectItem>
                     <SelectItem value="3">Normal</SelectItem>
                     <SelectItem value="5">Grand</SelectItem>
-                    <SelectItem value="7">Très grand</SelectItem>
+                    <SelectItem value="7">TrÃ¨s grand</SelectItem>
                   </SelectContent>
                 </Select>
                 
@@ -9504,7 +9505,7 @@ export default function NOCActivityApp() {
                           setLinkUrl('');
                         }
                       }}>
-                        Insérer
+                        InsÃ©rer
                       </Button>
                     </div>
                   </PopoverContent>
@@ -9525,7 +9526,7 @@ export default function NOCActivityApp() {
                 onInput={(e) => {
                   setNewEmail(prev => ({...prev, body: e.currentTarget.innerHTML}));
                 }}
-                data-placeholder="Écrivez votre message..."
+                data-placeholder="Ã‰crivez votre message..."
                 dangerouslySetInnerHTML={{ __html: newEmail.body || '' }}
               />
               
@@ -9607,7 +9608,7 @@ export default function NOCActivityApp() {
                   }
                   setComposeOpen(false);
                   
-                  toast.success('Message envoyé');
+                  toast.success('Message envoyÃ©');
                 }}
                 className="gap-1 bg-[#0b57d0] hover:bg-[#0842a0] text-white px-4"
               >
@@ -9675,7 +9676,7 @@ export default function NOCActivityApp() {
                 </PopoverTrigger>
                 <PopoverContent className="w-72 p-2">
                   <div className="grid grid-cols-8 gap-1">
-                    {['😀', '😂', '😍', '🥰', '😎', '🤔', '👍', '👎', '❤️', '🔥', '🎉', '✅', '⏰', '📞', '📧', '💻', '🔧', '📊', '📈', '✨', '🌟', '💪', '🙏', '👋'].map((emoji) => (
+                    {['ðŸ˜€', 'ðŸ˜‚', 'ðŸ˜', 'ðŸ¥°', 'ðŸ˜Ž', 'ðŸ¤”', 'ðŸ‘', 'ðŸ‘Ž', 'â¤ï¸', 'ðŸ”¥', 'ðŸŽ‰', 'âœ…', 'â°', 'ðŸ“ž', 'ðŸ“§', 'ðŸ’»', 'ðŸ”§', 'ðŸ“Š', 'ðŸ“ˆ', 'âœ¨', 'ðŸŒŸ', 'ðŸ’ª', 'ðŸ™', 'ðŸ‘‹'].map((emoji) => (
                       <button
                         key={emoji}
                         className="text-xl hover:bg-gray-100 rounded p-1"
@@ -9748,7 +9749,7 @@ export default function NOCActivityApp() {
                     Marquer comme important
                   </button>
                   <button className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded">
-                    Demander un accusé de réception
+                    Demander un accusÃ© de rÃ©ception
                   </button>
                   <button className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded">
                     Planifier l'envoi
@@ -9790,3 +9791,4 @@ export default function NOCActivityApp() {
     </>
   );
 }
+

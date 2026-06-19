@@ -38,6 +38,14 @@ export function normalizeTicketLocality(value: string): string {
     .join('');
 }
 
+export function normalizeTicketLocalityKey(value: string): string {
+  return normalizeTicketLocality(value)
+    .toLocaleLowerCase('fr')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, '');
+}
+
 export function prepareCreateLocality(payload: Partial<TicketLocalityDraft>): {
   canCreate: boolean;
   fallbackName: string;
@@ -135,7 +143,7 @@ export function parseTicketSitePayload(
     if (department) departmentsSet.add(department);
   });
 
-  const localitySet = new Set<string>();
+  const localityMap = new Map<string, string>();
   siteOptions.forEach((site) => {
     const siteLocality = normalizeTicketLocality(site.localite ?? '');
     if (!siteLocality) return;
@@ -143,13 +151,16 @@ export function parseTicketSitePayload(
       .split(',')
       .map((part) => normalizeTicketLocality(part))
       .filter(Boolean)
-      .forEach((locality) => localitySet.add(locality));
+      .forEach((locality) => {
+        const key = normalizeTicketLocalityKey(locality);
+        if (!localityMap.has(key)) localityMap.set(key, locality);
+      });
   });
 
   return {
     siteOptions,
     departments: Array.from(departmentsSet).sort((left, right) => left.localeCompare(right, 'fr')),
-    localities: Array.from(localitySet),
+    localities: Array.from(localityMap.values()),
   };
 }
 
@@ -181,7 +192,7 @@ export function parseManagedLocalitiesPayload(localitiesData: unknown): {
     .filter((locality) => Boolean(locality.name))
     .sort((left, right) => left.name.localeCompare(right.name, 'fr'));
 
-  const localitySet = new Set<string>();
+  const localityMap = new Map<string, string>();
   localitiesData
     .map((locality) => {
       if (typeof locality === 'string') {
@@ -191,9 +202,12 @@ export function parseManagedLocalitiesPayload(localitiesData: unknown): {
       return normalizeTicketLocality(String(entry.name ?? entry.value ?? entry.label ?? ''));
     })
     .filter(Boolean)
-    .forEach((locality) => localitySet.add(locality));
+    .forEach((locality) => {
+      const key = normalizeTicketLocalityKey(locality);
+      if (!localityMap.has(key)) localityMap.set(key, locality);
+    });
 
-  return { managedEntries, localities: Array.from(localitySet) };
+  return { managedEntries, localities: Array.from(localityMap.values()) };
 }
 
 export function buildManagedLocalityDraftFromSelection(
@@ -271,8 +285,8 @@ export function removeLocalityOptionByName(
   ticketLocalityOptions: string[],
   managedLocalityName: string
 ): string[] {
-  const normalizedName = normalizeTicketLocality(managedLocalityName);
+  const normalizedNameKey = normalizeTicketLocalityKey(managedLocalityName);
   return ticketLocalityOptions.filter(
-    (entry) => normalizeTicketLocality(entry) !== normalizedName
+    (entry) => normalizeTicketLocalityKey(entry) !== normalizedNameKey
   );
 }

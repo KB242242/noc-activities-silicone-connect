@@ -389,7 +389,7 @@ export async function GET(request: NextRequest) {
     let libreNmsError: string | null = null;
     if (libreNmsConfigured) {
       try {
-        const devicesData = await libreNmsRequest<LibreNmsDevicesResponse>('');
+        const devicesData = await libreNmsRequest<LibreNmsDevicesResponse>('api/v0/devices');
         libreNmsDevices = Array.isArray(devicesData.devices) ? devicesData.devices : [];
         libreNmsLive = true;
       } catch (error) {

@@ -1223,7 +1223,7 @@ export async function PUT(
           status: String(updated.status ?? ''),
           receiver: email,
           fromOverride: nocFromAddress,
-          subjectOverride: `[Ticket Ajout technicien] ${updated.numero} - ${updated.objet}`,
+          subjectOverride: `[AFFECTATION TICKET] ${updated.numero} - ${updated.objet}`,
           htmlBody: html,
           textBody: text,
         });
@@ -1253,7 +1253,7 @@ export async function PUT(
           status: String(updated.status ?? ''),
           receiver: email,
           fromOverride: nocFromAddress,
-          subjectOverride: `[Ticket Retrait technicien] ${updated.numero} - ${updated.objet}`,
+          subjectOverride: `[RETRAIT ASSIGNATION] ${updated.numero} - ${updated.objet}`,
           htmlBody: html,
           textBody: text,
         });
@@ -1279,7 +1279,7 @@ export async function PUT(
           status: String(updated.status ?? ''),
           receiver: nocMailbox,
           fromOverride: nocFromAddress,
-          subjectOverride: `[Ticket Assignation] ${updated.numero} - ${updated.objet}`,
+          subjectOverride: `[MISE A JOUR ASSIGNATION] ${updated.numero} - ${updated.objet}`,
           htmlBody: html,
           textBody: text,
         });
@@ -1337,6 +1337,13 @@ export async function PUT(
             : eventAction === 'escalated'
               ? 'Escalade'
               : 'Fermeture';
+        const eventSubjectTag = eventAction === 'reopened'
+          ? 'TICKET REOUVERT'
+          : eventAction === 'pending'
+            ? 'TICKET EN ATTENTE'
+            : eventAction === 'escalated'
+              ? 'TICKET ESCALADE'
+              : 'TICKET FERME';
         const transitionSummary = `Le ticket est passe de ${formatTicketStatusLabel(previousStatus)} a ${statusLabel} initier par ${actorName}.`;
 
         const dedupeField = `status_notify:${previousStatus}->${currentStatus}`;
@@ -1428,7 +1435,7 @@ export async function PUT(
             receiver,
             cc: notificationConfig.supportCopyEmail,
             fromOverride: nocFromAddress,
-            subjectOverride: `[Ticket ${eventSubjectLabel}] ${updated.numero} - ${updated.objet}`,
+            subjectOverride: `[${eventSubjectTag}] ${updated.numero} - ${updated.objet}`,
             htmlBody: html,
             textBody: text,
           });
@@ -1453,7 +1460,7 @@ export async function PUT(
             status: statusLabel,
             receiver: tech.email,
             fromOverride: nocFromAddress,
-            subjectOverride: `[Ticket ${eventSubjectLabel}] ${updated.numero} - ${updated.objet}`,
+            subjectOverride: `[MISE A JOUR TICKET] ${updated.numero} - ${updated.objet} (${eventSubjectLabel})`,
             htmlBody: html,
             textBody: text,
           });

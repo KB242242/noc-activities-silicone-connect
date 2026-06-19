@@ -4,15 +4,26 @@ function normalizeLibreNmsApiUrl(rawUrl?: string): string | undefined {
   try {
     const parsed = new URL(rawUrl);
     parsed.search = '';
+    parsed.hash = '';
+
+    const normalizedPath = parsed.pathname.replace(/\/+$/, '');
+    const apiV0Index = normalizedPath.indexOf('/api/v0');
+
+    if (apiV0Index >= 0) {
+      parsed.pathname = normalizedPath.slice(0, apiV0Index + '/api/v0'.length);
+    } else {
+      parsed.pathname = normalizedPath;
+    }
+
     return parsed.toString().replace(/\/$/, '');
   } catch {
     return undefined;
   }
 }
 
-const LIBRENMS_API_URL = normalizeLibreNmsApiUrl(process.env.LibreNMS_API_URL);
-const LIBRENMS_API_TOKEN = process.env.LibreNMS_API_TOKEN;
-const LIBRENMS_API_USER = process.env.LibreNMS_API_USER;
+const LIBRENMS_API_URL = normalizeLibreNmsApiUrl(process.env.LIBRENMS_API_URL ?? process.env.LibreNMS_API_URL);
+const LIBRENMS_API_TOKEN = process.env.LIBRENMS_API_TOKEN ?? process.env.LibreNMS_API_TOKEN;
+const LIBRENMS_API_USER = process.env.LIBRENMS_API_USER ?? process.env.LibreNMS_API_USER;
 
 interface LibreNmsResponse<T> {
   status: 'ok' | 'error' | string;

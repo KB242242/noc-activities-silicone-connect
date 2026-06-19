@@ -12,9 +12,21 @@ const INITIAL_SHIFT_START: Record<string, Date> = {
 };
 
 const SHIFT_MEMBER_ORDER: Record<string, string[]> = {
-  'A': ['Luca', 'Alaine', 'Casimir', 'José'],
-  'B': ['Furys', 'Severin', 'Marly', 'Sahra'],
-  'C': ['Kevine', 'Audrey', 'Lapreuve', 'Lotti'],
+  'A': ['Luca', 'Alaine', 'Casimir'],
+  'B': ['Furys', 'Wivine'],
+  'C': ['Kevine', 'Audrey'],
+};
+
+const SHIFT_INDIVIDUAL_REST_MEMBERS: Record<string, string[]> = {
+  A: ['Alaine', 'Casimir', 'Luca'],
+  B: ['Furys', 'Wivine'],
+  C: ['Kevine', 'Audrey'],
+};
+
+const SHIFT_INDIVIDUAL_REST_BASE_CYCLE: Record<string, number> = {
+  A: 13,
+  B: 14,
+  C: 14,
 };
 
 // Cycle duration: 6 work days + 3 rest days = 9 days total
@@ -155,12 +167,6 @@ export async function GET(request: NextRequest) {
 
     const dayNames = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
     
-    // Individual rest rotation tracking per shift
-    const restRotationPosition: Record<string, number> = {};
-    shifts.forEach(shift => {
-      restRotationPosition[shift.name] = 0;
-    });
-
     for (let d = monthStart; d <= monthEnd; d = addDays(d, 1)) {
       const dateStr = format(d, 'yyyy-MM-dd');
       const dayOfWeek = getDay(d);
@@ -178,9 +184,16 @@ export async function GET(request: NextRequest) {
           };
         });
         
-        // Individual rest starts on day 3 of each 9-day shift cycle, then rotates infinitely.
-        const restingAgentIndex = schedule.dayType !== 'REST_DAY' && schedule.dayNumber >= 3 && schedule.dayNumber <= 6
-          ? schedule.dayNumber - 3
+        const restMembers = SHIFT_INDIVIDUAL_REST_MEMBERS[shift.name] ?? memberOrder.slice(0, 3);
+        const cycleAnchor = SHIFT_INDIVIDUAL_REST_BASE_CYCLE[shift.name] ?? 1;
+        const cycleOffset = ((schedule.cycleNumber - cycleAnchor) % restMembers.length + restMembers.length) % restMembers.length;
+        const nightPosition = schedule.dayNumber - 4;
+        const restingAgentName = schedule.dayType === 'NIGHT_SHIFT'
+          ? restMembers[(nightPosition + cycleOffset) % restMembers.length]
+          : null;
+
+        const restingAgentIndex = restingAgentName !== null
+          ? orderedMembers.findIndex((member) => member.name === restingAgentName)
           : -1;
 
         const activeAgents = orderedMembers.filter((_, idx) => idx !== restingAgentIndex);

@@ -14,7 +14,6 @@ export function AppTasksHeader({ actions }: AppTasksHeaderProps) {
           <ClipboardList className="w-7 h-7 text-blue-600" />
           Mes Tâches Journalières
         </h1>
-        <p className="text-muted-foreground">Gestion intelligente et supervisée des tâches NOC</p>
       </div>
       {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
     </div>

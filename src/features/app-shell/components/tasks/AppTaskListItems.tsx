@@ -27,6 +27,10 @@ type TaskCategoryConfig = {
 
 type TaskListItem = {
   id: string;
+  userId: string;
+  linkedTicketId?: string;
+  linkedTicketNumero?: string;
+  linkedTicketObjet?: string;
   status: string;
   isOverdue?: boolean;
   title: string;
@@ -34,10 +38,31 @@ type TaskListItem = {
   category: string;
   description?: string;
   tags: string[];
+  alerts?: Array<{ isRead?: boolean; isDismissed?: boolean }>;
   startTime: Date;
   estimatedEndTime: Date;
   estimatedDuration: number;
 };
+
+function parseLinkedTicket(task: Pick<TaskListItem, 'tags' | 'linkedTicketNumero'>): { numero?: string; filteredTags: string[] } {
+  if (task.linkedTicketNumero) {
+    return {
+      numero: task.linkedTicketNumero,
+      filteredTags: task.tags.filter(
+        (tag) => !tag.toLowerCase().startsWith('ticket_id:') && !tag.toLowerCase().startsWith('ticket_no:')
+      ),
+    };
+  }
+
+  const tags = task.tags;
+  const ticketNumeroTag = tags.find((tag) => tag.toLowerCase().startsWith('ticket_no:'));
+  return {
+    numero: ticketNumeroTag ? ticketNumeroTag.split(':').slice(1).join(':').trim() : undefined,
+    filteredTags: tags.filter(
+      (tag) => !tag.toLowerCase().startsWith('ticket_id:') && !tag.toLowerCase().startsWith('ticket_no:')
+    ),
+  };
+}
 
 type AppTaskListItemsProps = {
   tasks: TaskListItem[];
@@ -49,6 +74,7 @@ type AppTaskListItemsProps = {
   onStart: (taskId: string) => void;
   onPause: (taskId: string) => void;
   onResume: (taskId: string) => void;
+  onTransfer: (task: TaskListItem) => void;
   onOpenDetails: (task: TaskListItem) => void;
   onDelete: (taskId: string) => void;
 };
@@ -72,6 +98,7 @@ export function AppTaskListItems<T extends TaskListItem>({
   onStart,
   onPause,
   onResume,
+  onTransfer,
   onOpenDetails,
   onDelete,
 }: GenericAppTaskListItemsProps<T>) {
@@ -82,6 +109,7 @@ export function AppTaskListItems<T extends TaskListItem>({
         const status = taskStatuses[task.status];
         const category = taskCategories[task.category];
         const CategoryIcon = category?.icon;
+        const linkedTicket = parseLinkedTicket(task);
 
         return (
           <AppTaskListItemRow
@@ -107,7 +135,9 @@ export function AppTaskListItems<T extends TaskListItem>({
                   statusClassName={`${status?.bgColor || ''} ${status?.color || ''}`.trim()}
                   timeRangeLabel={`${format(task.startTime, 'HH:mm')} - ${format(task.estimatedEndTime, 'HH:mm')}`}
                   durationLabel={`⏱ ${formatDuration(task.estimatedDuration)}`}
-                  tags={task.tags}
+                  tags={linkedTicket.filteredTags}
+                  alertCount={task.alerts?.filter((alert) => !alert.isDismissed && !alert.isRead).length ?? task.alerts?.length ?? 0}
+                  linkedTicketLabel={linkedTicket.numero}
                 />
               }
             />
@@ -116,6 +146,7 @@ export function AppTaskListItems<T extends TaskListItem>({
               onStart={() => onStart(task.id)}
               onPause={() => onPause(task.id)}
               onResume={() => onResume(task.id)}
+              onTransfer={() => onTransfer(task)}
               onOpenDetails={() => onOpenDetails(task)}
               onDelete={() => onDelete(task.id)}
             />

@@ -1,6 +1,14 @@
-import { addDays, eachDayOfInterval, endOfMonth, startOfMonth } from 'date-fns';
+import { addDays, eachDayOfInterval, endOfMonth, format, startOfMonth } from 'date-fns';
 
-import { CYCLE_TOTAL_DAYS, SHIFT_CYCLE_START, SHIFTS_DATA } from '@/features/app-shell/core/planning/shifts';
+import {
+  CYCLE_TOTAL_DAYS,
+  SHIFT_CYCLE_START,
+  SHIFT_INDIVIDUAL_REST_BASE_CYCLE,
+  SHIFT_INDIVIDUAL_REST_EFFECTIVE_CONFIG,
+  SHIFT_INDIVIDUAL_REST_MEMBER_OVERRIDES,
+  SHIFT_INDIVIDUAL_REST_MEMBERS,
+  SHIFTS_DATA,
+} from '@/features/app-shell/core/planning/shifts';
 import type { DayType, ResponsibilityType } from '@/features/app-shell/core/shared/types';
 
 type ShiftSchedule = {
@@ -49,13 +57,22 @@ export function getIndividualRestAgent(
 ): { agentIndex: number; agentName: string } | null {
   const schedule = getShiftScheduleForDate(shiftName, targetDate);
   const shiftData = SHIFTS_DATA[shiftName];
+  const dateKey = format(targetDate, 'yyyy-MM-dd');
 
-  if (!shiftData || schedule.isCollectiveRest || schedule.dayNumber < 3 || schedule.dayNumber > 6) {
+  if (!shiftData || schedule.isCollectiveRest || schedule.dayType !== 'NIGHT_SHIFT') {
     return null;
   }
 
-  const members = shiftData.members;
-  const agentIndex = schedule.dayNumber - 3;
+  const overrideMembers = SHIFT_INDIVIDUAL_REST_MEMBER_OVERRIDES[shiftName]?.[dateKey];
+  const effectiveConfig = (SHIFT_INDIVIDUAL_REST_EFFECTIVE_CONFIG[shiftName] ?? [])
+    .filter((entry) => entry.from <= dateKey)
+    .sort((left, right) => left.from.localeCompare(right.from))
+    .at(-1);
+  const members = overrideMembers ?? effectiveConfig?.members ?? SHIFT_INDIVIDUAL_REST_MEMBERS[shiftName] ?? shiftData.members.slice(0, 3);
+  const cycleAnchor = effectiveConfig?.cycleAnchor ?? SHIFT_INDIVIDUAL_REST_BASE_CYCLE[shiftName] ?? 1;
+  const cycleOffset = ((schedule.cycleNumber - cycleAnchor) % members.length + members.length) % members.length;
+  const nightPosition = schedule.dayNumber - 4;
+  const agentIndex = ((nightPosition - cycleOffset) % members.length + members.length) % members.length;
 
   if (agentIndex < 0 || agentIndex >= members.length) return null;
 

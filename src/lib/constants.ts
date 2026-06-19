@@ -279,9 +279,9 @@ export const SHIFT_HEX: Record<string, string> = {
 };
 
 export const SHIFTS_DATA: Record<string, { name: string; color: string; colorCode: string; members: string[] }> = {
-  'A': { name: 'Shift A', color: 'blue', colorCode: '#3B82F6', members: ['Luca', 'Alaine', 'Casimir', 'José'] },
-  'B': { name: 'Shift B', color: 'yellow', colorCode: '#EAB308', members: ['Furys', 'Severin', 'Marly', 'Sahra'] },
-  'C': { name: 'Shift C', color: 'green', colorCode: '#22C55E', members: ['Kevine', 'Audrey', 'Lapreuve', 'Lotti'] }
+  'A': { name: 'Shift A', color: 'blue', colorCode: '#3B82F6', members: ['Luca', 'Alaine', 'Casimir'] },
+  'B': { name: 'Shift B', color: 'yellow', colorCode: '#EAB308', members: ['Furys', 'Wivine'] },
+  'C': { name: 'Shift C', color: 'green', colorCode: '#22C55E', members: ['Kevine', 'Audrey', 'Lapreuve'] }
 };
 
 export const SHIFT_CYCLE_START: Record<string, Date> = {

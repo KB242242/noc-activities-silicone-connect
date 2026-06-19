@@ -371,6 +371,7 @@ export function AppTicketsTabSection({
           onSiteFilterChange: setTicketSiteFilter,
           onLocalityFilterChange: setTicketLocaliteFilter,
           onTechnicianFilterChange: setTicketTechnicienFilter,
+          currentUserId: user?.id,
           onPrefetchTicket: (ticketId: string) => {
             void router.prefetch(`/tickets/${ticketId}`);
           },

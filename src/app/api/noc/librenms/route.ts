@@ -30,7 +30,7 @@ export async function GET() {
   }
 
   try {
-    const data = await libreNmsRequest<LibreNmsDevicesResponse>('');
+    const data = await libreNmsRequest<LibreNmsDevicesResponse>('api/v0/devices');
     const devices = Array.isArray(data.devices) ? data.devices : [];
     const activeDevices = devices.filter((d) => String(d.disabled ?? '0') !== '1' && String(d.ignore ?? '0') !== '1');
     const up = activeDevices.filter((d) => String(d.status ?? '0') === '1').length;

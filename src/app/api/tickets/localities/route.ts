@@ -36,7 +36,27 @@ function normalizeLocalityKey(value: string): string {
   return normalizeLocality(value)
     .toLocaleLowerCase('fr')
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, '');
+}
+
+async function findExistingLocalityBySimilarityKey(
+  similarityKey: string,
+  excludeId?: bigint
+): Promise<{ id: string; name: string } | null> {
+  const rows = await db.$queryRaw<Array<{ id: bigint; name: string }>>`
+    SELECT id, name
+    FROM noc_ticket_localities
+  `.catch(() => []);
+
+  for (const row of rows) {
+    if (excludeId !== undefined && row.id === excludeId) continue;
+    if (normalizeLocalityKey(String(row.name ?? '')) === similarityKey) {
+      return { id: String(row.id), name: String(row.name ?? '') };
+    }
+  }
+
+  return null;
 }
 
 function toNullableText(value: unknown): string | null {
@@ -150,6 +170,56 @@ async function ensureTicketLocalitiesTable() {
   await addColumnIfMissing(`ALTER TABLE noc_ticket_localities ADD COLUMN reference_note TEXT NULL AFTER address`);
 }
 
+async function cleanupDuplicateLocalitiesBySimilarityKey() {
+  const rows = await db.$queryRaw<Array<{
+    id: bigint;
+    name: string;
+  }>>`
+    SELECT id, name
+    FROM noc_ticket_localities
+    ORDER BY id ASC
+  `.catch(() => []);
+
+  if (rows.length <= 1) return;
+
+  const keeperByKey = new Map<string, bigint>();
+  const duplicateIds: bigint[] = [];
+
+  for (const row of rows) {
+    const key = toPersistedLocalityName(normalizeLocalityKey(String(row.name ?? '')));
+    if (!key) continue;
+
+    const existingKeeper = keeperByKey.get(key);
+    if (existingKeeper === undefined) {
+      keeperByKey.set(key, row.id);
+      continue;
+    }
+
+    if (existingKeeper !== row.id) {
+      duplicateIds.push(row.id);
+    }
+  }
+
+  if (duplicateIds.length > 0) {
+    for (const duplicateId of duplicateIds) {
+      await db.$executeRaw`
+        DELETE FROM noc_ticket_localities
+        WHERE id = ${duplicateId}
+        LIMIT 1
+      `;
+    }
+  }
+
+  for (const [key, keeperId] of keeperByKey.entries()) {
+    await db.$executeRaw`
+      UPDATE noc_ticket_localities
+      SET name_normalized = ${key}
+      WHERE id = ${keeperId}
+      LIMIT 1
+    `;
+  }
+}
+
 async function hasTicketManagementAccess(body: Record<string, unknown>): Promise<boolean> {
   const actorId = String(
     body.requesterId
@@ -175,6 +245,7 @@ async function hasTicketManagementAccess(body: Record<string, unknown>): Promise
 export async function GET() {
   try {
     await ensureTicketLocalitiesTable();
+    await cleanupDuplicateLocalitiesBySimilarityKey();
 
     const siteRows = await db.$queryRaw<Array<{ localite: string | null }>>`
       SELECT DISTINCT localite
@@ -272,6 +343,7 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     await ensureTicketLocalitiesTable();
+    await cleanupDuplicateLocalitiesBySimilarityKey();
 
     const body = await req.json().catch(() => ({}));
     if (!(await hasTicketManagementAccess(body as Record<string, unknown>))) {
@@ -314,25 +386,31 @@ export async function POST(req: Request) {
 
     const normalizedName = toPersistedLocalityName(normalizeLocalityKey(name));
 
-    await db.$executeRaw`
-      INSERT INTO noc_ticket_localities
-        (name, name_normalized, country_code, country_name, departement, city, arrondissement, quartier, address, reference_note, latitude, longitude)
-      VALUES
-        (${name}, ${normalizedName}, ${countryCode}, ${countryName}, ${departement}, ${city}, ${arrondissement}, ${quartier}, ${address}, ${reference}, ${latitude}, ${longitude})
-      ON DUPLICATE KEY UPDATE
-        name = VALUES(name),
-        country_code = VALUES(country_code),
-        country_name = VALUES(country_name),
-        departement = VALUES(departement),
-        city = VALUES(city),
-        arrondissement = VALUES(arrondissement),
-        quartier = VALUES(quartier),
-        address = VALUES(address),
-        reference_note = VALUES(reference_note),
-        latitude = VALUES(latitude),
-        longitude = VALUES(longitude),
-        updated_at = CURRENT_TIMESTAMP
-    `;
+    const existing = await findExistingLocalityBySimilarityKey(normalizedName);
+    if (existing) {
+      return NextResponse.json(
+        { error: `Cette localite existe deja (${existing.name}). Les variantes d'espaces ne sont pas autorisees.` },
+        { status: 409 }
+      );
+    }
+
+    try {
+      await db.$executeRaw`
+        INSERT INTO noc_ticket_localities
+          (name, name_normalized, country_code, country_name, departement, city, arrondissement, quartier, address, reference_note, latitude, longitude)
+        VALUES
+          (${name}, ${normalizedName}, ${countryCode}, ${countryName}, ${departement}, ${city}, ${arrondissement}, ${quartier}, ${address}, ${reference}, ${latitude}, ${longitude})
+      `;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/1062|duplicate/i.test(message)) {
+        return NextResponse.json(
+          { error: 'Cette localite existe deja. Les variantes d\'espaces ne sont pas autorisees.' },
+          { status: 409 }
+        );
+      }
+      throw error;
+    }
 
     const rows = await db.$queryRaw<Array<{
       id: bigint;
@@ -393,6 +471,7 @@ export async function POST(req: Request) {
 export async function PUT(req: Request) {
   try {
     await ensureTicketLocalitiesTable();
+    await cleanupDuplicateLocalitiesBySimilarityKey();
 
     const body = await req.json().catch(() => ({}));
     if (!(await hasTicketManagementAccess(body as Record<string, unknown>))) {
@@ -444,25 +523,44 @@ export async function PUT(req: Request) {
 
     const normalizedName = toPersistedLocalityName(normalizeLocalityKey(name));
 
-    await db.$executeRaw`
-      UPDATE noc_ticket_localities
-      SET
-        name = ${name},
-        name_normalized = ${normalizedName},
-        country_code = ${countryCode},
-        country_name = ${countryName},
-        departement = ${departement},
-        city = ${city},
-        arrondissement = ${arrondissement},
-        quartier = ${quartier},
-        address = ${address},
-        reference_note = ${reference},
-        latitude = ${latitude},
-        longitude = ${longitude},
-        updated_at = CURRENT_TIMESTAMP
-      WHERE id = ${localityId}
-      LIMIT 1
-    `;
+    const existing = await findExistingLocalityBySimilarityKey(normalizedName, localityId);
+    if (existing) {
+      return NextResponse.json(
+        { error: `Cette localite existe deja (${existing.name}). Les variantes d'espaces ne sont pas autorisees.` },
+        { status: 409 }
+      );
+    }
+
+    try {
+      await db.$executeRaw`
+        UPDATE noc_ticket_localities
+        SET
+          name = ${name},
+          name_normalized = ${normalizedName},
+          country_code = ${countryCode},
+          country_name = ${countryName},
+          departement = ${departement},
+          city = ${city},
+          arrondissement = ${arrondissement},
+          quartier = ${quartier},
+          address = ${address},
+          reference_note = ${reference},
+          latitude = ${latitude},
+          longitude = ${longitude},
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ${localityId}
+        LIMIT 1
+      `;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/1062|duplicate/i.test(message)) {
+        return NextResponse.json(
+          { error: 'Cette localite existe deja. Les variantes d\'espaces ne sont pas autorisees.' },
+          { status: 409 }
+        );
+      }
+      throw error;
+    }
 
     const rows = await db.$queryRaw<Array<{
       id: bigint;
@@ -516,6 +614,7 @@ export async function PUT(req: Request) {
 export async function DELETE(req: Request) {
   try {
     await ensureTicketLocalitiesTable();
+    await cleanupDuplicateLocalitiesBySimilarityKey();
 
     const body = await req.json().catch(() => ({}));
     if (!(await hasTicketManagementAccess(body as Record<string, unknown>))) {

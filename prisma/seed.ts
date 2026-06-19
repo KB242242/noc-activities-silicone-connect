@@ -45,8 +45,7 @@ async function main() {
   const shiftAMembers = [
     { email: 'alaine@siliconeconnect.com', name: 'Alaine', firstName: 'Alaine', lastName: '' },
     { email: 'casimir@siliconeconnect.com', name: 'Casimir', firstName: 'Casimir', lastName: '' },
-    { email: 'luca@siliconeconnect.com', name: 'Luca', firstName: 'Luca', lastName: '' },
-    { email: 'jose@siliconeconnect.com', name: 'José', firstName: 'José', lastName: '' }
+    { email: 'luca@siliconeconnect.com', name: 'Luca', firstName: 'Luca', lastName: '' }
   ];
 
   for (const member of shiftAMembers) {
@@ -67,9 +66,7 @@ async function main() {
 
   // Create Users for Shift B
   const shiftBMembers = [
-    { email: 'sahra@siliconeconnect.com', name: 'Sahra', firstName: 'Sahra', lastName: '' },
-    { email: 'severin@siliconeconnect.com', name: 'Severin', firstName: 'Severin', lastName: '' },
-    { email: 'marly@siliconeconnect.com', name: 'Marly', firstName: 'Marly', lastName: '' },
+    { email: 'wivine@siliconeconnect.com', name: 'Wivine MITSOMOY', firstName: 'Wivine', lastName: '' },
     { email: 'furys@siliconeconnect.com', name: 'Furys', firstName: 'Furys', lastName: '' }
   ];
 
@@ -92,8 +89,6 @@ async function main() {
   // Create Users for Shift C
   const shiftCMembers = [
     { email: 'audrey@siliconeconnect.com', name: 'Audrey', firstName: 'Audrey', lastName: '' },
-    { email: 'lapreuve@siliconeconnect.com', name: 'Lapreuve', firstName: 'Lapreuve', lastName: '' },
-    { email: 'lotti@siliconeconnect.com', name: 'Lotti', firstName: 'Lotti', lastName: '' },
     { email: 'kevine@siliconeconnect.com', name: 'Kevine', firstName: 'Kevine', lastName: '' }
   ];
 

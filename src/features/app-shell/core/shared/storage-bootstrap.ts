@@ -1,4 +1,5 @@
 import type { AuditLogEntry, UserProfile } from '@/features/app-shell/core/shared/types';
+import { sanitizeRosterUsers } from '@/features/app-shell/core/users/user-roster-policy';
 
 export type BootstrapLocalData<TSectionAccess extends Record<string, boolean>> = {
   allUsers?: UserProfile[];
@@ -21,14 +22,17 @@ export function readBootstrapLocalData<TSectionAccess extends Record<string, boo
     try {
       const parsed = JSON.parse(storedUsers);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        result.allUsers = parsed as UserProfile[];
+        const safeStoredUsers = sanitizeRosterUsers(parsed as UserProfile[]);
+        result.allUsers = safeStoredUsers;
+        result.usersToPersist = safeStoredUsers;
       }
     } catch {
       // ignore malformed cache
     }
   } else {
-    result.allUsers = demoUsers;
-    result.usersToPersist = demoUsers;
+    const safeDemoUsers = sanitizeRosterUsers(demoUsers);
+    result.allUsers = safeDemoUsers;
+    result.usersToPersist = safeDemoUsers;
   }
 
   const storedLogs = storage.getItem('noc_audit_logs');

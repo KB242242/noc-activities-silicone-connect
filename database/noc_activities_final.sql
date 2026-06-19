@@ -743,8 +743,7 @@ INSERT INTO `users` (
 ) VALUES
     ('agent-a1', 'alaine@siliconeconnect.com',    'Alaine',    'Alaine',    '',        'alaine',    '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.G.4Pj5M8rqGzKq', 'TECHNICIEN_NO', 'shift-a', 'CALL_CENTER',   TRUE, TRUE, TRUE),
     ('agent-a2', 'casimir@siliconeconnect.com',   'Casimir',   'Casimir',   '',        'casimir',   '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.G.4Pj5M8rqGzKq', 'TECHNICIEN_NO', 'shift-a', 'MONITORING',    TRUE, TRUE, TRUE),
-    ('agent-a3', 'luca@siliconeconnect.com',      'Luca',      'Luca',      '',        'luca',      '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.G.4Pj5M8rqGzKq', 'TECHNICIEN_NO', 'shift-a', 'REPORTING_1',   TRUE, TRUE, TRUE),
-    ('agent-a4', 'jose@siliconeconnect.com',      'José',      'José',      '',        'jose',      '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.G.4Pj5M8rqGzKq', 'TECHNICIEN_NO', 'shift-a', 'REPORTING_2',   TRUE, TRUE, TRUE)
+    ('agent-a3', 'luca@siliconeconnect.com',      'Luca',      'Luca',      '',        'luca',      '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.G.4Pj5M8rqGzKq', 'TECHNICIEN_NO', 'shift-a', 'REPORTING_1',   TRUE, TRUE, TRUE)
 ON DUPLICATE KEY UPDATE `shift_id` = VALUES(`shift_id`), `responsibility` = VALUES(`responsibility`);
 
 -- ============================================
@@ -756,9 +755,7 @@ INSERT INTO `users` (
     `password_hash`, `role`, `shift_id`, `responsibility`,
     `is_active`, `is_first_login`, `must_change_password`
 ) VALUES
-    ('agent-b1', 'sahra@siliconeconnect.com',    'Sahra',     'Sahra',     '',        'sahra',     '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.G.4Pj5M8rqGzKq', 'TECHNICIEN_NO', 'shift-b', 'CALL_CENTER',   TRUE, TRUE, TRUE),
-    ('agent-b2', 'severin@siliconeconnect.com',   'Severin',   'Severin',   '',        'severin',   '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.G.4Pj5M8rqGzKq', 'TECHNICIEN_NO', 'shift-b', 'MONITORING',    TRUE, TRUE, TRUE),
-    ('agent-b3', 'marly@siliconeconnect.com',     'Marly',     'Marly',     '',        'marly',     '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.G.4Pj5M8rqGzKq', 'TECHNICIEN_NO', 'shift-b', 'REPORTING_1',   TRUE, TRUE, TRUE),
+    ('agent-b2', 'wivine@siliconeconnect.com',    'Wivine MITSOMOY', 'Wivine', '',     'wivine',    '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.G.4Pj5M8rqGzKq', 'TECHNICIEN_NO', 'shift-b', 'MONITORING',    TRUE, TRUE, TRUE),
     ('agent-b4', 'furys@siliconeconnect.com',     'Furys',     'Furys',     '',        'furys',     '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.G.4Pj5M8rqGzKq', 'TECHNICIEN_NO', 'shift-b', 'REPORTING_2',   TRUE, TRUE, TRUE)
 ON DUPLICATE KEY UPDATE `shift_id` = VALUES(`shift_id`), `responsibility` = VALUES(`responsibility`);
 
@@ -772,8 +769,6 @@ INSERT INTO `users` (
     `is_active`, `is_first_login`, `must_change_password`
 ) VALUES
     ('agent-c1', 'audrey@siliconeconnect.com',    'Audrey',    'Audrey',    '',        'audrey',    '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.G.4Pj5M8rqGzKq', 'TECHNICIEN_NO', 'shift-c', 'CALL_CENTER',   TRUE, TRUE, TRUE),
-    ('agent-c2', 'lapreuve@siliconeconnect.com',  'Lapreuve',  'Lapreuve',  '',        'lapreuve',  '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.G.4Pj5M8rqGzKq', 'TECHNICIEN_NO', 'shift-c', 'MONITORING',    TRUE, TRUE, TRUE),
-    ('agent-c3', 'lotti@siliconeconnect.com',     'Lotti',     'Lotti',     '',        'lotti',     '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.G.4Pj5M8rqGzKq', 'TECHNICIEN_NO', 'shift-c', 'REPORTING_1',   TRUE, TRUE, TRUE),
     ('agent-c4', 'kevine@siliconeconnect.com',    'Kevine',    'Kevine',    '',        'kevine',    '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.G.4Pj5M8rqGzKq', 'TECHNICIEN_NO', 'shift-c', 'REPORTING_2',   TRUE, TRUE, TRUE)
 ON DUPLICATE KEY UPDATE `shift_id` = VALUES(`shift_id`), `responsibility` = VALUES(`responsibility`);
 
@@ -820,7 +815,7 @@ INSERT INTO `conversations` (`id`, `title`) VALUES
     ('conv-shift-a', 'Shift A - Team Chat'),
     ('conv-shift-b', 'Shift B - Team Chat'),
     ('conv-shift-c', 'Shift C - Team Chat'),
-    ('conv-a1-b1', 'Alaine <> Sahra')
+    ('conv-a1-b2', 'Alaine <> Wivine MITSOMOY')
 ON DUPLICATE KEY UPDATE `title` = VALUES(`title`);
 
 INSERT INTO `conversation_participants` (`id`, `conversation_id`, `user_id`, `role`, `last_read_at`) VALUES
@@ -829,42 +824,32 @@ INSERT INTO `conversation_participants` (`id`, `conversation_id`, `user_id`, `ro
     ('cp-annonces-a1', 'conv-annonces', 'agent-a1', 'member', NOW(3)),
     ('cp-annonces-a2', 'conv-annonces', 'agent-a2', 'member', NOW(3)),
     ('cp-annonces-a3', 'conv-annonces', 'agent-a3', 'member', NOW(3)),
-    ('cp-annonces-a4', 'conv-annonces', 'agent-a4', 'member', NOW(3)),
-    ('cp-annonces-b1', 'conv-annonces', 'agent-b1', 'member', NOW(3)),
     ('cp-annonces-b2', 'conv-annonces', 'agent-b2', 'member', NOW(3)),
-    ('cp-annonces-b3', 'conv-annonces', 'agent-b3', 'member', NOW(3)),
     ('cp-annonces-b4', 'conv-annonces', 'agent-b4', 'member', NOW(3)),
     ('cp-annonces-c1', 'conv-annonces', 'agent-c1', 'member', NOW(3)),
-    ('cp-annonces-c2', 'conv-annonces', 'agent-c2', 'member', NOW(3)),
-    ('cp-annonces-c3', 'conv-annonces', 'agent-c3', 'member', NOW(3)),
     ('cp-annonces-c4', 'conv-annonces', 'agent-c4', 'member', NOW(3)),
 
     ('cp-sa-a1', 'conv-shift-a', 'agent-a1', 'admin', NOW(3)),
     ('cp-sa-a2', 'conv-shift-a', 'agent-a2', 'member', NOW(3)),
     ('cp-sa-a3', 'conv-shift-a', 'agent-a3', 'member', NOW(3)),
-    ('cp-sa-a4', 'conv-shift-a', 'agent-a4', 'member', NOW(3)),
 
-    ('cp-sb-b1', 'conv-shift-b', 'agent-b1', 'admin', NOW(3)),
-    ('cp-sb-b2', 'conv-shift-b', 'agent-b2', 'member', NOW(3)),
-    ('cp-sb-b3', 'conv-shift-b', 'agent-b3', 'member', NOW(3)),
+    ('cp-sb-b2', 'conv-shift-b', 'agent-b2', 'admin', NOW(3)),
     ('cp-sb-b4', 'conv-shift-b', 'agent-b4', 'member', NOW(3)),
 
     ('cp-sc-c1', 'conv-shift-c', 'agent-c1', 'admin', NOW(3)),
-    ('cp-sc-c2', 'conv-shift-c', 'agent-c2', 'member', NOW(3)),
-    ('cp-sc-c3', 'conv-shift-c', 'agent-c3', 'member', NOW(3)),
     ('cp-sc-c4', 'conv-shift-c', 'agent-c4', 'member', NOW(3)),
 
-    ('cp-pv-a1', 'conv-a1-b1', 'agent-a1', 'member', NOW(3)),
-    ('cp-pv-b1', 'conv-a1-b1', 'agent-b1', 'member', DATE_SUB(NOW(3), INTERVAL 2 HOUR))
+    ('cp-pv-a1', 'conv-a1-b2', 'agent-a1', 'member', NOW(3)),
+    ('cp-pv-b2', 'conv-a1-b2', 'agent-b2', 'member', DATE_SUB(NOW(3), INTERVAL 2 HOUR))
 ON DUPLICATE KEY UPDATE `role` = VALUES(`role`), `last_read_at` = VALUES(`last_read_at`);
 
 INSERT INTO `chat_messages` (`id`, `conversation_id`, `sender_id`, `participant_id`, `content`, `sent_at`, `status`, `read_at`) VALUES
     ('msg-announce-1', 'conv-annonces', 'super-admin-1', 'cp-annonces-admin', 'Bienvenue sur la plateforme NOC Activities.', DATE_SUB(NOW(3), INTERVAL 6 HOUR), 'read', DATE_SUB(NOW(3), INTERVAL 5 HOUR)),
     ('msg-shift-a-1', 'conv-shift-a', 'agent-a1', 'cp-sa-a1', 'Bonjour equipe A, verification monitoring terminee.', DATE_SUB(NOW(3), INTERVAL 4 HOUR), 'read', DATE_SUB(NOW(3), INTERVAL 3 HOUR)),
     ('msg-shift-b-1', 'conv-shift-b', 'agent-b2', 'cp-sb-b2', 'Escalade ticket TKT-2026-0001 faite.', DATE_SUB(NOW(3), INTERVAL 3 HOUR), 'read', DATE_SUB(NOW(3), INTERVAL 2 HOUR)),
-    ('msg-shift-c-1', 'conv-shift-c', 'agent-c3', 'cp-sc-c3', 'Rapport RFO envoye au responsable.', DATE_SUB(NOW(3), INTERVAL 2 HOUR), 'read', DATE_SUB(NOW(3), INTERVAL 1 HOUR)),
-    ('msg-pv-1', 'conv-a1-b1', 'agent-a1', 'cp-pv-a1', 'Salut Sahra, peux-tu verifier la liaison principale ?', DATE_SUB(NOW(3), INTERVAL 90 MINUTE), 'read', DATE_SUB(NOW(3), INTERVAL 85 MINUTE)),
-    ('msg-pv-2', 'conv-a1-b1', 'agent-b1', 'cp-pv-b1', 'Oui, je suis dessus. Retour dans 10 minutes.', DATE_SUB(NOW(3), INTERVAL 30 MINUTE), 'sent', NULL)
+    ('msg-shift-c-1', 'conv-shift-c', 'agent-c4', 'cp-sc-c4', 'Rapport RFO envoye au responsable.', DATE_SUB(NOW(3), INTERVAL 2 HOUR), 'read', DATE_SUB(NOW(3), INTERVAL 1 HOUR)),
+    ('msg-pv-1', 'conv-a1-b2', 'agent-a1', 'cp-pv-a1', 'Salut Wivine, peux-tu verifier la liaison principale ?', DATE_SUB(NOW(3), INTERVAL 90 MINUTE), 'read', DATE_SUB(NOW(3), INTERVAL 85 MINUTE)),
+    ('msg-pv-2', 'conv-a1-b2', 'agent-b2', 'cp-pv-b2', 'Oui, je suis dessus. Retour dans 10 minutes.', DATE_SUB(NOW(3), INTERVAL 30 MINUTE), 'sent', NULL)
 ON DUPLICATE KEY UPDATE `content` = VALUES(`content`), `status` = VALUES(`status`), `read_at` = VALUES(`read_at`);
 
 -- ============================================
@@ -872,7 +857,7 @@ ON DUPLICATE KEY UPDATE `content` = VALUES(`content`), `status` = VALUES(`status
 -- ============================================
 INSERT INTO `notifications` (`id`, `user_id`, `title`, `message`, `type`, `is_read`, `link`, `created_at`) VALUES
     ('notif-a1-1', 'agent-a1', 'Nouvelle annonce', 'Une annonce officielle vient d etre publiee.', 'info', TRUE, '/chat/conv-annonces', DATE_SUB(NOW(3), INTERVAL 5 HOUR)),
-    ('notif-b1-1', 'agent-b1', 'Message non lu', 'Vous avez un nouveau message prive de Alaine.', 'message', FALSE, '/chat/conv-a1-b1', DATE_SUB(NOW(3), INTERVAL 20 MINUTE)),
+    ('notif-b2-1', 'agent-b2', 'Message non lu', 'Vous avez un nouveau message prive de Alaine.', 'message', FALSE, '/chat/conv-a1-b2', DATE_SUB(NOW(3), INTERVAL 20 MINUTE)),
     ('notif-c1-1', 'agent-c1', 'Ticket critique', 'Le ticket TKT-2026-0001 requiert votre attention.', 'alert', FALSE, '/tickets', DATE_SUB(NOW(3), INTERVAL 45 MINUTE))
 ON DUPLICATE KEY UPDATE `is_read` = VALUES(`is_read`), `created_at` = VALUES(`created_at`);
 
@@ -882,7 +867,7 @@ ON DUPLICATE KEY UPDATE `is_read` = VALUES(`is_read`), `created_at` = VALUES(`cr
 -- Total tables: 31
 -- Total seed records:
 --   - 3 shifts
---   - 14 users (1 SUPER_ADMIN + 1 RESPONSABLE + 12 TECHNICIEN_NO)
+--   - 9 users (1 SUPER_ADMIN + 1 RESPONSABLE + 7 TECHNICIEN_NO)
 --   - 7 external links
 --   - 9 system settings
 --   - 1 ticket counter

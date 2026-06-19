@@ -104,6 +104,7 @@ export async function POST(
           creatorName: String(ticket.reporterName ?? ''),
           receiver,
           customMessage: message,
+          subjectOverride: `[TICKET RESTAURE] ${String(ticket.numero ?? id)} - ${String(ticket.objet ?? 'Ticket')}`,
         })
       )
     ).catch(() => null);

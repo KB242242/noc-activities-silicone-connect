@@ -1,3 +1,5 @@
+import { isTaskVisibleToUser } from '@/features/app-shell/components/tasks/utils/taskVisibility';
+
 export type TaskFilterValue = 'all' | 'my' | 'pending' | 'late' | 'critical';
 
 type FilterableTask = {
@@ -5,6 +7,7 @@ type FilterableTask = {
   status: string;
   isOverdue?: boolean;
   priority?: string;
+  tags?: string[];
   title: string;
   description?: string;
 };
@@ -25,6 +28,7 @@ export function filterTasksForList({
   const query = searchQuery.toLowerCase();
 
   return tasks
+    .filter((task) => isTaskVisibleToUser(task, userId))
     .filter((task) => {
       if (taskFilter === 'my') return task.userId === userId;
       if (taskFilter === 'pending') return task.status === 'pending';

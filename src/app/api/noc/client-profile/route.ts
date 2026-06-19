@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { isZabbixConfigured, zabbixRequest } from '@/lib/noc/zabbix';
+import { loadNocClientSettings, saveNocClientSettings, type NocClientSettings } from '@/lib/noc/clientSettings';
 
 type ZabbixHostRow = {
   hostid: string;
@@ -9,11 +10,52 @@ type ZabbixHostRow = {
 };
 
 type ZabbixSyncResult = {
-  status: 'SYNCED' | 'PENDING' | 'ERROR' | 'UNLINKED';
+  status: 'SYNCED' | 'PENDING' | 'ERROR' | 'UNLINKED' | 'BLOCKED';
   mappingId: number | null;
   linkRef: string | null;
   message: string;
 };
+
+function buildClientRef(settings: NocClientSettings, seq: number): string {
+  const year = settings.idStyle.fixedYear;
+  return `${settings.idStyle.prefix}-${year}-${String(seq).padStart(settings.idStyle.padding, '0')}`;
+}
+
+async function reserveNextClientRef(settings: NocClientSettings): Promise<{ clientRef: string; settings: NocClientSettings }> {
+  const year = settings.idStyle.fixedYear;
+  const likePattern = `${settings.idStyle.prefix}-${year}-%`;
+  const rows = await db.$queryRaw<Array<{ client_ref: string }>>`
+    SELECT client_ref
+    FROM noc_clients
+    WHERE client_ref LIKE ${likePattern}
+  `;
+
+  let maxExisting = 0;
+  for (const row of rows) {
+    const ref = String(row.client_ref ?? '').trim();
+    const parts = ref.split('-');
+    if (parts.length < 3) continue;
+    const seq = Number(parts[parts.length - 1]);
+    if (Number.isFinite(seq) && seq > maxExisting) maxExisting = seq;
+  }
+
+  const next = Math.max(settings.idStyle.nextSequence, maxExisting + 1);
+  const nextSettings: NocClientSettings = {
+    ...settings,
+    idStyle: {
+      ...settings.idStyle,
+      nextSequence: next + 1,
+    },
+    updatedAt: new Date().toISOString(),
+    updatedBy: settings.updatedBy ?? 'system',
+  };
+
+  const saved = await saveNocClientSettings(nextSettings);
+  return {
+    clientRef: buildClientRef(settings, next),
+    settings: saved,
+  };
+}
 
 async function syncClientZabbixLink(params: {
   clientRef: string;
@@ -166,6 +208,8 @@ function isSchemaCompatibilityError(error: unknown): boolean {
   return /unknown column|champ\s+.*inconnu|doesn't exist|n'existe pas|no such table|unknown table/i.test(message);
 }
 
+const DEFAULT_SLA_TARGET_PERCENT = 99.9;
+
 async function ensureCalendarTables() {
   await db.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS noc_client_working_hours (
@@ -204,6 +248,14 @@ async function ensureCalendarTables() {
 
 // ─── GET /api/noc/client-profile?clientRef=CSC-2025-00001 ────────────────────
 export async function GET(request: NextRequest) {
+  const settings = await loadNocClientSettings();
+  if (!settings.api.enableRead) {
+    return NextResponse.json(
+      { success: false, error: 'API clients desactivee par l\'administration.' },
+      { status: 503 }
+    );
+  }
+
   const { searchParams } = new URL(request.url);
   const clientRef = searchParams.get('clientRef') ?? '';
 
@@ -243,7 +295,7 @@ export async function GET(request: NextRequest) {
             c.id_client, c.client_ref, c.client_name, c.logo_url, c.contact_phone, c.contact_email,
             c.address, c.country, c.locality, c.client_type, c.ip_client, c.hostid_zabbix,
             NULL AS librenms_device_id, NULL AS librenms_sysname,
-            c.sla_target_percent, c.service_type, c.bandwidth_mbps, c.notes,
+            NULL AS sla_target_percent, c.service_type, c.bandwidth_mbps, c.notes,
             c.satisfaction_score, c.satisfaction_comment, c.status,
             NULL AS zabbix_element,
             CASE
@@ -272,7 +324,7 @@ export async function GET(request: NextRequest) {
             c.hostid_zabbix,
             NULL AS librenms_device_id,
             NULL AS librenms_sysname,
-            c.sla_target_percent,
+            NULL AS sla_target_percent,
             c.service_type,
             c.bandwidth_mbps,
             c.notes,
@@ -457,13 +509,37 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const settings = await loadNocClientSettings();
+    if (!settings.api.enableWrite) {
+      return NextResponse.json(
+        { success: false, error: 'Modifications clients desactivees par l\'administration.' },
+        { status: 403 }
+      );
+    }
+
     // Upsert client
     let clientId: number;
     let clientRef: string;
+    const isUpdate = Boolean(client.idClient);
+
+    if (!isUpdate && !settings.permissions.allowCreate) {
+      return NextResponse.json(
+        { success: false, error: 'Creation client desactivee par l\'administration.' },
+        { status: 403 }
+      );
+    }
+
+    if (isUpdate && !settings.permissions.allowUpdate) {
+      return NextResponse.json(
+        { success: false, error: 'Edition client desactivee par l\'administration.' },
+        { status: 403 }
+      );
+    }
 
     if (client.idClient) {
       // UPDATE
       try {
+        const slaTargetPercent = client.slaTargetPercent ?? DEFAULT_SLA_TARGET_PERCENT;
         await db.$executeRaw`
           UPDATE noc_clients SET
             client_name    = ${client.clientName},
@@ -478,7 +554,7 @@ export async function POST(request: NextRequest) {
             hostid_zabbix  = ${client.hostidZabbix ?? null},
             librenms_device_id = ${client.librenmsDeviceId ?? null},
             librenms_sysname   = ${client.libreNmsSysname ?? null},
-            sla_target_percent = ${client.slaTargetPercent ?? 99.90},
+            sla_target_percent = ${slaTargetPercent},
             service_type   = ${client.serviceType ?? 'INTERNET'},
             bandwidth_mbps = ${client.bandwidthMbps ?? null},
             notes          = ${client.notes ?? null},
@@ -505,7 +581,6 @@ export async function POST(request: NextRequest) {
               client_type    = ${client.clientType ?? null},
               ip_client      = ${client.ipClient ?? null},
               hostid_zabbix  = ${client.hostidZabbix ?? null},
-              sla_target_percent = ${client.slaTargetPercent ?? 99.90},
               service_type   = ${client.serviceType ?? 'INTERNET'},
               bandwidth_mbps = ${client.bandwidthMbps ?? null},
               notes          = ${client.notes ?? null},
@@ -527,7 +602,6 @@ export async function POST(request: NextRequest) {
               address        = ${client.address ?? null},
               ip_client      = ${client.ipClient ?? null},
               hostid_zabbix  = ${client.hostidZabbix ?? null},
-              sla_target_percent = ${client.slaTargetPercent ?? 99.90},
               service_type   = ${client.serviceType ?? 'INTERNET'},
               bandwidth_mbps = ${client.bandwidthMbps ?? null},
               notes          = ${client.notes ?? null},
@@ -542,21 +616,19 @@ export async function POST(request: NextRequest) {
       const refRow = await db.$queryRaw<any[]>`SELECT client_ref FROM noc_clients WHERE id_client = ${clientId} LIMIT 1`;
       clientRef = refRow[0]?.client_ref ?? '';
     } else {
-      // INSERT – generate ref CLISC_ddmmyyyy_NNNN
-      const now = new Date();
-      const dd = String(now.getDate()).padStart(2, '0');
-      const mm = String(now.getMonth() + 1).padStart(2, '0');
-      const yyyy = String(now.getFullYear());
-      const dateKey = `${dd}${mm}${yyyy}`;
-      const countRow = await db.$queryRaw<any[]>`
-        SELECT COUNT(*) AS cnt
-        FROM noc_clients
-        WHERE client_ref LIKE ${`CLISC_${dateKey}_%`}
-      `;
-      const seq = String(Number(countRow[0]?.cnt ?? 0) + 1).padStart(4, '0');
-      clientRef = `CLISC_${dateKey}_${seq}`;
+      const incomingRef = String(client.clientRef ?? '').trim();
+      if (incomingRef && settings.idStyle.allowManualRef) {
+        clientRef = incomingRef;
+      } else {
+        const generated = await reserveNextClientRef(settings);
+        clientRef = generated.clientRef;
+      }
+
+      const librenmsDeviceIdToStore = settings.api.enableLibreNmsFields ? client.librenmsDeviceId ?? null : null;
+      const librenmsSysnameToStore = settings.api.enableLibreNmsFields ? client.libreNmsSysname ?? null : null;
 
       try {
+        const slaTargetPercent = client.slaTargetPercent ?? DEFAULT_SLA_TARGET_PERCENT;
         await db.$executeRaw`
           INSERT INTO noc_clients
             (client_ref, client_name, logo_url, contact_phone, contact_email, address, country,
@@ -567,8 +639,8 @@ export async function POST(request: NextRequest) {
             (${clientRef}, ${client.clientName}, ${client.logoUrl ?? null}, ${client.contactPhone ?? null},
              ${client.contactEmail ?? null}, ${client.address ?? null}, ${client.country ?? null},
              ${client.locality ?? null}, ${client.clientType ?? null}, ${client.ipClient ?? null},
-             ${client.hostidZabbix ?? null}, ${client.librenmsDeviceId ?? null}, ${client.libreNmsSysname ?? null},
-             ${client.slaTargetPercent ?? 99.90}, ${client.serviceType ?? 'INTERNET'},
+             ${client.hostidZabbix ?? null}, ${librenmsDeviceIdToStore}, ${librenmsSysnameToStore},
+             ${slaTargetPercent}, ${client.serviceType ?? 'INTERNET'},
              ${client.bandwidthMbps ?? null}, ${client.notes ?? null}, ${client.satisfactionScore ?? null},
              ${client.satisfactionComment ?? null}, ${client.status ?? 'ACTIVE'})
         `;
@@ -588,7 +660,7 @@ export async function POST(request: NextRequest) {
                ${client.contactEmail ?? null}, ${client.address ?? null}, ${client.country ?? null},
                ${client.locality ?? null}, ${client.clientType ?? null}, ${client.ipClient ?? null},
                ${client.hostidZabbix ?? null},
-               ${client.slaTargetPercent ?? 99.90}, ${client.serviceType ?? 'INTERNET'},
+               ${client.slaTargetPercent ?? DEFAULT_SLA_TARGET_PERCENT}, ${client.serviceType ?? 'INTERNET'},
                ${client.bandwidthMbps ?? null}, ${client.notes ?? null}, ${client.satisfactionScore ?? null},
                ${client.satisfactionComment ?? null}, ${client.status ?? 'ACTIVE'})
           `;
@@ -599,11 +671,11 @@ export async function POST(request: NextRequest) {
           await db.$executeRaw`
             INSERT INTO noc_clients
               (client_ref, client_name, contact_phone, contact_email, address, ip_client, hostid_zabbix,
-               sla_target_percent, service_type, bandwidth_mbps, notes, status)
+               service_type, bandwidth_mbps, notes, status)
             VALUES
               (${clientRef}, ${client.clientName}, ${client.contactPhone ?? null}, ${client.contactEmail ?? null},
                ${client.address ?? null}, ${client.ipClient ?? null}, ${client.hostidZabbix ?? null},
-               ${client.slaTargetPercent ?? 99.90}, ${client.serviceType ?? 'INTERNET'}, ${client.bandwidthMbps ?? null},
+               ${client.serviceType ?? 'INTERNET'}, ${client.bandwidthMbps ?? null},
                ${client.notes ?? null}, ${client.status ?? 'ACTIVE'})
           `;
         }
@@ -789,13 +861,20 @@ export async function POST(request: NextRequest) {
     }
 
     // ── Liaison client ↔ Zabbix (mapping applicatif) ─────────────────────
-    const zabbixSync = await syncClientZabbixLink({
-      clientRef,
-      clientName: client.clientName,
-      hostidZabbix: client.hostidZabbix ?? null,
-      ipClient: client.ipClient ?? null,
-      zabbixElement: client.zabbixElement ?? null,
-    });
+    const zabbixSync: ZabbixSyncResult = settings.api.enableZabbixSync
+      ? await syncClientZabbixLink({
+          clientRef,
+          clientName: client.clientName,
+          hostidZabbix: client.hostidZabbix ?? null,
+          ipClient: client.ipClient ?? null,
+          zabbixElement: client.zabbixElement ?? null,
+        })
+      : {
+          status: 'BLOCKED',
+          mappingId: null,
+          linkRef: null,
+          message: 'Synchronisation Zabbix desactivee par la configuration admin.',
+        };
 
     // ── Historique ─────────────────────────────────────────────────────────
     const action = client.idClient ? 'UPDATE' : 'CREATE';

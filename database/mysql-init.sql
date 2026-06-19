@@ -225,16 +225,11 @@ INSERT INTO users (id, email, name, first_name, role, shift_id, is_active, creat
 ('agent-a1', 'alaine@siliconeconnect.com', 'Alaine', 'Alaine', 'AGENT', 'shift-a', TRUE, NOW(), NOW()),
 ('agent-a2', 'casimir@siliconeconnect.com', 'Casimir', 'Casimir', 'AGENT', 'shift-a', TRUE, NOW(), NOW()),
 ('agent-a3', 'luca@siliconeconnect.com', 'Luca', 'Luca', 'AGENT', 'shift-a', TRUE, NOW(), NOW()),
-('agent-a4', 'jose@siliconeconnect.com', 'José', 'José', 'AGENT', 'shift-a', TRUE, NOW(), NOW()),
 -- Shift B
-('agent-b1', 'sahra@siliconeconnect.com', 'Sahra', 'Sahra', 'AGENT', 'shift-b', TRUE, NOW(), NOW()),
-('agent-b2', 'severin@siliconeconnect.com', 'Severin', 'Severin', 'AGENT', 'shift-b', TRUE, NOW(), NOW()),
-('agent-b3', 'marly@siliconeconnect.com', 'Marly', 'Marly', 'AGENT', 'shift-b', TRUE, NOW(), NOW()),
+('agent-b2', 'wivine@siliconeconnect.com', 'Wivine MITSOMOY', 'Wivine', 'AGENT', 'shift-b', TRUE, NOW(), NOW()),
 ('agent-b4', 'furys@siliconeconnect.com', 'Furys', 'Furys', 'AGENT', 'shift-b', TRUE, NOW(), NOW()),
 -- Shift C
 ('agent-c1', 'audrey@siliconeconnect.com', 'Audrey', 'Audrey', 'AGENT', 'shift-c', TRUE, NOW(), NOW()),
-('agent-c2', 'lapreuve@siliconeconnect.com', 'Lapreuve', 'Lapreuve', 'AGENT', 'shift-c', TRUE, NOW(), NOW()),
-('agent-c3', 'lotti@siliconeconnect.com', 'Lotti', 'Lotti', 'AGENT', 'shift-c', TRUE, NOW(), NOW()),
 ('agent-c4', 'kevine@siliconeconnect.com', 'Kevine', 'Kevine', 'AGENT', 'shift-c', TRUE, NOW(), NOW());
 
 -- Insérer les administrateurs

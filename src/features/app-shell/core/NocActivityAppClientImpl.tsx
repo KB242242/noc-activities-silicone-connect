@@ -30,6 +30,7 @@ import { toast } from '@/lib/toast';
 import {
   DEFAULT_SECTION_ACCESS,
   getCurrentTabStorageKey,
+  getPlanningFilterStorageKey,
   isAppSectionKey,
   isNocSection,
   NOC_SIDEBAR_ITEMS,
@@ -98,9 +99,7 @@ import {
   calculateActualDuration,
   calculateAgentPerformance,
   checkInactivity,
-  createNewTask,
   formatDuration,
-  generateTaskAlert,
   getGanttTaskColor,
   isTaskOverdue,
   sortTasksByPriority,
@@ -112,6 +111,10 @@ import {
   getShiftScheduleForDate,
 } from '@/features/app-shell/core/planning/planning-utils';
 import { downloadOvertimePdf, downloadPlanningPdf } from '@/features/app-shell/core/planning/planning-pdf';
+import {
+  defaultNocPlanningSettings,
+  type NocPlanningSettings,
+} from '@/lib/noc/planningSettings';
 import { DEMO_USERS } from '@/features/app-shell/core/demo/demo-users';
 import {
   filterManagedLocalities,
@@ -196,6 +199,7 @@ import {
 import {
   applyManagedLocalityUpdate,
   buildManagedLocalityDraftFromSelection,
+  normalizeTicketLocalityKey,
   normalizeTicketLocality,
   parseManagedLocalitiesPayload,
   parseTicketSitePayload,
@@ -235,6 +239,7 @@ import {
   updateUserRequest,
   updateUserRoleRequest,
 } from '@/features/app-shell/core/users/user-admin-api';
+import { sanitizeRosterUsers } from '@/features/app-shell/core/users/user-roster-policy';
 import {
   fetchAuditLogRequest,
 } from '@/features/app-shell/core/shared/system-api';
@@ -294,7 +299,8 @@ import { NocCallCenterPanel } from '@/components/noc/NocCallCenterPanel';
 import { AppLoginScreen } from '@/features/app-shell/components/auth/AppLoginScreen';
 import { buildTicketArchiveOptions, buildTicketFilterOptions } from '@/features/app-shell/components/tickets/utils/ticketOptionBuilders';
 import { computeTaskStats, getDisplayedTasks } from '@/features/app-shell/components/tasks/utils/taskSelectors';
-import { applyTaskCompletionToggle, removeTaskById, updateTaskStatus } from '@/features/app-shell/components/tasks/utils/taskMutations';
+import { setTaskVisibilityTag } from '@/features/app-shell/components/tasks/utils/taskVisibility';
+import { deleteTaskRequest, fetchTasksRequest, createTaskRequest, updateTaskRequest } from '@/features/app-shell/core/tasks/task-api';
 import { AppEmailComposeDialog } from '@/features/app-shell/components/email/dialogs/AppEmailComposeDialog';
 import { AppEmailCreateGroupDialog } from '@/features/app-shell/components/email/dialogs/AppEmailCreateGroupDialog';
 import { AppEmailAddCallParticipantsDialog } from '@/features/app-shell/components/email/dialogs/AppEmailAddCallParticipantsDialog';
@@ -339,6 +345,8 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsToolti
 // ============================================
 // COMPOSANT PRINCIPAL
 // ============================================
+
+type PlanningFilterMode = 'NOC_AGENT' | 'ALL' | 'MY_SHIFT' | 'MY_RESTS';
 
 export default function NOCActivityApp() {
   const searchParams = useSearchParams();
@@ -462,6 +470,11 @@ export default function NOCActivityApp() {
   const [ticketAdminEmailsInput, setTicketAdminEmailsInput] = useState('');
   const [ticketAdminSettingsLoading, setTicketAdminSettingsLoading] = useState(false);
   const [ticketAdminSettingsSaving, setTicketAdminSettingsSaving] = useState(false);
+  const [planningSettings, setPlanningSettings] = useState<NocPlanningSettings>(defaultNocPlanningSettings());
+  const [planningSettingsLoading, setPlanningSettingsLoading] = useState(false);
+  const [planningSettingsSaving, setPlanningSettingsSaving] = useState(false);
+  const [planningFilterMode, setPlanningFilterMode] = useState<PlanningFilterMode>('NOC_AGENT');
+  const [shiftAssignmentBusyUserId, setShiftAssignmentBusyUserId] = useState<string | null>(null);
   const [editingTicket, setEditingTicket] = useState<TicketItem | null>(null);
   const [editTicketLocalityDraft, setEditTicketLocalityDraft] = useState<TicketLocalityDraft>(DEFAULT_TICKET_LOCALITY_DRAFT);
   const [isEditLocalityCreationEnabled, setIsEditLocalityCreationEnabled] = useState(false);
@@ -497,6 +510,41 @@ export default function NOCActivityApp() {
   const tempAvatarObjectUrlRef = useRef<string | null>(null);
   const sidebarResizeFrameRef = useRef<number | null>(null);
   const selectedConversationRef = useRef<Conversation | null>(null);
+
+  const normalizePlanningRole = useCallback((value: unknown) => {
+    return String(value ?? '')
+      .trim()
+      .toUpperCase()
+      .replace(/[-\s]+/g, '_');
+  }, []);
+
+  const currentUserRole = useMemo(() => normalizePlanningRole(user?.role), [normalizePlanningRole, user?.role]);
+  const availablePlanningRoles = useMemo(() => {
+    return Array.from(new Set(allUsers.map((entry) => normalizePlanningRole(entry.role)).filter(Boolean))).sort();
+  }, [allUsers, normalizePlanningRole]);
+
+  const canGeneratePlanningPdf = useMemo(() => {
+    if (!planningSettings.permissions.enablePdfGeneration) return false;
+    if (!currentUserRole) return false;
+    return planningSettings.permissions.pdfAllowedRoles
+      .map((role) => normalizePlanningRole(role))
+      .includes(currentUserRole);
+  }, [currentUserRole, normalizePlanningRole, planningSettings.permissions.enablePdfGeneration, planningSettings.permissions.pdfAllowedRoles]);
+
+  const canViewPlanningIndividualRest = useMemo(() => {
+    if (!currentUserRole) return false;
+    return planningSettings.visibility.individualRestVisibleRoles
+      .map((role) => normalizePlanningRole(role))
+      .includes(currentUserRole);
+  }, [currentUserRole, normalizePlanningRole, planningSettings.visibility.individualRestVisibleRoles]);
+
+  const planningPdfDisabledReason = useMemo(() => {
+    if (canGeneratePlanningPdf) return '';
+    if (!planningSettings.permissions.enablePdfGeneration) {
+      return 'La génération PDF planning est désactivée par l\'administration.';
+    }
+    return 'Votre rôle n\'est pas autorisé à générer le PDF planning.';
+  }, [canGeneratePlanningPdf, planningSettings.permissions.enablePdfGeneration]);
   const seenIncomingMessageIdsByConversationRef = useRef<Record<string, Set<string>>>({});
   const isTicketActionBusy = useCallback((action: 'delete' | 'permanent' | 'restore', ticketId: string) => {
     return isTicketActionBusyKey(ticketActionBusyKeys, action, ticketId);
@@ -559,6 +607,10 @@ export default function NOCActivityApp() {
   const [newTask, setNewTask] = useState({
     title: '',
     description: '',
+    linkedTicketId: '',
+    linkedTicketNumero: '',
+    linkedTicketObjet: '',
+    visibility: 'public' as 'public' | 'private',
     priority: 'medium' as TaskPriority,
     category: 'other' as TaskCategory,
     startTime: new Date(),
@@ -604,6 +656,60 @@ export default function NOCActivityApp() {
 
     setCurrentTab((previousTab) => (previousTab === queryTab ? previousTab : queryTab));
   }, [canAccessNocSections, canAccessPlanning, searchParams]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!isAuthenticated || !user) return;
+    if (restoredCurrentTabRef.current) return;
+
+    restoredCurrentTabRef.current = true;
+
+    const queryTab = searchParams.get('tab');
+    if (queryTab && isAppSectionKey(queryTab)) {
+      return;
+    }
+
+    const storedTab = localStorage.getItem(getCurrentTabStorageKey(user.id));
+    if (!storedTab || !isAppSectionKey(storedTab)) {
+      return;
+    }
+
+    if (storedTab === 'planning' && !canAccessPlanning) {
+      setCurrentTab('dashboard');
+      return;
+    }
+
+    if (isNocSection(storedTab) && !canAccessNocSections) {
+      setCurrentTab('dashboard');
+      return;
+    }
+
+    setCurrentTab((previousTab) => (previousTab === storedTab ? previousTab : storedTab));
+  }, [canAccessNocSections, canAccessPlanning, isAuthenticated, searchParams, user]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!isAuthenticated || !user) return;
+    localStorage.setItem(getCurrentTabStorageKey(user.id), currentTab);
+  }, [currentTab, isAuthenticated, user]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!isAuthenticated || !user?.id) return;
+    if (restoredPlanningFilterUserIdRef.current === user.id) return;
+
+    restoredPlanningFilterUserIdRef.current = user.id;
+    const stored = localStorage.getItem(getPlanningFilterStorageKey(user.id));
+    if (stored === 'NOC_AGENT' || stored === 'ALL' || stored === 'MY_SHIFT' || stored === 'MY_RESTS') {
+      setPlanningFilterMode(stored);
+    }
+  }, [isAuthenticated, user?.id]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!isAuthenticated || !user?.id) return;
+    localStorage.setItem(getPlanningFilterStorageKey(user.id), planningFilterMode);
+  }, [isAuthenticated, planningFilterMode, user?.id]);
 
   const refreshNocOverview = useCallback(async () => {
     setNocOverviewLoading(true);
@@ -895,6 +1001,7 @@ export default function NOCActivityApp() {
   const [mounted, setMounted] = useState(false);
   const initializedRef = useRef(false);
   const restoredCurrentTabRef = useRef(false);
+  const restoredPlanningFilterUserIdRef = useRef<string | null>(null);
 
   const playCallTone = useCallback(
     (tone: 'ring' | 'connected' | 'missed' | 'busy' | 'ended' | 'incoming') => {
@@ -1785,17 +1892,40 @@ export default function NOCActivityApp() {
   }, []);
 
   useEffect(() => {
-    if (isAuthenticated && tasks.length === 0 && notificationsHydrated) {
-      const timer = setTimeout(() => {
-        setTasks(buildInitialTasks());
-        setActivities(buildInitialActivities());
-        if (notifications.length === 0) {
-          setNotifications(buildDefaultNotifications());
-        }
-      }, 0);
-      return () => clearTimeout(timer);
+    if (!isAuthenticated || !notificationsHydrated) return;
+
+    let cancelled = false;
+
+    const loadTasks = async () => {
+      try {
+        const tasksFromApi = await fetchTasksRequest();
+        if (cancelled) return;
+        const nextTasks = tasksFromApi.length > 0 ? tasksFromApi : buildInitialTasks();
+        setNocTasks(nextTasks);
+        setTaskAlerts(nextTasks.flatMap((task) => task.alerts ?? []));
+      } catch {
+        if (cancelled) return;
+        setNocTasks(buildInitialTasks());
+      }
+    };
+
+    void loadTasks();
+
+    if (notifications.length === 0) {
+      setNotifications(buildDefaultNotifications());
     }
-  }, [isAuthenticated, tasks.length, notifications.length, notificationsHydrated]);
+
+    const timer = setTimeout(() => {
+      if (!cancelled) {
+        setActivities((currentActivities) => (currentActivities.length > 0 ? currentActivities : buildInitialActivities()));
+      }
+    }, 0);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [isAuthenticated, notifications.length, notificationsHydrated, user?.id]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !notificationsHydrated) return;
@@ -1817,11 +1947,11 @@ export default function NOCActivityApp() {
       });
 
       if (bootstrapData.allUsers) {
-        setAllUsers(bootstrapData.allUsers);
+        setAllUsers(sanitizeRosterUsers(bootstrapData.allUsers));
       }
 
       if (bootstrapData.usersToPersist) {
-        localStorage.setItem('noc_all_users', JSON.stringify(bootstrapData.usersToPersist));
+        localStorage.setItem('noc_all_users', JSON.stringify(sanitizeRosterUsers(bootstrapData.usersToPersist)));
       }
 
       if (bootstrapData.auditLogs) {
@@ -1851,8 +1981,9 @@ export default function NOCActivityApp() {
       const usersFromApi = await fetchUsersListRequest();
       if (!usersFromApi) return;
 
-      setAllUsers(usersFromApi);
-      localStorage.setItem('noc_all_users', JSON.stringify(usersFromApi));
+      const safeUsers = sanitizeRosterUsers(usersFromApi);
+      setAllUsers(safeUsers);
+      localStorage.setItem('noc_all_users', JSON.stringify(safeUsers));
     } catch {
       // fallback to current local cache
     } finally {
@@ -1885,6 +2016,137 @@ export default function NOCActivityApp() {
     if (currentTab !== 'admin' || !canManageUsers) return;
     void loadTicketAdminSettings();
   }, [currentTab, canManageUsers, loadTicketAdminSettings]);
+
+  const loadPlanningSettings = useCallback(async () => {
+    setPlanningSettingsLoading(true);
+    try {
+      const response = await fetch('/api/noc/planning-settings', { cache: 'no-store' });
+      if (!response.ok) throw new Error('planning_settings_load_failed');
+      const payload = await response.json().catch(() => ({}));
+      if (payload?.settings) {
+        setPlanningSettings((prev) => ({
+          ...prev,
+          ...payload.settings,
+          permissions: {
+            ...prev.permissions,
+            ...(payload.settings?.permissions ?? {}),
+          },
+          visibility: {
+            ...prev.visibility,
+            ...(payload.settings?.visibility ?? {}),
+          },
+        }));
+      }
+    } catch {
+      toast.error('Paramètres Planning indisponibles', {
+        description: 'Impossible de charger la configuration du planning.',
+      });
+    } finally {
+      setPlanningSettingsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    void loadPlanningSettings();
+  }, [isAuthenticated, loadPlanningSettings]);
+
+  useEffect(() => {
+    if ((currentTab !== 'admin' && currentTab !== 'admin_users') || !canManageUsers) return;
+    void loadPlanningSettings();
+  }, [currentTab, canManageUsers, loadPlanningSettings]);
+
+  const savePlanningSettings = useCallback(async () => {
+    if (!canManageUsers || !user?.id) return;
+    setPlanningSettingsSaving(true);
+    try {
+      const response = await fetch('/api/noc/planning-settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actorId: user.id, settings: planningSettings }),
+      });
+
+      if (!response.ok) throw new Error('planning_settings_save_failed');
+
+      const payload = await response.json().catch(() => ({}));
+      if (payload?.settings) {
+        setPlanningSettings((prev) => ({
+          ...prev,
+          ...payload.settings,
+          permissions: {
+            ...prev.permissions,
+            ...(payload.settings?.permissions ?? {}),
+          },
+          visibility: {
+            ...prev.visibility,
+            ...(payload.settings?.visibility ?? {}),
+          },
+        }));
+      }
+      toast.success('Paramètres Planning enregistrés');
+    } catch {
+      toast.error('Enregistrement impossible', {
+        description: 'Les paramètres planning n\'ont pas pu être sauvegardés.',
+      });
+    } finally {
+      setPlanningSettingsSaving(false);
+    }
+  }, [canManageUsers, planningSettings, user?.id]);
+
+  const assignUserToShift = useCallback(async (targetUserId: string, shiftName: 'A' | 'B' | 'C') => {
+    if (!canManageUsers || !user?.id) return;
+
+    const targetUser = allUsers.find((entry) => entry.id === targetUserId);
+    if (!targetUser) {
+      toast.error('Agent introuvable');
+      return;
+    }
+
+    const nextShiftId = `shift-${shiftName.toLowerCase()}`;
+    const currentShift = String(targetUser.shift?.name ?? targetUser.shiftId ?? '').replace(/^shift-/i, '').toUpperCase();
+    if (currentShift === shiftName) return;
+
+    setShiftAssignmentBusyUserId(targetUserId);
+    try {
+      const result = await updateUserRequest({
+        adminId: user.id,
+        userId: targetUser.id,
+        name: targetUser.name,
+        firstName: targetUser.firstName ?? '',
+        lastName: targetUser.lastName ?? '',
+        email: targetUser.email,
+        username: targetUser.username ?? null,
+        role: targetUser.role,
+        shiftId: nextShiftId,
+        responsibility: targetUser.responsibility ?? null,
+        isActive: Boolean(targetUser.isActive),
+        isBlocked: Boolean(targetUser.isBlocked),
+      });
+
+      const updatedUser = { ...targetUser, ...result.user, updatedAt: new Date() };
+
+      setAllUsers((prev) => {
+        const updated = prev.map((entry) => (entry.id === targetUser.id ? updatedUser : entry));
+        localStorage.setItem('noc_all_users', JSON.stringify(updated));
+        return updated;
+      });
+
+      if (user.id === targetUser.id) {
+        setUser(updatedUser);
+        localStorage.setItem('noc_user', JSON.stringify(updatedUser));
+        window.dispatchEvent(new Event('noc-user-updated'));
+      }
+
+      addAuditLog('SHIFT_UPDATE', `Shift modifié pour ${targetUser.name}: ${currentShift || 'AUCUN'} -> ${shiftName}`);
+      toast.success('Shift mis à jour', { description: `${targetUser.name} est maintenant dans le Shift ${shiftName}` });
+    } catch (error) {
+      toast.error('Mise à jour impossible', {
+        description: error instanceof Error ? error.message : 'Le changement de shift a échoué.',
+      });
+    } finally {
+      setShiftAssignmentBusyUserId(null);
+    }
+  }, [allUsers, canManageUsers, user?.id]);
 
   const saveTicketAdminSettings = useCallback(async () => {
     if (!canManageUsers || !user) return;
@@ -1938,9 +2200,10 @@ export default function NOCActivityApp() {
   const upsertLocalityOption = useCallback((name: string) => {
     const normalized = normalizeTicketLocality(name);
     if (!normalized) return;
+    const normalizedKey = normalizeTicketLocalityKey(normalized);
 
     setTicketLocalityOptions((prev) => {
-      if (prev.some((item) => normalizeTicketLocality(item).toLowerCase() === normalized.toLowerCase())) {
+      if (prev.some((item) => normalizeTicketLocalityKey(item) === normalizedKey)) {
         return prev;
       }
       return [...prev, normalized].sort((left, right) => left.localeCompare(right, 'fr'));
@@ -2126,7 +2389,7 @@ export default function NOCActivityApp() {
       if (!moduleData.activeOk) {
         console.error('[tickets page] active tickets request failed', moduleData.activeStatus);
       }
-      if (!moduleData.trashOk) {
+      if (!moduleData.trashOk && moduleData.trashStatus !== 0) {
         console.error('[tickets page] trash tickets request failed', moduleData.trashStatus);
       }
 
@@ -2792,10 +3055,13 @@ export default function NOCActivityApp() {
 
       setFailedAttempts(0);
       setShowForgotMessage(false);
+      restoredCurrentTabRef.current = true;
+      setCurrentTab('dashboard');
       setUser(loggedUser);
       setIsAuthenticated(true);
       setLastActivity(new Date());
       localStorage.setItem('noc_user', JSON.stringify(loggedUser));
+      localStorage.setItem(getCurrentTabStorageKey(loggedUser.id), 'dashboard');
       window.dispatchEvent(new Event('noc-user-updated'));
       if (result.token) {
         localStorage.setItem('noc_auth_token', String(result.token));
@@ -3402,79 +3668,211 @@ export default function NOCActivityApp() {
     toast.success('Message modifié');
   }, [editMessageContent, editingMessage, updateChatMessage]);
 
-  const handleCreateTask = useCallback(() => {
+  const handleCreateTask = useCallback(async () => {
     if (!newTask.title.trim()) {
       toast.error('Erreur', { description: 'Le titre est obligatoire' });
       return;
     }
 
-    const task = createNewTask(
-      user?.id || '',
-      user?.name || '',
-      {
+    if (!user || !user.id) {
+      toast.error('Erreur', { description: 'Vous devez être authentifié pour créer une tâche' });
+      return;
+    }
+
+    if (!newTask.startTime) {
+      toast.error('Erreur', { description: 'La date de début est obligatoire' });
+      return;
+    }
+
+    try {
+      const parsedTags = newTask.tags
+        .split(',')
+        .map((tag) => tag.trim())
+        .filter(Boolean);
+      const tagsWithVisibility = setTaskVisibilityTag(parsedTags, newTask.visibility);
+
+      const taskData = {
+        userId: user.id,
+        ticketId: newTask.linkedTicketId || undefined,
         title: newTask.title,
         description: newTask.description,
         priority: newTask.priority,
         category: newTask.category,
         estimatedDuration: newTask.estimatedDuration,
         startTime: newTask.startTime,
-        tags: newTask.tags
-          .split(',')
-          .map((tag) => tag.trim())
-          .filter(Boolean),
-      },
-      user?.shift?.name
-    );
+        shiftName: user.shift?.name,
+        tags: tagsWithVisibility,
+      };
 
-    setNocTasks((prev) => [task, ...prev]);
-    setNewTask({
-      title: '',
-      description: '',
-      priority: 'medium',
-      category: 'other',
-      startTime: new Date(),
-      estimatedDuration: 60,
-      tags: '',
-    });
-    setTaskDialogOpen(false);
-    toast.success('Tâche créée', { description: 'La tâche a été ajoutée à votre liste' });
+      console.log('[TaskCreate] Sending data:', taskData);
+      const task = await createTaskRequest(taskData);
+
+      setNocTasks((prev) => [task, ...prev.filter((currentTask) => currentTask.id !== task.id)]);
+      setTaskAlerts((prev) => [...task.alerts, ...prev.filter((alert) => alert.taskId !== task.id)]);
+      setNewTask({
+        title: '',
+        description: '',
+        linkedTicketId: '',
+        linkedTicketNumero: '',
+        linkedTicketObjet: '',
+        visibility: 'public',
+        priority: 'medium',
+        category: 'other',
+        startTime: new Date(),
+        estimatedDuration: 60,
+        tags: '',
+      });
+      setTaskDialogOpen(false);
+      toast.success('Tâche créée', { description: 'La tâche a été ajoutée à votre liste' });
+    } catch {
+      toast.error('Création impossible', { description: 'La tâche n’a pas pu être enregistrée.' });
+    }
   }, [newTask, user]);
 
-  const handleToggleTaskCompletion = useCallback((task: (typeof nocTasks)[number], checked: boolean) => {
-    setNocTasks((prev) =>
-      applyTaskCompletionToggle(prev, task.id, checked, (currentTask) =>
-        calculateActualDuration(currentTask)
-      )
-    );
-    toast.success(checked ? 'Tâche terminée ✓' : 'Tâche réactivée');
-  }, [calculateActualDuration]);
+  const handleToggleTaskCompletion = useCallback(async (task: (typeof nocTasks)[number], checked: boolean) => {
+    try {
+      const updatedTask = await updateTaskRequest({
+        taskId: task.id,
+        userId: user?.id,
+        status: checked ? 'COMPLETED' : 'PENDING',
+        actualDuration: checked ? calculateActualDuration(task) : undefined,
+        actualEndTime: checked ? new Date() : undefined,
+      });
 
-  const handleStartTask = useCallback((taskId: string) => {
-    setNocTasks((prev) => updateTaskStatus(prev, taskId, 'in_progress'));
-    toast.info('Tâche démarrée');
-  }, []);
+      setNocTasks((prev) => prev.map((currentTask) => (currentTask.id === updatedTask.id ? updatedTask : currentTask)));
+      setTaskAlerts((prev) => [...updatedTask.alerts, ...prev.filter((alert) => alert.taskId !== updatedTask.id)]);
+      toast.success(checked ? 'Tâche terminée ✓' : 'Tâche réactivée');
+    } catch {
+      toast.error('Mise à jour impossible');
+    }
+  }, [calculateActualDuration, user?.id]);
 
-  const handlePauseTask = useCallback((taskId: string) => {
-    setNocTasks((prev) => updateTaskStatus(prev, taskId, 'on_hold'));
-    toast.warning('Tâche suspendue');
-  }, []);
+  const handleStartTask = useCallback(async (taskId: string) => {
+    try {
+      const updatedTask = await updateTaskRequest({ taskId, userId: user?.id, status: 'IN_PROGRESS' });
+      setNocTasks((prev) => prev.map((currentTask) => (currentTask.id === updatedTask.id ? updatedTask : currentTask)));
+      setTaskAlerts((prev) => [...updatedTask.alerts, ...prev.filter((alert) => alert.taskId !== updatedTask.id)]);
+      toast.info('Tâche démarrée');
+    } catch {
+      toast.error('Démarrage impossible');
+    }
+  }, [user?.id]);
 
-  const handleResumeTask = useCallback((taskId: string) => {
-    setNocTasks((prev) => updateTaskStatus(prev, taskId, 'in_progress'));
-    toast.info('Tâche reprise');
-  }, []);
+  const handlePauseTask = useCallback(async (taskId: string) => {
+    try {
+      const updatedTask = await updateTaskRequest({ taskId, userId: user?.id, status: 'ON_HOLD' });
+      setNocTasks((prev) => prev.map((currentTask) => (currentTask.id === updatedTask.id ? updatedTask : currentTask)));
+      setTaskAlerts((prev) => [...updatedTask.alerts, ...prev.filter((alert) => alert.taskId !== updatedTask.id)]);
+      toast.warning('Tâche suspendue');
+    } catch {
+      toast.error('Suspension impossible');
+    }
+  }, [user?.id]);
+
+  const handleResumeTask = useCallback(async (taskId: string) => {
+    try {
+      const updatedTask = await updateTaskRequest({ taskId, userId: user?.id, status: 'IN_PROGRESS' });
+      setNocTasks((prev) => prev.map((currentTask) => (currentTask.id === updatedTask.id ? updatedTask : currentTask)));
+      setTaskAlerts((prev) => [...updatedTask.alerts, ...prev.filter((alert) => alert.taskId !== updatedTask.id)]);
+      toast.info('Tâche reprise');
+    } catch {
+      toast.error('Reprise impossible');
+    }
+  }, [user?.id]);
+
+  const handleTransferTask = useCallback(async (taskId: string, targetUserId: string) => {
+    try {
+      const updatedTask = await updateTaskRequest({
+        taskId,
+        userId: user?.id,
+        transferToUserId: targetUserId,
+      });
+
+      setNocTasks((prev) => prev.map((currentTask) => (currentTask.id === updatedTask.id ? updatedTask : currentTask)));
+      setTaskAlerts((prev) => [...updatedTask.alerts, ...prev.filter((alert) => alert.taskId !== updatedTask.id)]);
+      toast.success('Tâche transférée');
+    } catch {
+      toast.error('Transfert impossible');
+    }
+  }, [user?.id]);
+
+  const handleUpdateTaskSchedule = useCallback(async (taskId: string, startTime: Date, estimatedEndTime: Date) => {
+    try {
+      const duration = Math.max(5, Math.round((estimatedEndTime.getTime() - startTime.getTime()) / 60000));
+      const updatedTask = await updateTaskRequest({
+        taskId,
+        userId: user?.id,
+        startTime,
+        estimatedEndTime,
+        estimatedDuration: duration,
+      });
+
+      setNocTasks((prev) => prev.map((currentTask) => (currentTask.id === updatedTask.id ? updatedTask : currentTask)));
+      setTaskAlerts((prev) => [...updatedTask.alerts, ...prev.filter((alert) => alert.taskId !== updatedTask.id)]);
+      toast.success('Planning tâche mis à jour');
+    } catch {
+      toast.error('Replanification impossible');
+    }
+  }, [user?.id]);
+
+  const handleLinkTaskToTicket = useCallback(async (
+    task: (typeof nocTasks)[number],
+    ticket: { id: string; numero: string; objet: string }
+  ) => {
+    try {
+      const updatedTask = await updateTaskRequest({
+        taskId: task.id,
+        userId: user?.id,
+        ticketId: ticket.id,
+      });
+
+      setNocTasks((prev) => prev.map((currentTask) => (currentTask.id === updatedTask.id ? updatedTask : currentTask)));
+      setTaskAlerts((prev) => [...updatedTask.alerts, ...prev.filter((alert) => alert.taskId !== updatedTask.id)]);
+      toast.success(`Tâche liée au ticket ${ticket.numero}`);
+    } catch {
+      toast.error('Liaison ticket impossible');
+    }
+  }, [user?.id]);
+
+  const handleQuickUpdateTask = useCallback(async (
+    taskId: string,
+    updates: { title?: string; description?: string; priority?: string; status?: string; tags?: string[] },
+    successMessage?: string
+  ) => {
+    try {
+      const updatedTask = await updateTaskRequest({
+        taskId,
+        userId: user?.id,
+        ...updates,
+      });
+
+      setNocTasks((prev) => prev.map((currentTask) => (currentTask.id === updatedTask.id ? updatedTask : currentTask)));
+      setTaskAlerts((prev) => [...updatedTask.alerts, ...prev.filter((alert) => alert.taskId !== updatedTask.id)]);
+      if (successMessage) {
+        toast.success(successMessage);
+      }
+    } catch {
+      toast.error('Mise à jour rapide impossible');
+    }
+  }, [user?.id]);
 
   const handleOpenTaskDetails = useCallback((task: (typeof nocTasks)[number]) => {
     setSelectedTask(task);
     setTaskDetailOpen(true);
   }, []);
 
-  const handleDeleteTask = useCallback((taskId: string) => {
-    if (confirm('Supprimer cette tâche ?')) {
-      setNocTasks((prev) => removeTaskById(prev, taskId));
+  const handleDeleteTask = useCallback(async (taskId: string) => {
+    if (!confirm('Supprimer cette tâche ?')) return;
+
+    try {
+      await deleteTaskRequest({ taskId, userId: user?.id });
+      setNocTasks((prev) => prev.filter((currentTask) => currentTask.id !== taskId));
+      setTaskAlerts((prev) => prev.filter((alert) => alert.taskId !== taskId));
       toast.success('Tâche supprimée');
+    } catch {
+      toast.error('Suppression impossible');
     }
-  }, []);
+  }, [user?.id]);
 
   const tasksStats = useMemo(() => computeTaskStats(nocTasks, user?.id), [nocTasks, user?.id]);
 
@@ -4092,10 +4490,14 @@ export default function NOCActivityApp() {
   // Bloquer/Débloquer un utilisateur
   const handleToggleBlockUser = async (targetUser: UserProfile) => {
     if (!canManageUsers || !user?.id) return;
+
+    const currentUser = allUsers.find((entry) => entry.id === targetUser.id) ?? targetUser;
+    const nextIsBlocked = !Boolean(currentUser.isBlocked);
     
     const updatedUser = {
-      ...targetUser,
-      isBlocked: !targetUser.isBlocked,
+      ...currentUser,
+      isBlocked: nextIsBlocked,
+      isActive: nextIsBlocked ? Boolean(currentUser.isActive) : true,
       updatedAt: new Date()
     };
     
@@ -4104,7 +4506,8 @@ export default function NOCActivityApp() {
       const result = await toggleUserBlockRequest({
         adminId: user.id,
         userId: targetUser.id,
-        isBlocked: !targetUser.isBlocked,
+        isBlocked: nextIsBlocked,
+        isActive: nextIsBlocked ? Boolean(currentUser.isActive) : true,
       });
 
       const syncedUser = { ...updatedUser, ...result.user };
@@ -4113,6 +4516,8 @@ export default function NOCActivityApp() {
         localStorage.setItem('noc_all_users', JSON.stringify(updated));
         return updated;
       });
+
+      void syncUsersFromApi();
     } catch (error) {
       toast.error('Erreur', { description: error instanceof Error ? error.message : 'Blocage/déblocage impossible' });
       return;
@@ -4292,17 +4697,114 @@ export default function NOCActivityApp() {
   }, [user, overtimeMonth]);
 
   const generatePlanningPDF = useCallback(async () => {
+    if (!canGeneratePlanningPdf) {
+      toast.error('Action non autorisée', {
+        description: planningPdfDisabledReason || 'Vous ne pouvez pas générer le PDF planning.',
+      });
+      return;
+    }
+
     try {
-      await downloadPlanningPdf({ currentMonth });
+      await downloadPlanningPdf({ currentMonth, allUsers });
       toast.success('PDF généré', { description: 'Le planning a été téléchargé' });
     } catch (error) {
       console.error('[planning] generatePlanningPDF', error);
       toast.error('Erreur', { description: 'Impossible de générer le planning PDF' });
     }
-  }, [currentMonth]);
+  }, [allUsers, canGeneratePlanningPdf, currentMonth, planningPdfDisabledReason]);
 
   // Planning generation
   const planning = useMemo(() => buildMonthlyPlanning(currentMonth), [currentMonth]);
+
+  const normalizeIdentity = useCallback((value: unknown) => {
+    return String(value ?? '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]/g, '');
+  }, []);
+
+  const userShiftKey = useMemo(() => {
+    const raw = String(user?.shift?.name ?? user?.shiftId ?? '').trim().toUpperCase();
+    if (!raw) return '';
+    if (raw === 'A' || raw === 'B' || raw === 'C') return raw;
+    const shifted = raw.replace(/^SHIFT[-_\s]*/i, '');
+    return shifted === 'A' || shifted === 'B' || shifted === 'C' ? shifted : '';
+  }, [user?.shift?.name, user?.shiftId]);
+
+  const isRestAgentCurrentUser = useCallback((agentName: string) => {
+    if (!user?.id) return false;
+
+    const normAgent = normalizeIdentity(agentName);
+    if (!normAgent) return false;
+
+    const matchingDirectoryUser = allUsers.find((entry) => {
+      const candidates = [entry.name, entry.firstName, entry.lastName, entry.username]
+        .map((value) => normalizeIdentity(value))
+        .filter(Boolean);
+      return candidates.some((candidate) => candidate === normAgent || candidate.startsWith(normAgent) || normAgent.startsWith(candidate));
+    });
+
+    if (matchingDirectoryUser?.id && matchingDirectoryUser.id === user.id) {
+      return true;
+    }
+
+    const ownCandidates = [user.name, user.firstName, user.lastName, user.username]
+      .map((value) => normalizeIdentity(value))
+      .filter(Boolean);
+    return ownCandidates.some((candidate) => candidate === normAgent || candidate.startsWith(normAgent) || normAgent.startsWith(candidate));
+  }, [allUsers, normalizeIdentity, user?.firstName, user?.id, user?.lastName, user?.name, user?.username]);
+
+  const resolvePlanningRiDisplayName = useCallback((agentName: string) => {
+    const overrides = planningSettings.visibility.individualRestNameOverrides ?? {};
+    const explicit = String(overrides[agentName] ?? '').trim();
+    if (explicit) return explicit;
+
+    const mode = planningSettings.visibility.individualRestLabelMode === 'PSEUDO' ? 'PSEUDO' : 'FULL_NAME';
+    if (mode !== 'PSEUDO') return agentName;
+
+    const normAgent = normalizeIdentity(agentName);
+    if (!normAgent) return agentName;
+
+    const match = allUsers.find((entry) => {
+      const candidates = [entry.name, entry.firstName, entry.lastName, entry.username]
+        .map((value) => normalizeIdentity(value))
+        .filter(Boolean);
+      return candidates.some((candidate) => candidate === normAgent || candidate.startsWith(normAgent) || normAgent.startsWith(candidate));
+    });
+
+    const pseudo = String(match?.username ?? '').trim();
+    return pseudo || agentName;
+  }, [allUsers, normalizeIdentity, planningSettings.visibility.individualRestLabelMode, planningSettings.visibility.individualRestNameOverrides]);
+
+  const effectivePlanningFilterMode: PlanningFilterMode =
+    planningFilterMode === 'MY_RESTS' && !canViewPlanningIndividualRest
+      ? 'ALL'
+      : planningFilterMode;
+
+  const planningForDisplay = useMemo(() => {
+    return planning.map((day) => {
+      if (effectivePlanningFilterMode === 'ALL' || effectivePlanningFilterMode === 'NOC_AGENT') return day;
+
+      const filteredShifts = day.shifts.filter((shift: any) => {
+        const shiftKey = String(shift?.shiftName ?? shift?.name ?? '').trim().toUpperCase().replace(/^SHIFT[-_\s]*/i, '');
+
+        if (effectivePlanningFilterMode === 'MY_SHIFT') {
+          if (!userShiftKey) return true;
+          return shiftKey === userShiftKey;
+        }
+
+        const restAgentName = String(shift?.restInfo?.agentName ?? '').trim();
+        if (!restAgentName) return false;
+        return isRestAgentCurrentUser(restAgentName);
+      });
+
+      return {
+        ...day,
+        shifts: filteredShifts,
+      };
+    });
+  }, [effectivePlanningFilterMode, isRestAgentCurrentUser, planning, userShiftKey]);
 
   // Search filter
   const filteredTasks = tasks.filter(t => 
@@ -4409,8 +4911,16 @@ export default function NOCActivityApp() {
               tasks={tasks}
               currentMonth={currentMonth}
               setCurrentMonth={setCurrentMonth}
-              planning={planning}
+              planning={planningForDisplay}
+              planningFilterMode={planningFilterMode}
+              setPlanningFilterMode={setPlanningFilterMode}
+              canUseMyShiftPlanningFilter={Boolean(userShiftKey)}
+              canUseMyRestsPlanningFilter={canViewPlanningIndividualRest}
+              resolvePlanningRiDisplayName={resolvePlanningRiDisplayName}
               generatePlanningPDF={generatePlanningPDF}
+              canGeneratePlanningPdf={canGeneratePlanningPdf}
+              planningPdfDisabledReason={planningPdfDisabledReason}
+              canViewPlanningIndividualRest={canViewPlanningIndividualRest}
               overtimeMonth={overtimeMonth}
               setOvertimeMonth={setOvertimeMonth}
               generateOvertimePDF={generateOvertimePDF}
@@ -4617,6 +5127,9 @@ export default function NOCActivityApp() {
               handleStartTask={handleStartTask}
               handlePauseTask={handlePauseTask}
               handleResumeTask={handleResumeTask}
+              handleUpdateTaskSchedule={handleUpdateTaskSchedule}
+              handleLinkTaskToTicket={handleLinkTaskToTicket}
+              handleQuickUpdateTask={handleQuickUpdateTask}
               handleOpenTaskDetails={handleOpenTaskDetails}
               handleDeleteTask={handleDeleteTask}
               dailyTaskPerformance={dailyTaskPerformance}
@@ -4835,6 +5348,16 @@ export default function NOCActivityApp() {
               setSectionAccess={setSectionAccess}
               ALERT_TYPE_CONFIG={ALERT_TYPE_CONFIG}
               SHIFT_CYCLE_START={SHIFT_CYCLE_START}
+              allUsers={allUsers}
+              assignUserToShift={assignUserToShift}
+              shiftAssignmentBusyUserId={shiftAssignmentBusyUserId}
+              planningSettings={planningSettings}
+              setPlanningSettings={setPlanningSettings}
+              planningSettingsLoading={planningSettingsLoading}
+              planningSettingsSaving={planningSettingsSaving}
+              loadPlanningSettings={loadPlanningSettings}
+              savePlanningSettings={savePlanningSettings}
+              availablePlanningRoles={availablePlanningRoles}
             />
           </main>
         </div>

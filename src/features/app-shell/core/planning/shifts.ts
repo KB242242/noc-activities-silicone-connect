@@ -5,9 +5,33 @@ export const SHIFT_CYCLE_START: Record<string, Date> = {
 };
 
 export const SHIFTS_DATA: Record<string, { name: string; color: string; colorCode: string; members: string[] }> = {
-  A: { name: 'Shift A', color: 'blue', colorCode: '#3B82F6', members: ['Luca', 'Alaine', 'Casimir', 'Jose'] },
-  B: { name: 'Shift B', color: 'yellow', colorCode: '#EAB308', members: ['Furys', 'Severin', 'Marly', 'Sahra'] },
-  C: { name: 'Shift C', color: 'green', colorCode: '#22C55E', members: ['Kevine', 'Audrey', 'Lapreuve', 'Lotti'] },
+  A: { name: 'Shift A', color: 'blue', colorCode: '#3B82F6', members: ['Luca', 'Alaine', 'Casimir'] },
+  B: { name: 'Shift B', color: 'yellow', colorCode: '#EAB308', members: ['Furys', 'Wivine'] },
+  C: { name: 'Shift C', color: 'green', colorCode: '#22C55E', members: ['Kevine', 'Audrey', 'Lapreuve'] },
+};
+
+export const SHIFT_INDIVIDUAL_REST_MEMBERS: Record<string, string[]> = {
+  A: ['Alaine', 'Casimir', 'Luca'],
+  B: ['Furys', 'Wivine'],
+  C: ['Kevine', 'Audrey', 'Lapreuve'],
+};
+
+export const SHIFT_INDIVIDUAL_REST_BASE_CYCLE: Record<string, number> = {
+  A: 13,
+  B: 14,
+  C: 14,
+};
+
+export const SHIFT_INDIVIDUAL_REST_MEMBER_OVERRIDES: Record<string, Record<string, string[]>> = {
+  B: {},
+};
+
+export const SHIFT_INDIVIDUAL_REST_EFFECTIVE_CONFIG: Record<string, Array<{ from: string; members: string[]; cycleAnchor: number }>> = {
+  // June 2026 onward: anchor each shift on the validated 15-23 June RI block,
+  // then rotate each agent to the next night slot on every following cycle.
+  A: [{ from: '2026-06-01', members: ['Casimir', 'Alaine', 'Luca'], cycleAnchor: 13 }],
+  B: [{ from: '2026-06-01', members: ['Sara', 'Furys', 'Wivine'], cycleAnchor: 14 }],
+  C: [{ from: '2026-06-01', members: ['Lapreuve', 'Kevine', 'Audrey'], cycleAnchor: 14 }],
 };
 
 export const CYCLE_TOTAL_DAYS = 9;

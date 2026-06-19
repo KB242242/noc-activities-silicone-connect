@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { format, isToday } from 'date-fns';
+import { format, getDay, isToday } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, FileDown } from 'lucide-react';
 
@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { getShiftColor, getShiftLightBg } from '@/features/app-shell/core/planning/shifts';
 
@@ -38,18 +39,39 @@ type PlanningDay = {
 type AppPlanningPanelProps = {
   currentMonth: Date;
   planning: PlanningDay[];
+  planningFilterMode?: 'NOC_AGENT' | 'ALL' | 'MY_SHIFT' | 'MY_RESTS';
+  onPlanningFilterModeChange?: (mode: 'NOC_AGENT' | 'ALL' | 'MY_SHIFT' | 'MY_RESTS') => void;
+  canUseMyShiftFilter?: boolean;
+  canUseMyRestsFilter?: boolean;
+  resolveIndividualRestLabel?: (agentName: string) => string;
   onPreviousMonth: () => void;
   onNextMonth: () => void;
   onGeneratePdf: () => void;
+  canGeneratePdf?: boolean;
+  generatePdfDisabledReason?: string;
+  showIndividualRestDetails?: boolean;
 };
 
 export function AppPlanningPanel({
   currentMonth,
   planning,
+  planningFilterMode = 'NOC_AGENT',
+  onPlanningFilterModeChange,
+  canUseMyShiftFilter = false,
+  canUseMyRestsFilter = false,
+  resolveIndividualRestLabel,
   onPreviousMonth,
   onNextMonth,
   onGeneratePdf,
+  canGeneratePdf = true,
+  generatePdfDisabledReason,
+  showIndividualRestDetails = true,
 }: AppPlanningPanelProps) {
+  const shouldShowIndividualRest =
+    showIndividualRestDetails && (planningFilterMode === 'ALL' || planningFilterMode === 'MY_RESTS');
+  const leadingEmptyCells = planning.length > 0 ? getDay(planning[0].date) : 0;
+  const trailingEmptyCells = planning.length > 0 ? (7 - ((leadingEmptyCells + planning.length) % 7)) % 7 : 0;
+
   return (
     <motion.div key="planning" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -57,7 +79,21 @@ export function AppPlanningPanel({
           <h1 className="text-2xl lg:text-3xl font-bold">Planning des shifts</h1>
           <p className="text-muted-foreground">Cycles : 6 jours travail (3 jour + 3 nuit) + 3 jours repos</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 justify-end">
+          <Select
+            value={planningFilterMode}
+            onValueChange={(value: 'NOC_AGENT' | 'ALL' | 'MY_SHIFT' | 'MY_RESTS') => onPlanningFilterModeChange?.(value)}
+          >
+            <SelectTrigger className="w-[210px]">
+              <SelectValue placeholder="Filtrer le planning" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="NOC_AGENT">Planning Agent NOC</SelectItem>
+              <SelectItem value="ALL">Mukobecks plan</SelectItem>
+              <SelectItem value="MY_SHIFT" disabled={!canUseMyShiftFilter}>Mon shift</SelectItem>
+              <SelectItem value="MY_RESTS" disabled={!canUseMyRestsFilter}>Mes repos individuels</SelectItem>
+            </SelectContent>
+          </Select>
           <Button variant="outline" size="icon" onClick={onPreviousMonth}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
@@ -65,7 +101,12 @@ export function AppPlanningPanel({
           <Button variant="outline" size="icon" onClick={onNextMonth}>
             <ChevronRight className="h-4 w-4" />
           </Button>
-          <Button onClick={onGeneratePdf} className="gap-2 ml-2">
+          <Button
+            onClick={onGeneratePdf}
+            className="gap-2 ml-2"
+            disabled={!canGeneratePdf}
+            title={!canGeneratePdf ? generatePdfDisabledReason : undefined}
+          >
             <FileDown className="w-4 h-4" /> Générer PDF
           </Button>
         </div>
@@ -82,6 +123,10 @@ export function AppPlanningPanel({
               ))}
             </div>
             <div className="grid grid-cols-7">
+              {Array.from({ length: leadingEmptyCells }).map((_, idx) => (
+                <div key={`leading-empty-${idx}`} className="min-h-25 border-r border-b bg-muted/10" />
+              ))}
+
               {planning.map((day, idx) => {
                 const isCurrentDay = isToday(day.date);
 
@@ -96,7 +141,13 @@ export function AppPlanningPanel({
                       )}
                     </div>
                     <div className="space-y-0.5">
-                      {day.shifts.map((shift) => (
+                      {day.shifts.map((shift) => {
+                        const restLabel =
+                          shouldShowIndividualRest && shift.restInfo
+                            ? resolveIndividualRestLabel?.(shift.restInfo.agentName) ?? shift.restInfo.agentName
+                            : '';
+
+                        return (
                         <Popover key={shift.name}>
                           <PopoverTrigger asChild>
                             <div
@@ -109,14 +160,14 @@ export function AppPlanningPanel({
                               }`}
                             >
                               <div className="flex items-center justify-between">
-                                <span className="font-medium">S{shift.name}</span>
+                                <span className="font-medium">{shift.name}</span>
                                 <span className="opacity-70">
                                   {shift.schedule.isCollectiveRest
                                     ? 'R'
                                     : `${shift.schedule.dayType === 'DAY_SHIFT' ? 'J' : 'N'}${shift.schedule.dayNumber}`}
                                 </span>
                               </div>
-                              {shift.restInfo && <div className="text-orange-500 font-medium">RI: {shift.restInfo.agentName.substring(0, 3)}</div>}
+                              {shouldShowIndividualRest && shift.restInfo && <div className="text-orange-500 font-medium">RI: {restLabel}</div>}
                             </div>
                           </PopoverTrigger>
                           <PopoverContent className="w-72 p-3" align="start">
@@ -140,10 +191,10 @@ export function AppPlanningPanel({
                                   <span className="text-muted-foreground">Cycle:</span>
                                   <span>#{shift.schedule.cycleNumber}</span>
                                 </div>
-                                {shift.restInfo && (
+                                {shouldShowIndividualRest && shift.restInfo && (
                                   <div className="flex justify-between text-orange-500">
                                     <span>Repos individuel:</span>
-                                    <span className="font-medium">{shift.restInfo.agentName}</span>
+                                    <span className="font-medium">{restLabel}</span>
                                   </div>
                                 )}
                               </div>
@@ -152,8 +203,8 @@ export function AppPlanningPanel({
                                 <p className="font-medium mb-1">Agents:</p>
                                 {shift.agents.map((agent, i) => (
                                   <div key={i} className="flex items-center justify-between py-0.5">
-                                    <span className={agent.isResting ? 'line-through text-muted-foreground' : ''}>{agent.name}</span>
-                                    {agent.isResting && (
+                                    <span className={shouldShowIndividualRest && agent.isResting ? 'line-through text-muted-foreground' : ''}>{agent.name}</span>
+                                    {shouldShowIndividualRest && agent.isResting && (
                                       <Badge variant="secondary" className="text-[9px]">
                                         Repos
                                       </Badge>
@@ -169,11 +220,16 @@ export function AppPlanningPanel({
                             </div>
                           </PopoverContent>
                         </Popover>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 );
               })}
+
+              {Array.from({ length: trailingEmptyCells }).map((_, idx) => (
+                <div key={`trailing-empty-${idx}`} className="min-h-25 border-r border-b bg-muted/10" />
+              ))}
             </div>
           </div>
         </CardContent>

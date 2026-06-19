@@ -76,6 +76,7 @@ export async function toggleUserBlockRequest(params: {
   adminId: string;
   userId: string;
   isBlocked: boolean;
+  isActive?: boolean;
 }): Promise<any> {
   return requestUsersApi('PUT', params);
 }

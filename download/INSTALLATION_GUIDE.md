@@ -132,14 +132,9 @@ Ouvrir le navigateur : **http://localhost:3000**
 | alaine@siliconeconnect.com | Alaine_SC2026! | A |
 | casimir@siliconeconnect.com | Casimir@2026SC | A |
 | luca@siliconeconnect.com | Luca#2026!SC | A |
-| jose@siliconeconnect.com | Jose_SC@2026 | A |
-| sahra@siliconeconnect.com | Sahra2026*SC | B |
-| severin@siliconeconnect.com | Sev2026_SC@rin | B |
-| marly@siliconeconnect.com | Marly_SC2026! | B |
+| wivine@siliconeconnect.com | Sev2026_SC@rin | B |
 | furys@siliconeconnect.com | Furys#2026SC | B |
 | audrey@siliconeconnect.com | Audrey@2026SC | C |
-| lapreuve@siliconeconnect.com | Lapreuve#SC26 | C |
-| lotti@siliconeconnect.com | Lotti@2026!SC | C |
 | kevine@siliconeconnect.com | @Admin2026SC | C |
 
 ---

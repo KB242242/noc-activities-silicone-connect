@@ -5,22 +5,16 @@ import path from 'path';
 import { sendTicketLifecycleEmail } from '@/lib/tickets/emailNotifications';
 
 function getSmtpStatus() {
-  const host = String(process.env.SMTP_HOST ?? '').trim();
-  const port = String(process.env.SMTP_PORT ?? '587').trim();
+  const host = String(process.env.SMTP_HOST ?? 'localhost').trim() || 'localhost';
+  const port = String(process.env.SMTP_PORT ?? '25').trim();
   const user = String(process.env.SMTP_USER ?? '').trim();
   const pass = String(process.env.SMTP_PASS ?? '').trim();
-  const from = String(process.env.SMTP_FROM ?? '').trim();
+  const from = String(process.env.SMTP_FROM ?? process.env.SMTP_USER ?? 'noc@siliconeconnect.local').trim();
   const secure = String(process.env.SMTP_SECURE ?? 'false').trim().toLowerCase() === 'true';
 
-  const missing = [
-    !host ? 'SMTP_HOST' : null,
-    !user ? 'SMTP_USER' : null,
-    !pass ? 'SMTP_PASS' : null,
-  ].filter(Boolean);
-
   return {
-    configured: missing.length === 0,
-    missing,
+    configured: Boolean(host),
+    mode: user && pass ? 'auth' : 'local_no_auth',
     host: host || null,
     port,
     secure,
@@ -76,9 +70,9 @@ export async function GET() {
       processEnvPassLength: String(process.env.SMTP_PASS ?? '').trim().length,
       envLocalPassMeta,
     },
-    message: smtp.configured
-      ? 'SMTP tickets configure. Vous pouvez lancer un test par POST.'
-      : 'SMTP tickets incomplet. Renseignez les variables manquantes dans .env.local puis redemarrez le serveur.',
+    message: smtp.mode === 'local_no_auth'
+      ? 'SMTP en mode Postfix local (sans auth). Vous pouvez lancer un test par POST.'
+      : 'SMTP en mode authentifie. Vous pouvez lancer un test par POST.',
   });
 }
 
@@ -96,7 +90,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json().catch(() => ({}));
-  const receiver = String(body?.to ?? body?.receiver ?? process.env.SMTP_USER ?? '').trim();
+  const receiver = String(body?.to ?? body?.receiver ?? process.env.SMTP_FROM ?? process.env.SMTP_USER ?? 'noc@siliconeconnect.local').trim();
 
   if (!receiver) {
     return NextResponse.json(
@@ -111,12 +105,12 @@ export async function POST(request: NextRequest) {
   const sent = await sendTicketLifecycleEmail({
     action: 'created',
     ticketNumber: '#SMTP-TEST-001',
-    subject: 'Test notification tickets Gmail',
+    subject: 'Test notification tickets Postfix local',
     status: 'OPEN',
     creatorName: 'Diagnostic SMTP',
     receiver,
-    subjectOverride: '[TEST SMTP] Notification tickets Gmail',
-    customMessage: 'Si vous recevez cet email, la configuration Gmail SMTP du module tickets fonctionne correctement.',
+    subjectOverride: '[TEST SMTP] Notification tickets Postfix local',
+    customMessage: 'Si vous recevez cet email, la configuration SMTP locale (Postfix) du module tickets fonctionne correctement.',
     htmlBody: `
       <div style="font-family: Arial, sans-serif; color: #0f172a; line-height: 1.5;">
         <h2 style="margin: 0 0 12px;">Test SMTP Tickets</h2>

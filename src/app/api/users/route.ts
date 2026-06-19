@@ -11,6 +11,7 @@ import {
   loadUserEmailDomainPolicies,
   resolveUserAllowedDomains,
 } from '@/lib/users/emailDomainPolicies';
+import { isDisallowedRosterUser } from '@/features/app-shell/core/users/user-roster-policy';
 
 function getImageExtension(mimeType: string) {
   if (mimeType.includes('png')) return 'png';
@@ -108,10 +109,20 @@ export async function GET(request: NextRequest) {
       domainPolicy: getUserEmailDomainPolicy(user.id, policiesStore)
     }));
 
+    const rosterSafeUsers = safeUsers.filter((user) =>
+      !isDisallowedRosterUser({
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        firstName: user.firstName ?? undefined,
+        lastName: user.lastName ?? undefined,
+      })
+    );
+
     return NextResponse.json({
       success: true,
-      users: safeUsers,
-      count: safeUsers.length
+      users: rosterSafeUsers,
+      count: rosterSafeUsers.length
     });
 
   } catch (error) {
@@ -371,6 +382,15 @@ export async function PUT(request: NextRequest) {
     }
 
     // Update user
+    const nextIsBlocked = isBlocked !== undefined ? Boolean(isBlocked) : user.isBlocked;
+    const nextIsActive = (() => {
+      // Unblocking should always reactivate the account to keep roster visibility consistent.
+      if (isBlocked !== undefined && !Boolean(isBlocked)) return true;
+      if (isActive !== undefined) return Boolean(isActive);
+      if (isBlocked !== undefined) return !Boolean(isBlocked);
+      return user.isActive;
+    })();
+
     const updatedUser = await db.user.update({
       where: { id: userId },
       data: {
@@ -382,8 +402,8 @@ export async function PUT(request: NextRequest) {
         role: role || user.role,
         shiftId: shiftId !== undefined ? shiftId : user.shiftId,
         responsibility: responsibility !== undefined ? responsibility : user.responsibility,
-        isActive: isActive !== undefined ? isActive : user.isActive,
-        isBlocked: isBlocked !== undefined ? isBlocked : user.isBlocked,
+        isActive: nextIsActive,
+        isBlocked: nextIsBlocked,
         updatedAt: new Date()
       },
       include: {

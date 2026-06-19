@@ -3,7 +3,6 @@
 import { addMonths, subMonths } from 'date-fns';
 
 import { toast } from '@/lib/toast';
-import { AppActivitiesTabSection } from '@/features/app-shell/components/activities/AppActivitiesTabSection';
 import { AppAdminManagementTabSection } from '@/features/app-shell/components/admin/AppAdminManagementTabSection';
 import { AppAdminUsersTabSection } from '@/features/app-shell/components/admin/AppAdminUsersTabSection';
 import { AppDashboardPanel } from '@/features/app-shell/components/sections/AppDashboardPanel';
@@ -29,7 +28,15 @@ export function AppMainContentSection(props: AppMainContentSectionProps) {
     currentMonth,
     setCurrentMonth,
     planning,
+    planningFilterMode,
+    setPlanningFilterMode,
+    canUseMyShiftPlanningFilter,
+    canUseMyRestsPlanningFilter,
+    resolvePlanningRiDisplayName,
     generatePlanningPDF,
+    canGeneratePlanningPdf,
+    planningPdfDisabledReason,
+    canViewPlanningIndividualRest,
     overtimeMonth,
     setOvertimeMonth,
     generateOvertimePDF,
@@ -236,6 +243,10 @@ export function AppMainContentSection(props: AppMainContentSectionProps) {
     handleStartTask,
     handlePauseTask,
     handleResumeTask,
+    handleUpdateTaskSchedule,
+    handleLinkTaskToTicket,
+    handleQuickUpdateTask,
+    handleTransferTask,
     handleOpenTaskDetails,
     handleDeleteTask,
     dailyTaskPerformance,
@@ -455,6 +466,16 @@ export function AppMainContentSection(props: AppMainContentSectionProps) {
     setSectionAccess,
     ALERT_TYPE_CONFIG,
     SHIFT_CYCLE_START,
+    allUsers,
+    assignUserToShift,
+    shiftAssignmentBusyUserId,
+    planningSettings,
+    setPlanningSettings,
+    planningSettingsLoading,
+    planningSettingsSaving,
+    loadPlanningSettings,
+    savePlanningSettings,
+    availablePlanningRoles,
   } = props;
 
   return (
@@ -465,6 +486,7 @@ export function AppMainContentSection(props: AppMainContentSectionProps) {
           user={user}
           userRestInfo={userRestInfo}
           tasks={tasks}
+          allUsers={allUsers}
           onRefresh={() => toast.success('Données actualisées')}
         />
       )}
@@ -474,9 +496,17 @@ export function AppMainContentSection(props: AppMainContentSectionProps) {
           key="tab-planning"
           currentMonth={currentMonth}
           planning={planning}
+          planningFilterMode={planningFilterMode}
+          onPlanningFilterModeChange={setPlanningFilterMode}
+          canUseMyShiftFilter={canUseMyShiftPlanningFilter}
+          canUseMyRestsFilter={canUseMyRestsPlanningFilter}
+          resolveIndividualRestLabel={resolvePlanningRiDisplayName}
           onPreviousMonth={() => setCurrentMonth(subMonths(currentMonth, 1))}
           onNextMonth={() => setCurrentMonth(addMonths(currentMonth, 1))}
           onGeneratePdf={generatePlanningPDF}
+          canGeneratePdf={canGeneratePlanningPdf}
+          generatePdfDisabledReason={planningPdfDisabledReason}
+          showIndividualRestDetails={canViewPlanningIndividualRest}
         />
       )}
 
@@ -501,6 +531,7 @@ export function AppMainContentSection(props: AppMainContentSectionProps) {
           setTaskDialogOpen={setTaskDialogOpen}
           newTask={newTask}
           setNewTask={setNewTask}
+          allUsers={allUsers}
           taskPriorities={TASK_PRIORITIES}
           taskCategories={TASK_CATEGORIES}
           onCreateTask={handleCreateTask}
@@ -517,6 +548,10 @@ export function AppMainContentSection(props: AppMainContentSectionProps) {
           onStart={handleStartTask}
           onPause={handlePauseTask}
           onResume={handleResumeTask}
+          onUpdateSchedule={handleUpdateTaskSchedule}
+          onLinkTaskToTicket={handleLinkTaskToTicket}
+          onQuickUpdateTask={handleQuickUpdateTask}
+          onTransfer={handleTransferTask}
           onOpenDetails={handleOpenTaskDetails}
           onDelete={handleDeleteTask}
           isPerformanceVisible={Boolean(nocTasks.length > 0 && user && dailyTaskPerformance)}
@@ -526,38 +561,6 @@ export function AppMainContentSection(props: AppMainContentSectionProps) {
           tasksCreated={dailyTaskPerformance?.tasksCreated || 0}
           BadgeIcon={dailyTaskBadgeConfig?.icon}
           badgeLabel={dailyTaskBadgeConfig?.label || ''}
-        />
-      )}
-
-      {currentTab === 'activities' && (
-        <AppActivitiesTabSection
-          key="tab-activities"
-          activityDialogOpen={activityDialogOpen}
-          onActivityDialogOpenChange={setActivityDialogOpen}
-          newActivity={newActivity}
-          typeOptions={ACTIVITY_TYPES[newActivity.category] ?? []}
-          onCategoryChange={(category) => setNewActivity({ ...newActivity, category, type: '' })}
-          onTypeChange={(type) => setNewActivity({ ...newActivity, type })}
-          onDescriptionChange={(description) => setNewActivity({ ...newActivity, description })}
-          onSave={() => {
-            if (newActivity.type && user) {
-              const activity = {
-                id: `act-${Date.now()}`,
-                userId: user.id,
-                userName: user.name,
-                type: newActivity.type,
-                category: newActivity.category,
-                description: newActivity.description,
-                createdAt: new Date(),
-              };
-              setActivities((prev: any[]) => [activity, ...prev]);
-              setNewActivity({ type: '', category: 'Monitoring', description: '' });
-              setActivityDialogOpen(false);
-              toast.success('Activité enregistrée');
-            }
-          }}
-          activities={activities}
-          accentColor={user?.shift?.colorCode || '#3B82F6'}
         />
       )}
 
@@ -773,6 +776,7 @@ export function AppMainContentSection(props: AppMainContentSectionProps) {
         <AppSupervisionTabContent
           key="tab-supervision"
           SHIFTS_DATA={SHIFTS_DATA}
+          allUsers={allUsers}
           getShiftScheduleForDate={getShiftScheduleForDate}
           getIndividualRestAgent={getIndividualRestAgent}
           getShiftColor={getShiftColor}
@@ -819,7 +823,17 @@ export function AppMainContentSection(props: AppMainContentSectionProps) {
           ALERT_TYPE_CONFIG={ALERT_TYPE_CONFIG}
           SHIFTS_DATA={SHIFTS_DATA}
           SHIFT_CYCLE_START={SHIFT_CYCLE_START}
+          allUsers={allUsers}
+          assignUserToShift={assignUserToShift}
+          shiftAssignmentBusyUserId={shiftAssignmentBusyUserId}
           getShiftColor={getShiftColor}
+          planningSettings={planningSettings}
+          setPlanningSettings={setPlanningSettings}
+          planningSettingsLoading={planningSettingsLoading}
+          planningSettingsSaving={planningSettingsSaving}
+          loadPlanningSettings={loadPlanningSettings}
+          savePlanningSettings={savePlanningSettings}
+          availablePlanningRoles={availablePlanningRoles}
         />
       )}
 
@@ -842,7 +856,17 @@ export function AppMainContentSection(props: AppMainContentSectionProps) {
           ALERT_TYPE_CONFIG={ALERT_TYPE_CONFIG}
           SHIFTS_DATA={SHIFTS_DATA}
           SHIFT_CYCLE_START={SHIFT_CYCLE_START}
+          allUsers={allUsers}
+          assignUserToShift={assignUserToShift}
+          shiftAssignmentBusyUserId={shiftAssignmentBusyUserId}
           getShiftColor={getShiftColor}
+          planningSettings={planningSettings}
+          setPlanningSettings={setPlanningSettings}
+          planningSettingsLoading={planningSettingsLoading}
+          planningSettingsSaving={planningSettingsSaving}
+          loadPlanningSettings={loadPlanningSettings}
+          savePlanningSettings={savePlanningSettings}
+          availablePlanningRoles={availablePlanningRoles}
         />
       )}
     </>

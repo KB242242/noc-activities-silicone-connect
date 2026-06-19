@@ -90,18 +90,13 @@ L'application sera accessible sur : http://localhost:3000
 - alaine@siliconeconnect.com - Call Center
 - casimir@siliconeconnect.com - Monitoring
 - luca@siliconeconnect.com - Reporting 1
-- jose@siliconeconnect.com - Reporting 2
 
 **Shift B (Jaune):**
-- sahra@siliconeconnect.com - Call Center
-- severin@siliconeconnect.com - Monitoring
-- marly@siliconeconnect.com - Reporting 1
+- wivine@siliconeconnect.com - Monitoring
 - furys@siliconeconnect.com - Reporting 2
 
 **Shift C (Vert):**
 - audrey@siliconeconnect.com - Call Center
-- lapreuve@siliconeconnect.com - Reporting 2
-- lotti@siliconeconnect.com - Reporting 1
 - kevine@siliconeconnect.com - Monitoring
 
 **Mot de passe par défaut pour tous les agents:** Admin@2026

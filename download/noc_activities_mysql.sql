@@ -681,21 +681,16 @@ INSERT INTO users (id, email, name, first_name, last_name, username, password_ha
 INSERT INTO users (id, email, name, first_name, last_name, username, password_hash, role, shift_id, responsibility, is_active, is_blocked, is_first_login, must_change_password, failed_login_attempts, created_at, updated_at) VALUES
 ('agent-a1', 'alaine@siliconeconnect.com', 'Alaine', 'Alaine', '', 'Alaine', 'Alaine_SC2026!', 'TECHNICIEN_NO', 'shift-a', 'CALL_CENTER', TRUE, FALSE, TRUE, TRUE, 0, NOW(), NOW()),
 ('agent-a2', 'casimir@siliconeconnect.com', 'Casimir', 'Casimir', '', 'Casimir', 'Casimir@2026SC', 'TECHNICIEN_NO', 'shift-a', 'MONITORING', TRUE, FALSE, TRUE, TRUE, 0, NOW(), NOW()),
-('agent-a3', 'luca@siliconeconnect.com', 'Luca', 'Luca', '', 'Luca', 'Luca#2026!SC', 'TECHNICIEN_NO', 'shift-a', 'REPORTING_1', TRUE, FALSE, TRUE, TRUE, 0, NOW(), NOW()),
-('agent-a4', 'jose@siliconeconnect.com', 'José', 'José', '', 'Jose', 'Jose_SC@2026', 'TECHNICIEN_NO', 'shift-a', 'REPORTING_2', TRUE, FALSE, TRUE, TRUE, 0, NOW(), NOW());
+('agent-a3', 'luca@siliconeconnect.com', 'Luca', 'Luca', '', 'Luca', 'Luca#2026!SC', 'TECHNICIEN_NO', 'shift-a', 'REPORTING_1', TRUE, FALSE, TRUE, TRUE, 0, NOW(), NOW());
 
 -- Techniciens NOC - Shift B
 INSERT INTO users (id, email, name, first_name, last_name, username, password_hash, role, shift_id, responsibility, is_active, is_blocked, is_first_login, must_change_password, failed_login_attempts, created_at, updated_at) VALUES
-('agent-b1', 'sahra@siliconeconnect.com', 'Sahra', 'Sahra', '', 'Sahra', 'Sahra2026*SC', 'TECHNICIEN_NO', 'shift-b', 'CALL_CENTER', TRUE, FALSE, TRUE, TRUE, 0, NOW(), NOW()),
-('agent-b2', 'severin@siliconeconnect.com', 'Severin', 'Severin', '', 'Severin', 'Sev2026_SC@rin', 'TECHNICIEN_NO', 'shift-b', 'MONITORING', TRUE, FALSE, TRUE, TRUE, 0, NOW(), NOW()),
-('agent-b3', 'marly@siliconeconnect.com', 'Marly', 'Marly', '', 'Marly', 'Marly_SC2026!', 'TECHNICIEN_NO', 'shift-b', 'REPORTING_1', TRUE, FALSE, TRUE, TRUE, 0, NOW(), NOW()),
+('agent-b2', 'wivine@siliconeconnect.com', 'Wivine MITSOMOY', 'Wivine', '', 'Wivine', 'Sev2026_SC@rin', 'TECHNICIEN_NO', 'shift-b', 'MONITORING', TRUE, FALSE, TRUE, TRUE, 0, NOW(), NOW()),
 ('agent-b4', 'furys@siliconeconnect.com', 'Furys', 'Furys', '', 'Furys', 'Furys#2026SC', 'TECHNICIEN_NO', 'shift-b', 'REPORTING_2', TRUE, FALSE, TRUE, TRUE, 0, NOW(), NOW());
 
 -- Techniciens NOC - Shift C
 INSERT INTO users (id, email, name, first_name, last_name, username, password_hash, role, shift_id, responsibility, is_active, is_blocked, is_first_login, must_change_password, failed_login_attempts, created_at, updated_at) VALUES
 ('agent-c1', 'audrey@siliconeconnect.com', 'Audrey', 'Audrey', '', 'Audrey', 'Audrey@2026SC', 'TECHNICIEN_NO', 'shift-c', 'CALL_CENTER', TRUE, FALSE, TRUE, TRUE, 0, NOW(), NOW()),
-('agent-c2', 'lapreuve@siliconeconnect.com', 'Lapreuve', 'Lapreuve', '', 'Lapreuve', 'Lapreuve#SC26', 'TECHNICIEN_NO', 'shift-c', 'MONITORING', TRUE, FALSE, TRUE, TRUE, 0, NOW(), NOW()),
-('agent-c3', 'lotti@siliconeconnect.com', 'Lotti', 'Lotti', '', 'Lotti', 'Lotti@2026!SC', 'TECHNICIEN_NO', 'shift-c', 'REPORTING_1', TRUE, FALSE, TRUE, TRUE, 0, NOW(), NOW()),
 ('agent-c4', 'kevine@siliconeconnect.com', 'Kevine', 'Kevine', '', 'Kevine', '@Admin2026SC', 'TECHNICIEN_NO', 'shift-c', 'REPORTING_2', TRUE, FALSE, TRUE, TRUE, 0, NOW(), NOW());
 
 -- Autre utilisateur
