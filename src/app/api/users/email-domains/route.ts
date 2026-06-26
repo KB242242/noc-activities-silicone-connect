@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { getJwtClaims } from '@/lib/auth/request-auth';
 import {
   defaultEmailDomain,
   loadAllowedEmailDomains,
   saveAllowedEmailDomains,
 } from '@/lib/users/emailDomains';
 
-async function ensureAdmin(adminId: string | null | undefined) {
-  const id = String(adminId ?? '').trim();
+async function ensureAdmin(request: NextRequest) {
+  const claims = getJwtClaims(request);
+  const id = String(claims?.id ?? '').trim();
   if (!id) return null;
   const user = await db.user.findUnique({ where: { id }, select: { id: true, role: true } }).catch(() => null);
   if (!user) return null;
@@ -27,7 +29,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const admin = await ensureAdmin(body?.adminId);
+    const admin = await ensureAdmin(request);
     if (!admin) {
       return NextResponse.json({ success: false, error: 'Non autorisé' }, { status: 403 });
     }
@@ -70,7 +72,7 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const admin = await ensureAdmin(body?.adminId);
+    const admin = await ensureAdmin(request);
     if (!admin) {
       return NextResponse.json({ success: false, error: 'Non autorisé' }, { status: 403 });
     }
@@ -109,8 +111,7 @@ export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const domain = String(searchParams.get('domain') ?? '').trim().toLowerCase().replace(/^@+/, '');
-    const adminId = searchParams.get('adminId');
-    const admin = await ensureAdmin(adminId);
+    const admin = await ensureAdmin(request);
     if (!admin) {
       return NextResponse.json({ success: false, error: 'Non autorisé' }, { status: 403 });
     }

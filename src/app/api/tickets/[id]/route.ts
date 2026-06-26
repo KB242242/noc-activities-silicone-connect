@@ -291,9 +291,9 @@ async function loadNotificationEmails(): Promise<string[]> {
     const emails = Array.isArray(parsed.notificationEmails)
       ? parsed.notificationEmails.map((item) => String(item).trim()).filter(Boolean)
       : [];
-    return emails.length > 0 ? emails : ['kevinebauer7@gmail.com'];
+    return emails.length > 0 ? emails : ['noc@siliconeconnect.com'];
   } catch {
-    return ['kevinebauer7@gmail.com'];
+    return ['noc@siliconeconnect.com'];
   }
 }
 
@@ -303,9 +303,9 @@ async function loadNotificationConfig() {
     ? parsed.notificationEmails.map((item) => String(item).trim().toLowerCase()).filter(Boolean)
     : [];
   return {
-    notificationEmails: notificationEmails.length > 0 ? notificationEmails : ['kevinebauer7@gmail.com'],
+    notificationEmails: notificationEmails.length > 0 ? notificationEmails : ['noc@siliconeconnect.com'],
     supportCopyEmail: String(parsed.supportCopyEmail ?? 'support@siliconeconnect.com').trim().toLowerCase(),
-    technicianFallbackEmail: String(parsed.technicianFallbackEmail ?? 'kevinebauer7@gmail.com').trim().toLowerCase(),
+    technicianFallbackEmail: String(parsed.technicianFallbackEmail ?? 'noc@siliconeconnect.com').trim().toLowerCase(),
     lifecycleEmailEvents: {
       pending: Boolean(parsed.lifecycleEmailEvents?.pending ?? true),
       escalated: Boolean(parsed.lifecycleEmailEvents?.escalated ?? true),
@@ -1478,6 +1478,112 @@ export async function PUT(
             timestamp: new Date(),
           },
         }).catch(() => null);
+      }
+    }
+
+    if (!statusChanged) {
+      const updateChangeLines: string[] = [];
+      if (priority !== undefined && priority !== existing.priority) {
+        updateChangeLines.push(`Priorite: ${String(existing.priority ?? '-')} -> ${String(updated.priority ?? '-')}`);
+      }
+      if (nextObjetNormalized !== undefined && nextObjetNormalized !== String(existing.objet ?? '')) {
+        updateChangeLines.push(`Objet: ${String(existing.objet ?? '-')} -> ${String(updated.objet ?? '-')}`);
+      }
+      if (description !== undefined && description !== existing.description) {
+        updateChangeLines.push('Description: mise a jour');
+      }
+      if (dueDateChanged) {
+        updateChangeLines.push('Echeance: mise a jour');
+      }
+      if (previousEta !== nextEta) {
+        updateChangeLines.push('ETA: mise a jour');
+      }
+      if (previousEtr !== nextEtr) {
+        updateChangeLines.push('ETR: mise a jour');
+      }
+      if (previousSite !== nextSite) {
+        updateChangeLines.push(`Site: ${String(previousSite || '-')} -> ${String(nextSite || '-')}`);
+      }
+      if (previousLocalite !== nextLocalite) {
+        updateChangeLines.push(`Localite: ${String(previousLocalite || '-')} -> ${String(nextLocalite || '-')}`);
+      }
+
+      const shouldNotifyGeneralUpdate = updateChangeLines.length > 0;
+      if (shouldNotifyGeneralUpdate) {
+        const notificationConfig = await loadNotificationConfig();
+        const technicianIds = extractTagTechnicianIds(currentTags);
+        const assignedTechnicians = technicianIds.length > 0
+          ? await (db as any).user.findMany({
+              where: { id: { in: technicianIds } },
+              select: { id: true, name: true, email: true },
+            }).catch(() => [])
+          : [];
+
+        const technicianRecipients = assignedTechnicians
+          .map((entry: any) => ({
+            name: String(entry?.name ?? '').trim() || 'Technicien',
+            email: String(entry?.email ?? '').trim().toLowerCase(),
+          }))
+          .filter((entry: { name: string; email: string }) => Boolean(entry.email));
+
+        const nocRecipients = uniqueEmails([nocMailbox, ...notificationConfig.notificationEmails]);
+        const actorName = String(updatedBy ?? '').trim() || String(body.updatedByName ?? '').trim() || 'Systeme';
+        const currentTicketDescription = String(updated.description ?? '').trim() || 'Aucune description';
+        const currentAssignedTechnician = String(updated.assigneeName ?? updated.technicien ?? '').trim() || 'Non assigne';
+        const currentLocality = String(updated.localite ?? '').trim() || 'Non precisee';
+        const updateSummary = updateChangeLines.join(' | ');
+
+        for (const receiver of nocRecipients) {
+          const { html, text } = buildTicketMessageContent({
+            greeting: 'NOC SILICONE CONNECT,\nBonjour !,',
+            intro: 'Un ticket a ete mis a jour, voici le detail:',
+            ticketNumber: String(updated.numero ?? ''),
+            subject: String(updated.objet ?? ''),
+            description: currentTicketDescription,
+            assignedTechnician: currentAssignedTechnician,
+            locality: currentLocality,
+            status: formatTicketStatusLabel(updated.status),
+            footer: `Mise a jour initiee par ${actorName}. Champs modifies: ${updateSummary}`,
+          });
+          void sendTicketLifecycleEmail({
+            action: 'created',
+            ticketNumber: String(updated.numero ?? ''),
+            subject: String(updated.objet ?? ''),
+            status: String(updated.status ?? ''),
+            receiver,
+            cc: notificationConfig.supportCopyEmail,
+            fromOverride: nocFromAddress,
+            subjectOverride: `[MISE A JOUR TICKET] ${updated.numero} - ${updated.objet}`,
+            htmlBody: html,
+            textBody: text,
+          });
+        }
+
+        for (const tech of technicianRecipients) {
+          const { html, text } = buildTicketMessageContent({
+            greeting: `Bonjour ${tech.name},`,
+            intro: 'Le ticket auquel vous etes assigne a ete mis a jour, voici le detail.',
+            ticketNumber: String(updated.numero ?? ''),
+            subject: String(updated.objet ?? ''),
+            description: currentTicketDescription,
+            assignedTechnician: currentAssignedTechnician,
+            locality: currentLocality,
+            status: formatTicketStatusLabel(updated.status),
+            footer: `Champs modifies: ${updateSummary}`,
+            addTechnicianSignature: true,
+          });
+          void sendTicketLifecycleEmail({
+            action: 'created',
+            ticketNumber: String(updated.numero ?? ''),
+            subject: String(updated.objet ?? ''),
+            status: String(updated.status ?? ''),
+            receiver: tech.email,
+            fromOverride: nocFromAddress,
+            subjectOverride: `[MISE A JOUR TICKET] ${updated.numero} - ${updated.objet}`,
+            htmlBody: html,
+            textBody: text,
+          });
+        }
       }
     }
 

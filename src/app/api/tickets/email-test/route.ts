@@ -90,6 +90,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json().catch(() => ({}));
+  // This test uses the same transport settings as real ticket notifications.
   const receiver = String(body?.to ?? body?.receiver ?? process.env.SMTP_FROM ?? process.env.SMTP_USER ?? 'noc@siliconeconnect.local').trim();
 
   if (!receiver) {

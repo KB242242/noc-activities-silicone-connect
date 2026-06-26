@@ -160,7 +160,14 @@ export function getArchiveYearBuckets(
 export function getTicketTechnicianOptions(usersDirectory: UserProfile[]): TicketOptionItem[] {
   return usersDirectory
     .filter((profile) => profile.isActive && (profile.role === 'TECHNICIEN' || profile.role === 'TECHNICIEN_NO'))
-    .map((profile) => ({ id: profile.id, name: profile.name }))
+    .map((profile) => ({
+      id: profile.id,
+      name: profile.name,
+      email: profile.email,
+      hasEmail: Boolean(String(profile.email ?? '').trim()),
+      isActive: Boolean(profile.isActive),
+      role: profile.role,
+    }))
     .sort((left, right) => left.name.localeCompare(right.name, 'fr', { sensitivity: 'base' }));
 }
 

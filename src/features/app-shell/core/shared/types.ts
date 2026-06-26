@@ -476,6 +476,10 @@ export interface TicketItem {
 export interface TicketOptionItem {
   id: string;
   name: string;
+  email?: string | null;
+  hasEmail?: boolean;
+  isActive?: boolean;
+  role?: string | null;
   localite?: string | null;
   departement?: string | null;
 }

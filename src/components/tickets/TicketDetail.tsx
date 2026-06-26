@@ -361,7 +361,7 @@ export default function TicketDetail({
       ``,
       `Cause: ${ticket.resolutionCause ? RESOLUTION_CAUSE_CONFIG[ticket.resolutionCause] : 'N/A'}`,
     ].join('\n');
-    const mailto = `mailto:kevine.test242@gmail.com,kevinebauer7@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    const mailto = `mailto:noc@siliconeconnect.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     window.open(mailto, '_blank');
   };
 

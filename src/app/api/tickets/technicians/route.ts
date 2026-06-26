@@ -26,6 +26,17 @@ async function ensureTicketTechniciansTable() {
 
 const ALLOWED_UNITS = new Set(['Datacom', 'System', 'NOC', 'Technicien de terain', 'Electricite']);
 
+function normalizeIdentity(value: string): string {
+  return String(value ?? '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 async function getWeeklyOpenCount(displayName: string, pseudo: string) {
   const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
   const weekEnd = endOfWeek(new Date(), { weekStartsOn: 1 });
@@ -51,68 +62,13 @@ export async function GET(_req: NextRequest) {
   try {
     await ensureTicketTechniciansTable();
 
-    const customTechs = await db.$queryRaw<Array<{
-      id: string;
-      firstName: string;
-      lastName: string;
-      pseudo: string;
-      department: string;
-      unitName: string;
-      isActive: number;
-    }>>`
-      SELECT id,
-             first_name AS firstName,
-             last_name AS lastName,
-             pseudo,
-             department,
-             unit_name AS unitName,
-             is_active AS isActive
-      FROM noc_ticket_technicians
-      WHERE is_active = 1
-      ORDER BY last_name ASC, first_name ASC
-    `;
-
-    if (customTechs.length > 0) {
-      const normalized = await Promise.all(
-        customTechs.map(async (tech) => {
-          const name = `${tech.lastName} ${tech.firstName}`.trim();
-          const weeklyOpen = await getWeeklyOpenCount(name, tech.pseudo);
-          return {
-            id: tech.id,
-            name,
-            firstName: tech.firstName,
-            lastName: tech.lastName,
-            pseudo: tech.pseudo,
-            email: tech.pseudo.includes('@') ? tech.pseudo : null,
-            hasEmail: tech.pseudo.includes('@'),
-            department: tech.department,
-            unit: tech.unitName,
-            weeklyOpen,
-          };
-        })
-      );
-
-      return NextResponse.json(normalized);
-    }
-
-    let users = await (db as any).user.findMany({
-      where: {
-        isActive: true,
-        role: { in: ['TECHNICIEN', 'TECHNICIEN_NO'] },
-      },
-      select: { id: true, name: true, email: true, role: true },
+    const users = await (db as any).user.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true, email: true, role: true, isActive: true },
       orderBy: { name: 'asc' },
     }).catch(() => []);
 
-    if (users.length === 0) {
-      users = await (db as any).user.findMany({
-        where: { isActive: true },
-        select: { id: true, name: true, email: true, role: true },
-        orderBy: { name: 'asc' },
-      });
-    }
-
-    const result = await Promise.all(
+    const resultFromUsers = await Promise.all(
       users.map(async (u: any) => {
         const weeklyOpen = await getWeeklyOpenCount(u.name, u.email?.split('@')[0] ?? u.id);
 
@@ -122,6 +78,7 @@ export async function GET(_req: NextRequest) {
           email: u.email ?? null,
           hasEmail: Boolean(String(u.email ?? '').trim()),
           pseudo: u.email?.split('@')[0],
+          isActive: Boolean(u.isActive),
           department: 'Technique',
           unit: 'NOC',
           weeklyOpen,
@@ -129,7 +86,67 @@ export async function GET(_req: NextRequest) {
       })
     );
 
-    return NextResponse.json(result);
+    const byKey = new Map<string, any>();
+
+    for (const item of resultFromUsers) {
+      const emailKey = item.email ? `email:${String(item.email).trim().toLowerCase()}` : null;
+      const nameKey = `name:${String(item.name).trim().toLowerCase()}`;
+      const existing = byKey.get(`id:${item.id}`) || (emailKey ? byKey.get(emailKey) : null) || byKey.get(nameKey);
+
+      if (!existing) {
+        byKey.set(`id:${item.id}`, item);
+        if (emailKey) byKey.set(emailKey, item);
+        byKey.set(nameKey, item);
+        continue;
+      }
+
+      const merged = {
+        ...existing,
+        email: existing.email || item.email,
+        hasEmail: Boolean(existing.hasEmail || item.hasEmail),
+        weeklyOpen: Math.max(Number(existing.weeklyOpen ?? 0), Number(item.weeklyOpen ?? 0)),
+      };
+      byKey.set(`id:${existing.id ?? item.id}`, merged);
+      if (merged.email) byKey.set(`email:${String(merged.email).trim().toLowerCase()}`, merged);
+      byKey.set(`name:${String(merged.name).trim().toLowerCase()}`, merged);
+    }
+
+    const dedupByIdentity = new Map<string, any>();
+    for (const item of byKey.values()) {
+      const normalizedEmail = normalizeIdentity(String(item.email ?? ''));
+      const normalizedName = normalizeIdentity(String(item.name ?? ''));
+      const normalizedPseudo = normalizeIdentity(String(item.pseudo ?? ''));
+      const identityKey = normalizedEmail
+        ? `email:${normalizedEmail}`
+        : normalizedName
+          ? `name:${normalizedName}`
+          : normalizedPseudo
+            ? `pseudo:${normalizedPseudo}`
+            : `id:${String(item.id ?? '').trim()}`;
+
+      if (!identityKey) continue;
+      const existing = dedupByIdentity.get(identityKey);
+      if (!existing) {
+        dedupByIdentity.set(identityKey, item);
+        continue;
+      }
+
+      dedupByIdentity.set(identityKey, {
+        ...existing,
+        ...item,
+        id: String(existing.id ?? item.id ?? '').trim() || String(item.id ?? existing.id ?? '').trim(),
+        name: String(existing.name ?? item.name ?? '').trim() || String(item.name ?? existing.name ?? '').trim(),
+        email: String(existing.email ?? '').trim() || String(item.email ?? '').trim() || null,
+        hasEmail: Boolean(existing.hasEmail || item.hasEmail),
+        weeklyOpen: Math.max(Number(existing.weeklyOpen ?? 0), Number(item.weeklyOpen ?? 0)),
+      });
+    }
+
+    const mergedResult = Array.from(dedupByIdentity.values()).sort((a, b) =>
+      String(a.name ?? '').localeCompare(String(b.name ?? ''), 'fr', { sensitivity: 'base' })
+    );
+
+    return NextResponse.json(mergedResult);
   } catch (err) {
     console.error('[tickets/technicians GET]', err);
     return NextResponse.json([], { status: 200 });

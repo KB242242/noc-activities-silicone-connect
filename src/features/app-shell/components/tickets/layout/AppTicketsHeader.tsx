@@ -6,12 +6,12 @@ type AppTicketsHeaderProps = {
 
 export function AppTicketsHeader({ actions }: AppTicketsHeaderProps) {
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-      <div>
-        <h1 className="text-2xl lg:text-3xl font-bold text-foreground">Gestion des Tickets</h1>
-        <p className="text-muted-foreground">Suivi et création de tickets</p>
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+      <div className="min-w-0 space-y-1">
+        <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold leading-tight text-foreground wrap-break-word">Gestion des Tickets</h1>
+        <p className="text-sm sm:text-base text-muted-foreground wrap-break-word">Suivi et création de tickets</p>
       </div>
-      <div className="flex items-center gap-2">{actions}</div>
+      <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">{actions}</div>
     </div>
   );
 }

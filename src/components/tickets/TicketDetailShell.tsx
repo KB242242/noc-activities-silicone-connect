@@ -1827,22 +1827,41 @@ export default function TicketDetailShell({ ticket }: { ticket: any }) {
     const loadTechnicians = async () => {
       try {
         const res = await fetch('/api/tickets/technicians', { cache: 'no-store' });
-        if (!res.ok) {
-          setTicketTechnicianOptions([]);
-          return;
-        }
+        if (!res.ok) return;
         const data = await res.json();
         const mapped = Array.isArray(data)
           ? data
               .map((item) => ({ id: String(item.id ?? ''), name: String(item.name ?? '').trim() }))
               .filter((item) => item.id && item.name)
           : [];
-        setTicketTechnicianOptions(mapped);
+        const dedupByName = new Map<string, { id: string; name: string }>();
+        mapped.forEach((item) => {
+          const key = String(item.name ?? '')
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[_-]+/g, ' ')
+            .replace(/[^a-z0-9\s]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+          if (!key || dedupByName.has(key)) return;
+          dedupByName.set(key, item);
+        });
+        setTicketTechnicianOptions(
+          Array.from(dedupByName.values()).sort((a, b) =>
+            String(a.name ?? '').localeCompare(String(b.name ?? ''), 'fr', { sensitivity: 'base' })
+          )
+        );
       } catch {
-        setTicketTechnicianOptions([]);
+        // Keep previous values if API is temporarily unavailable.
       }
     };
     void loadTechnicians();
+    const syncTimer = window.setInterval(() => {
+      void loadTechnicians();
+    }, 15000);
+
+    return () => window.clearInterval(syncTimer);
   }, [editDialogOpen]);
 
   useEffect(() => {
@@ -1914,7 +1933,24 @@ export default function TicketDetailShell({ ticket }: { ticket: any }) {
                   .map((item) => ({ id: String(item.id ?? ''), name: String(item.name ?? '').trim() }))
                   .filter((item) => item.id && item.name)
               : [];
-            setTicketTechnicianOptions(mapped);
+            const dedupByName = new Map<string, { id: string; name: string }>();
+            mapped.forEach((item) => {
+              const key = String(item.name ?? '')
+                .toLowerCase()
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .replace(/[_-]+/g, ' ')
+                .replace(/[^a-z0-9\s]/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+              if (!key || dedupByName.has(key)) return;
+              dedupByName.set(key, item);
+            });
+            setTicketTechnicianOptions(
+              Array.from(dedupByName.values()).sort((a, b) =>
+                String(a.name ?? '').localeCompare(String(b.name ?? ''), 'fr', { sensitivity: 'base' })
+              )
+            );
           }
         } catch {
           // keep previous options

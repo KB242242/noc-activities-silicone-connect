@@ -840,6 +840,7 @@ export function AppMainContentSection(props: AppMainContentSectionProps) {
       {currentTab === 'admin' && canManageUsers && (
         <AppAdminManagementTabSection
           key="tab-admin"
+          requesterId={user?.id}
           setCurrentTabSafely={setCurrentTabSafely}
           ticketAdminSettings={ticketAdminSettings}
           setTicketAdminSettings={setTicketAdminSettings}

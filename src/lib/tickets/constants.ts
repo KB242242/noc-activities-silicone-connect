@@ -263,7 +263,7 @@ export const TECHNICIANS: Technician[] = [
 // EMAIL RECIPIENTS
 // ============================================
 export const EMAIL_RECIPIENTS = {
-  notification: 'kevine.test242@gmail.com',
+  notification: 'noc@siliconeconnect.com',
   support: 'support@siliconeconnect.com',
   noc: 'noc@siliconeconnect.com'
 };

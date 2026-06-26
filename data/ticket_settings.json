@@ -2,10 +2,10 @@
   "numberFormat": "#SC{date}-{seq}",
   "numberSeed": 100000000,
   "notificationEmails": [
-    "kevinebauer7@gmail.com"
+    "noc@siliconeconnect.com"
   ],
   "supportCopyEmail": "support@siliconeconnect.com",
-  "technicianFallbackEmail": "kevinebauer7@gmail.com",
+  "technicianFallbackEmail": "noc@siliconeconnect.com",
   "lifecycleEmailEvents": {
     "creation": true,
     "pending": true,

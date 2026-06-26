@@ -27,8 +27,7 @@ interface Props {
 const SUPER_ADMIN_EMAIL = 'theresia.babindamana@siliconeconnect.com';
 const AUTHORIZED_EDITORS = [
   'theresia.babindamana@siliconeconnect.com',
-  'kevine.test242@gmail.com',
-  'kevinebauer7@gmail.com',
+  'noc@siliconeconnect.com',
 ];
 
 export default function TicketsPage({ user, initialSearch = '', initialTab = 'list' }: Props) {

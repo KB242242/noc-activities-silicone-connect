@@ -8,6 +8,7 @@ export function AppAdminManagementTabSection(props: AppAdminManagementTabSection
   return (
     <motion.div key="admin" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-4">
       <AppAdminTabContent
+        requesterId={props.requesterId}
         isUsersSyncing={props.isUsersSyncing}
         syncUsersFromApi={props.syncUsersFromApi}
         setCurrentTabSafely={props.setCurrentTabSafely}

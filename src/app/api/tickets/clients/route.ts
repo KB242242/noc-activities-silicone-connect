@@ -27,6 +27,52 @@ async function ensureTicketClientsTable() {
       INDEX idx_noc_ticket_clients_name (name)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `);
+
+  // Keep a single deterministic test fixture for client-email behavior.
+  await db.$executeRawUnsafe(`
+    DELETE FROM noc_ticket_clients
+    WHERE id IN ('test-client-mail-ok', 'test-client-mail-no')
+       OR name IN ('test_client_mail_ok', 'test_client_mail_no')
+  `);
+
+  await db.$executeRawUnsafe(`
+    INSERT INTO noc_ticket_clients (
+      id,
+      name,
+      email,
+      phone,
+      address,
+      city,
+      district,
+      account_number,
+      client_type,
+      service_type,
+      principal_responsable
+    ) VALUES (
+      'saris-congo-test',
+      'SARIS_CONGO',
+      'kevinebauer7@gmail.com',
+      '+242066000001',
+      'Zone industrielle SARIS',
+      'Nkayi',
+      'Bouenza',
+      'SARIS-TEST-001',
+      'Entreprise',
+      'Fibre',
+      'Responsable IT SARIS'
+    )
+    ON DUPLICATE KEY UPDATE
+      name = VALUES(name),
+      email = VALUES(email),
+      phone = VALUES(phone),
+      address = VALUES(address),
+      city = VALUES(city),
+      district = VALUES(district),
+      account_number = VALUES(account_number),
+      client_type = VALUES(client_type),
+      service_type = VALUES(service_type),
+      principal_responsable = VALUES(principal_responsable)
+  `);
 }
 
 function normalizeContactPersons(value: unknown): Array<{ name: string; email?: string; phone?: string }> {
@@ -85,34 +131,31 @@ export async function GET(_req: NextRequest) {
       ORDER BY name ASC
     `;
 
-    if (ticketClients.length > 0) {
-      return NextResponse.json(
-        ticketClients.map((client) => {
-          let contacts: Array<{ name: string; email?: string; phone?: string }> = [];
-          try {
-            contacts = normalizeContactPersons(JSON.parse(client.contactPersonsJson ?? '[]'));
-          } catch {
-            contacts = [];
-          }
-          return {
-            id: client.id,
-            name: client.name,
-            email: client.email ?? undefined,
-            phone: client.phone ?? undefined,
-            address: client.address ?? undefined,
-            city: client.city ?? undefined,
-            district: client.district ?? undefined,
-            accountNumber: client.accountNumber ?? undefined,
-            clientType: client.clientType ?? undefined,
-            serviceType: client.serviceType ?? undefined,
-            contractStartDate: client.contractStartDate?.toISOString() ?? null,
-            consumptionDate: client.consumptionDate?.toISOString() ?? null,
-            principalResponsable: client.principalResponsable ?? undefined,
-            contactPersons: contacts,
-          };
-        })
-      );
-    }
+    const ticketClientItems = ticketClients.map((client) => {
+      let contacts: Array<{ name: string; email?: string; phone?: string }> = [];
+      try {
+        contacts = normalizeContactPersons(JSON.parse(client.contactPersonsJson ?? '[]'));
+      } catch {
+        contacts = [];
+      }
+      return {
+        id: client.id,
+        name: client.name,
+        email: client.email ?? undefined,
+        hasEmail: Boolean(String(client.email ?? '').trim()),
+        phone: client.phone ?? undefined,
+        address: client.address ?? undefined,
+        city: client.city ?? undefined,
+        district: client.district ?? undefined,
+        accountNumber: client.accountNumber ?? undefined,
+        clientType: client.clientType ?? undefined,
+        serviceType: client.serviceType ?? undefined,
+        contractStartDate: client.contractStartDate?.toISOString() ?? null,
+        consumptionDate: client.consumptionDate?.toISOString() ?? null,
+        principalResponsable: client.principalResponsable ?? undefined,
+        contactPersons: contacts,
+      };
+    });
 
     // Try to find a Client model in prisma; fallback to empty
     const client = (db as any).client ?? (db as any).clientSC ?? null;
@@ -128,21 +171,45 @@ export async function GET(_req: NextRequest) {
       }
     }
 
-    const nocClients = await db.$queryRaw<Array<{ id: bigint; name: string; serviceType: string | null }>>`
+    const nocClients = await db.$queryRaw<Array<{ id: bigint; name: string; serviceType: string | null; email: string | null }>>`
       SELECT id_client AS id,
              client_name AS name,
-             service_type AS serviceType
+             service_type AS serviceType,
+             contact_email AS email
       FROM noc_clients
       ORDER BY client_name ASC
     `.catch(() => []);
 
-    if (nocClients.length > 0) {
+    const nocClientItems = nocClients.map((c) => ({
+      id: String(c.id),
+      name: c.name,
+      serviceType: c.serviceType ?? undefined,
+      email: c.email ?? undefined,
+      hasEmail: Boolean(String(c.email ?? '').trim()),
+    }));
+
+    const mergedByName = new Map<string, any>();
+    for (const item of [...ticketClientItems, ...nocClientItems]) {
+      const key = String(item?.name ?? '').trim().toLowerCase();
+      if (!key) continue;
+      const existing = mergedByName.get(key);
+      if (!existing) {
+        mergedByName.set(key, item);
+        continue;
+      }
+      mergedByName.set(key, {
+        ...existing,
+        ...item,
+        email: existing.email || item.email,
+        hasEmail: Boolean(existing.hasEmail || item.hasEmail),
+      });
+    }
+
+    if (mergedByName.size > 0) {
       return NextResponse.json(
-        nocClients.map((c) => ({
-          id: String(c.id),
-          name: c.name,
-          serviceType: c.serviceType ?? undefined,
-        }))
+        Array.from(mergedByName.values()).sort((a, b) =>
+          String(a.name ?? '').localeCompare(String(b.name ?? ''), 'fr', { sensitivity: 'base' })
+        )
       );
     }
 

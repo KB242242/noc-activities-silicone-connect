@@ -316,6 +316,5 @@ export const LOCKOUT_DURATION = 15 * 60 * 1000; // 15 minutes
 // ============================================
 
 export const NOTIFICATION_EMAILS = [
-  'kevinebauer7@gmail.com',
-  'kevine.test242@gmail.com'
+  'noc@siliconeconnect.com'
 ];

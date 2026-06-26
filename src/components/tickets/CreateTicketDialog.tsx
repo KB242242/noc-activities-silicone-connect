@@ -33,6 +33,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { RichTextEditor as Zarko } from '@/components/ui/rich-text-editor';
@@ -46,6 +47,7 @@ import {
   DialogTrigger,
   FloatingDialogContent,
 } from '@/components/ui/dialog';
+import { mergeTechnicianCandidates } from '@/lib/tickets/technicianIdentity';
 
 // Types
 
@@ -71,11 +73,15 @@ interface TicketOptionItem {
   localite?: string | null;
   email?: string | null;
   hasEmail?: boolean;
+  isActive?: boolean;
+  role?: string | null;
 }
 
 interface ClientOption {
   id: string;
   name: string;
+  email?: string | null;
+  hasEmail?: boolean;
 }
 
 interface LocalAttachment {
@@ -108,6 +114,7 @@ interface FormState {
   etr: Date | null;
   slaDuration: string;
   slr: string;
+  sendCopyToClient: boolean;
 }
 
 type AutoPrefillMode = 'enabled' | 'disabled_once' | 'disabled_always';
@@ -170,6 +177,7 @@ const DEFAULT_TICKET_FORM: FormState = {
   etr: null,
   slaDuration: '',
   slr: '',
+  sendCopyToClient: false,
 };
 
 const createToastId = (type: 'success' | 'error') => `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -184,6 +192,36 @@ const toast = {
 function splitValues(value: string): string[] {
   if (!value) return [];
   return value.split(/[,;|]/).map((v) => v.trim()).filter(Boolean);
+}
+
+function normalizeSearchText(value: string): string {
+  return String(value ?? '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function dedupeTechnicianOptions(
+  options: Array<{ id: string; name: string; email?: string | null; hasEmail?: boolean; isActive?: boolean; role?: string | null }>
+): {
+  options: Array<{ id: string; name: string; email?: string | null; hasEmail?: boolean; isActive?: boolean; role?: string | null }>;
+  similarityPairs: Array<{ canonicalName: string; similarName: string }>;
+} {
+  const merged = mergeTechnicianCandidates(options);
+  return {
+    options: merged.options.map((entry) => ({
+      id: String(entry.id ?? '').trim(),
+      name: String(entry.name ?? '').trim(),
+      email: String(entry.email ?? '').trim() || null,
+      hasEmail: Boolean(entry.hasEmail),
+      isActive: Boolean(entry.isActive),
+      role: String(entry.role ?? '').trim() || null,
+    })),
+    similarityPairs: merged.similarityPairs,
+  };
 }
 
 function formatLocalityLabel(value: string): string {
@@ -293,9 +331,9 @@ function SelectM({
   };
 
   const filteredOptions = useMemo(() => {
-    const query = search.trim().toLowerCase();
+    const query = normalizeSearchText(search);
     if (!query) return options;
-    return options.filter((opt) => opt.name.toLowerCase().includes(query));
+    return options.filter((opt) => normalizeSearchText(opt.name).includes(query));
   }, [options, search]);
 
   const selectedOptions = useMemo(
@@ -452,6 +490,7 @@ export function CreateTicketDialog({
   const [localityInput, setLocalityInput] = useState('');
   const [autoPrefillMode, setAutoPrefillMode] = useState<AutoPrefillMode>('enabled');
   const [prefillChoiceOpen, setPrefillChoiceOpen] = useState(false);
+  const [clientMailChoiceLocked, setClientMailChoiceLocked] = useState(false);
   const etaAlertedRef = useRef<string>('');
   const clearedPrefillSnapshotRef = useRef<{ title: string; objet: string; descriptionHtml: string } | null>(null);
 
@@ -611,81 +650,101 @@ export function CreateTicketDialog({
     };
   }, [open]);
 
-  useEffect(() => {
-    if (!open) return;
-    const loadSites = async () => {
-      try {
-        const res = await fetch('/api/tickets/sites');
-        if (!res.ok) return;
-        const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
-          setApiSiteOptions(data.map((item: any) => ({ id: String(item.id ?? ''), name: String(item.name ?? '').trim() })).filter((s: any) => s.id && s.name));
-        }
-      } catch { /* keep resilient */ }
-    };
-    const loadLocalities = async () => {
-      try {
-        const res = await fetch('/api/tickets/localities');
-        if (!res.ok) return;
-        const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
-          setApiLocalityOptions(data.map((item: any) => String(item.label ?? item.name ?? '')).filter(Boolean));
-        }
-      } catch { /* keep resilient */ }
-    };
-    void loadSites();
-    void loadLocalities();
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const loadClients = async () => {
-      try {
-        const res = await fetch('/api/tickets/clients');
-        if (!res.ok) return;
-        const data = await res.json();
-        const mapped = Array.isArray(data)
-          ? data
-              .map((item) => ({ id: String(item.id ?? ''), name: String(item.name ?? '').trim() }))
-              .filter((item) => item.id && item.name)
-          : [];
-        setClients(mapped);
-      } catch {
-        setClients([]);
+  const loadSites = useCallback(async () => {
+    try {
+      const res = await fetch('/api/tickets/sites', { cache: 'no-store' });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        const mapped = data
+          .map((item: any) => ({ id: String(item.id ?? ''), name: String(item.name ?? '').trim() }))
+          .filter((s: any) => s.id && s.name);
+        setApiSiteOptions(mapped);
       }
-    };
-    loadClients();
-  }, [open]);
+    } catch {
+      // Keep resilient.
+    }
+  }, []);
+
+  const loadLocalities = useCallback(async () => {
+    try {
+      const res = await fetch('/api/tickets/localities', { cache: 'no-store' });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        const mapped = data.map((item: any) => String(item.label ?? item.name ?? '')).filter(Boolean);
+        setApiLocalityOptions(mapped);
+      }
+    } catch {
+      // Keep resilient.
+    }
+  }, []);
+
+  const loadClients = useCallback(async () => {
+    try {
+      const res = await fetch('/api/tickets/clients', { cache: 'no-store' });
+      if (!res.ok) return;
+      const data = await res.json();
+      const mapped = Array.isArray(data)
+        ? data
+            .map((item) => {
+              const email = String(item.email ?? '').trim();
+              const hasEmail = typeof item.hasEmail === 'boolean' ? item.hasEmail : Boolean(email);
+              return {
+                id: String(item.id ?? ''),
+                name: String(item.name ?? '').trim(),
+                email: email || null,
+                hasEmail,
+                isActive: Boolean(item.isActive),
+                role: String(item.role ?? '').trim() || null,
+              };
+            })
+            .filter((item) => item.id && item.name)
+        : [];
+      setClients(mapped);
+    } catch {
+      setClients([]);
+    }
+  }, []);
+
+  const loadTechnicians = useCallback(async () => {
+    try {
+      const res = await fetch('/api/tickets/technicians', { cache: 'no-store' });
+      if (!res.ok) return;
+      const data = await res.json();
+      const mapped = Array.isArray(data)
+        ? data
+            .map((item) => {
+              const email = String(item.email ?? '').trim();
+              const hasEmail = typeof item.hasEmail === 'boolean' ? item.hasEmail : Boolean(email);
+              return {
+                id: String(item.id ?? ''),
+                name: String(item.name ?? '').trim(),
+                email: email || null,
+                hasEmail,
+              };
+            })
+            .filter((item) => item.id && item.name)
+        : [];
+      const nextOptions = dedupeTechnicianOptions(mapped).options;
+      setTicketTechnicians((prev) => (nextOptions.length > 0 ? nextOptions : prev));
+    } catch {
+      // Keep last known options if API is temporarily unavailable.
+    }
+  }, []);
 
   useEffect(() => {
     if (!open) return;
-    const loadTechnicians = async () => {
-      try {
-        const res = await fetch('/api/tickets/technicians', { cache: 'no-store' });
-        if (!res.ok) return;
-        const data = await res.json();
-        const mapped = Array.isArray(data)
-          ? data
-              .map((item) => {
-                const email = String(item.email ?? '').trim();
-                const hasEmail = typeof item.hasEmail === 'boolean' ? item.hasEmail : Boolean(email);
-                return {
-                  id: String(item.id ?? ''),
-                  name: String(item.name ?? '').trim(),
-                  email: email || null,
-                  hasEmail,
-                };
-              })
-              .filter((item) => item.id && item.name)
-          : [];
-        setTicketTechnicians(mapped);
-      } catch {
-        setTicketTechnicians([]);
-      }
-    };
+    // Initial pull from DB-backed APIs
+    void Promise.all([loadSites(), loadLocalities(), loadClients(), loadTechnicians()]);
 
-    loadTechnicians();
-  }, [open]);
+    // Keep options synchronized while dialog is open.
+    const syncTimer = window.setInterval(() => {
+      void Promise.all([loadSites(), loadLocalities(), loadClients(), loadTechnicians()]);
+    }, 15000);
+
+    return () => window.clearInterval(syncTimer);
+  }, [open, loadSites, loadLocalities, loadClients, loadTechnicians]);
 
   const startDrag = useCallback((e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('button, a, input, textarea, select, [role="combobox"]')) return;
@@ -760,7 +819,7 @@ export function CreateTicketDialog({
     [localityLookup]
   );
 
-  const mergedTechnicianOptions = useMemo(() => {
+  const normalizedTechnicianBundle = useMemo(() => {
     const merged = new Map<string, { id: string; name: string; email?: string | null; hasEmail?: boolean }>();
     technicianOptions.forEach((item) => {
       const email = String(item.email ?? '').trim();
@@ -769,13 +828,24 @@ export function CreateTicketDialog({
         name: item.name,
         email: email || null,
         hasEmail: typeof item.hasEmail === 'boolean' ? item.hasEmail : Boolean(email),
+        isActive: Boolean(item.isActive),
+        role: String(item.role ?? '').trim() || null,
       });
     });
     ticketTechnicians.forEach((item) => merged.set(item.id, item));
-    return Array.from(merged.values()).sort((left, right) =>
-      left.name.localeCompare(right.name, 'fr', { sensitivity: 'base' })
-    );
+    return dedupeTechnicianOptions(Array.from(merged.values()));
   }, [technicianOptions, ticketTechnicians]);
+
+  const mergedTechnicianOptions = normalizedTechnicianBundle.options;
+
+  const technicianSimilarityMessage = useMemo(() => {
+    const pairs = normalizedTechnicianBundle.similarityPairs.slice(0, 3);
+    if (pairs.length === 0) return '';
+    const examples = pairs
+      .map((pair) => `${pair.canonicalName} / ${pair.similarName}`)
+      .join(' ; ');
+    return `Nous avons detecte que ces noms ${examples} ont une forte ressemblance. Confirmez s'il s'agit de la meme personne ou supprimez les comptes dupliques. L'identification prioritaire se fait par adresse mail.`;
+  }, [normalizedTechnicianBundle]);
 
   const mergedSiteOptions = useMemo(() => {
     const merged = new Map<string, { id: string; name: string }>();
@@ -793,6 +863,19 @@ export function CreateTicketDialog({
     () => form.clientIds.map((id) => clients.find((client) => client.id === id)?.name ?? id).filter(Boolean),
     [form.clientIds, clients]
   );
+
+  const selectedClientsDetailed = useMemo(
+    () => form.clientIds.map((id) => clients.find((client) => client.id === id)).filter((client): client is ClientOption => Boolean(client)),
+    [form.clientIds, clients]
+  );
+
+  const selectedClientWithEmail = useMemo(
+    () => selectedClientsDetailed.find((client) => Boolean(String(client.email ?? '').trim())),
+    [selectedClientsDetailed]
+  );
+
+  const selectedClientEmail = String(selectedClientWithEmail?.email ?? '').trim().toLowerCase();
+  const canSendClientMail = Boolean(selectedClientEmail);
 
   const selectedSiteNames = useMemo(
     () => form.siteIds.map((id) => mergedSiteOptions.find((site) => site.id === id)?.name ?? id).filter(Boolean),
@@ -859,6 +942,20 @@ export function CreateTicketDialog({
       return { ...prev, descriptionHtml: nextHtml };
     });
   }, [open, autoDescriptionText, isAutoPrefillEnabled]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (canSendClientMail) {
+      setClientMailChoiceLocked(false);
+      return;
+    }
+
+    setForm((prev) => {
+      if (!prev.sendCopyToClient) return prev;
+      return { ...prev, sendCopyToClient: false };
+    });
+    setClientMailChoiceLocked(false);
+  }, [open, canSendClientMail]);
 
   const onCategoryChange = useCallback((value: TicketCategory) => {
     const nextUpdates: Partial<FormState> = { category: value };
@@ -1010,6 +1107,9 @@ export function CreateTicketDialog({
         ownerTechnicianId: form.ownerTechnicianId || null,
         ownerTechnicianName: owner?.name ?? null,
         clientIds: form.clientIds,
+        contactName: selectedClientWithEmail?.name ?? selectedClientNames[0] ?? null,
+        contactEmail: selectedClientEmail || null,
+        sendCopyToClient: form.sendCopyToClient,
         creatorId: user.id,
         creatorName: user.name,
         eta: form.eta?.toISOString() ?? null,
@@ -1068,6 +1168,8 @@ export function CreateTicketDialog({
     form,
     buildShortObject,
     selectedClientNames,
+    selectedClientWithEmail,
+    selectedClientEmail,
     normalizeLocalityInput,
     localityInput,
     localityLookup,
@@ -1316,7 +1418,10 @@ export function CreateTicketDialog({
                 placeholder="Selectionner client(s)"
                 options={clients}
                 selectedIds={form.clientIds}
-                onChange={(clientIds) => updateForm({ clientIds })}
+                onChange={(clientIds) => {
+                  setClientMailChoiceLocked(false);
+                  updateForm({ clientIds, sendCopyToClient: false });
+                }}
               />
 
               <SelectM
@@ -1333,6 +1438,63 @@ export function CreateTicketDialog({
                   });
                 }}
               />
+            </div>
+
+            {technicianSimilarityMessage ? (
+              <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-200">
+                {technicianSimilarityMessage}
+              </p>
+            ) : null}
+
+            <div className="grid gap-3 rounded-lg border p-3">
+              <Label className="text-foreground font-medium inline-flex items-center gap-1.5">
+                <Mail className="h-4 w-4" />
+                Envoyer un email au client à la création
+              </Label>
+
+              <RadioGroup
+                value={form.sendCopyToClient ? 'yes' : 'no'}
+                onValueChange={(value) => {
+                  if (value === 'yes') {
+                    if (!canSendClientMail) {
+                      toast.error("Impossible d'envoyer le mail a ce client, car son adresse mail n'est pas renseignee.");
+                      setForm((prev) => ({ ...prev, sendCopyToClient: false }));
+                      setClientMailChoiceLocked(false);
+                      return;
+                    }
+                    setForm((prev) => ({ ...prev, sendCopyToClient: true }));
+                    setClientMailChoiceLocked(true);
+                    toast.success(`Le client sera notifie a la creation sur ${selectedClientEmail}.`);
+                    return;
+                  }
+
+                  if (!clientMailChoiceLocked) {
+                    setForm((prev) => ({ ...prev, sendCopyToClient: false }));
+                  }
+                }}
+                className="grid grid-cols-1 gap-2 sm:grid-cols-2"
+              >
+                <label
+                  className={`flex items-center gap-2 rounded-md border px-3 py-2 ${canSendClientMail && !clientMailChoiceLocked ? 'cursor-pointer' : 'opacity-60 cursor-not-allowed'}`}
+                >
+                  <RadioGroupItem value="yes" id="send-client-mail-yes" disabled={!canSendClientMail || clientMailChoiceLocked} />
+                  <span className="text-sm">Oui, envoyer au client</span>
+                </label>
+                <label className={`flex items-center gap-2 rounded-md border px-3 py-2 ${clientMailChoiceLocked ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}>
+                  <RadioGroupItem value="no" id="send-client-mail-no" disabled={clientMailChoiceLocked} />
+                  <span className="text-sm">Non</span>
+                </label>
+              </RadioGroup>
+
+              {!canSendClientMail ? (
+                <p className="text-xs text-red-600">
+                  Impossible d'envoyer le mail a ce client, car son adresse mail n'est pas renseignee.
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Le message sera envoye depuis le compte NOC configure par les admins ({selectedClientEmail}).
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">

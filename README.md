@@ -87,6 +87,9 @@ Des fallbacks sont actifs pour la production:
 - SMTP_SECURE = false (si non defini)
 - SMTP_FROM = noc@siliconeconnect.local (si non defini)
 
+La logique applicative reste identique en dev et en prod: les notifications tickets visent toujours la boite NOC `noc@siliconeconnect.com`.
+Seul le transport SMTP change entre les environnements.
+
 Configuration recommandee dans l'environnement de production:
 
 ```env
@@ -101,9 +104,31 @@ SMTP_FROM=noc@votre-domaine.tld
 
 Quand Postfix est configure et actif sur le serveur, aucun changement de code supplementaire n'est necessaire.
 
+Le guide de mise en production detaille est disponible dans [DEPLOYMENT_POSTFIX_CENTOS.md](DEPLOYMENT_POSTFIX_CENTOS.md).
+
+### Profils SMTP de reference
+
+```env
+# Dev ou relais Gmail temporaire
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=noc@siliconeconnect.com
+SMTP_PASS=mot_de_passe_application
+SMTP_FROM="Noc Activities <noc@siliconeconnect.com>"
+
+# Prod CentOS + Postfix local
+# SMTP_HOST=127.0.0.1
+# SMTP_PORT=25
+# SMTP_SECURE=false
+# SMTP_USER=
+# SMTP_PASS=
+# SMTP_FROM="NOC Silicone Connect <noc@siliconeconnect.com>"
+```
+
 # Contact
 Pour toute question ou collaboration, vous pouvez me joindre à :
-kevinebauer7@gmail.com
+noc@siliconeconnect.com
 
 # Structure du projet
 

@@ -780,7 +780,7 @@ model MeetingParticipant {
 
 model CallHistory {
   id              String    @id @default(cuid())
-  meetingId       String?   @map("meeting_id")
+  meetingId       String?   @unique @map("meeting_id")
   conversationId  String    @map("conversation_id")
   callType        String    @db.VarChar(50)
   startTime       DateTime  @map("start_time")

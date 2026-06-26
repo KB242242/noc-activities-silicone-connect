@@ -136,9 +136,9 @@ export const TICKET_ADMIN_CATEGORY_KEYS = [
 export const DEFAULT_TICKET_ADMIN_SETTINGS: TicketAdminSettings = {
   numberFormat: '#SC{date}-{seq}',
   numberSeed: 100000000,
-  notificationEmails: ['kevinebauer7@gmail.com'],
+  notificationEmails: ['noc@siliconeconnect.com'],
   supportCopyEmail: 'support@siliconeconnect.com',
-  technicianFallbackEmail: 'kevinebauer7@gmail.com',
+  technicianFallbackEmail: 'noc@siliconeconnect.com',
   lifecycleEmailEvents: {
     creation: true,
     pending: true,

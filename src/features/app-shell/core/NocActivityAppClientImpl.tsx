@@ -130,6 +130,7 @@ import {
   matchesTicketStorageView,
   updateTicketActionBusyKeys,
 } from '@/features/app-shell/core/tickets/ticket-selectors';
+import { mergeTechnicianCandidates } from '@/lib/tickets/technicianIdentity';
 import {
   attachReplyMessages,
   mapFetchedChatMessage,
@@ -362,6 +363,7 @@ export default function NOCActivityApp() {
   const [email, setEmail] = useState('');
   const [loginError, setLoginError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const authFetchPatchedRef = useRef(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -375,6 +377,53 @@ export default function NOCActivityApp() {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [activityDialogOpen, setActivityDialogOpen] = useState(false);
   const [newActivity, setNewActivity] = useState({ type: '', category: 'Monitoring', description: '' });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (authFetchPatchedRef.current) return;
+
+    authFetchPatchedRef.current = true;
+    const originalFetch = window.fetch.bind(window);
+
+    const patchedFetch: typeof window.fetch = async (input, init) => {
+      try {
+        const inputUrl =
+          typeof input === 'string'
+            ? input
+            : input instanceof URL
+              ? input.toString()
+              : input.url;
+
+        const parsedUrl = new URL(inputUrl, window.location.origin);
+        const isSameOriginApi = parsedUrl.origin === window.location.origin && parsedUrl.pathname.startsWith('/api/');
+
+        if (!isSameOriginApi) {
+          return originalFetch(input, init);
+        }
+
+        const token = localStorage.getItem('noc_auth_token');
+        if (!token) {
+          return originalFetch(input, init);
+        }
+
+        const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
+        if (!headers.has('Authorization')) {
+          headers.set('Authorization', `Bearer ${token}`);
+        }
+
+        return originalFetch(input, { ...(init ?? {}), headers });
+      } catch {
+        return originalFetch(input, init);
+      }
+    };
+
+    window.fetch = patchedFetch;
+
+    return () => {
+      window.fetch = originalFetch;
+      authFetchPatchedRef.current = false;
+    };
+  }, []);
   
   // États pour la gestion des utilisateurs et sécurité
   const [password, setPassword] = useState('');
@@ -570,31 +619,61 @@ export default function NOCActivityApp() {
 
   useEffect(() => {
     const fromDirectory = getTicketTechnicianOptions(usersDirectory);
-    const fallbackNames = Array.from(
-      new Set(
-        tickets
-          .flatMap((ticket) => splitTicketValues(ticket.technicien))
-          .map((name) => name.trim())
-          .filter((name) => name.length > 0 && name !== '-')
-      )
-    ).sort((left, right) => left.localeCompare(right, 'fr', { sensitivity: 'base' }));
 
-    const fallbackOptions = fallbackNames.map((name) => ({
-      id: `fallback-${name.toLowerCase().replace(/\s+/g, '-')}`,
-      name,
-    }));
-
-    const mergedByName = new Map<string, { id: string; name: string }>();
-    [...fromDirectory, ...fallbackOptions].forEach((entry) => {
-      const key = entry.name.trim().toLowerCase();
-      if (!key) return;
-      if (!mergedByName.has(key)) {
-        mergedByName.set(key, { id: entry.id, name: entry.name });
+    const syncTechnicianOptions = async () => {
+      let fromApi: Array<{ id: string; name: string; email?: string | null; hasEmail?: boolean; isActive?: boolean; role?: string | null }> = [];
+      try {
+        const response = await fetch('/api/tickets/technicians', { cache: 'no-store' });
+        if (response.ok) {
+          const payload = await response.json().catch(() => []);
+          fromApi = Array.isArray(payload)
+            ? payload
+                .map((entry) => ({
+                  id: String(entry?.id ?? '').trim(),
+                  name: String(entry?.name ?? '').trim(),
+                  email: String(entry?.email ?? '').trim() || null,
+                  hasEmail: Boolean(entry?.hasEmail),
+                  isActive: Boolean(entry?.isActive),
+                  role: String(entry?.role ?? '').trim() || null,
+                }))
+                .filter((entry) => entry.id && entry.name)
+            : [];
+        }
+      } catch {
+        fromApi = [];
       }
-    });
 
-    setTicketTechnicianOptions(Array.from(mergedByName.values()));
-  }, [tickets, usersDirectory]);
+      const sourceCandidates = fromApi.length > 0
+        ? fromApi
+        : [...fromDirectory].map((entry) => ({
+            id: entry.id,
+            name: entry.name,
+            email: String((entry as any).email ?? '').trim() || null,
+            hasEmail: Boolean((entry as any).hasEmail),
+            isActive: Boolean((entry as any).isActive),
+            role: String((entry as any).role ?? '').trim() || null,
+          }));
+
+      const { options } = mergeTechnicianCandidates(sourceCandidates);
+      const nextOptions = options.map((entry) => ({
+        id: String(entry.id ?? '').trim(),
+        name: String(entry.name ?? '').trim(),
+        email: String(entry.email ?? '').trim() || null,
+        hasEmail: Boolean(entry.hasEmail),
+        isActive: Boolean(entry.isActive),
+        role: String(entry.role ?? '').trim() || null,
+      }));
+
+      setTicketTechnicianOptions((prev) => (nextOptions.length > 0 ? nextOptions : prev));
+    };
+
+    void syncTechnicianOptions();
+    const syncTimer = window.setInterval(() => {
+      void syncTechnicianOptions();
+    }, 15000);
+
+    return () => window.clearInterval(syncTimer);
+  }, [usersDirectory]);
 
   // États pour le module Tâches NOC
   const [nocTasks, setNocTasks] = useState<Task[]>([]);
@@ -1994,6 +2073,33 @@ export default function NOCActivityApp() {
   useEffect(() => {
     void syncUsersFromApi();
   }, [syncUsersFromApi]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !user?.id) return;
+
+    const syncTimer = window.setInterval(() => {
+      void syncUsersFromApi();
+    }, 15000);
+
+    const handleWindowFocus = () => {
+      void syncUsersFromApi();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void syncUsersFromApi();
+      }
+    };
+
+    window.addEventListener('focus', handleWindowFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(syncTimer);
+      window.removeEventListener('focus', handleWindowFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isAuthenticated, user?.id, syncUsersFromApi]);
 
   const loadTicketAdminSettings = useCallback(async () => {
     if (!canManageUsers) return;

@@ -222,6 +222,8 @@ function buildLifecycleHtml(input: TicketLifecycleInput) {
 }
 
 function buildTransporter() {
+  // The recipient mailbox is ثابت in the ticket flow; only the SMTP transport changes
+  // between Gmail auth in dev and local Postfix relay in prod.
   const host = String(process.env.SMTP_HOST ?? 'localhost').trim() || 'localhost';
   const port = Number(process.env.SMTP_PORT ?? '25');
   const user = String(process.env.SMTP_USER ?? '').trim();
@@ -247,6 +249,7 @@ export async function sendTicketLifecycleEmail(input: TicketLifecycleInput) {
     const transporter = buildTransporter();
     if (!transporter) return false;
 
+    // Keep the NOC sender identity stable so notifications remain consistent across environments.
     const from = String(input.fromOverride ?? process.env.SMTP_FROM ?? process.env.SMTP_USER ?? 'noc@siliconeconnect.local').trim();
     const to = input.receiver ?? 'ange.bata@siliconeconnect.com';
     const actionLabelMap: Record<TicketLifecycleInput['action'], string> = {

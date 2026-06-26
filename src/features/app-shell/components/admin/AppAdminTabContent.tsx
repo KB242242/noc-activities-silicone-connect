@@ -2,6 +2,7 @@ import { format } from 'date-fns';
 import { RefreshCw } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
+import { AdminSmtpSettingsPanel } from '@/components/admin/AdminSmtpSettingsPanel';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -21,6 +22,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 type AppAdminTabContentProps = {
+  requesterId?: string;
   isUsersSyncing: boolean;
   syncUsersFromApi: () => Promise<void>;
   setCurrentTabSafely: (tab: any) => void;
@@ -53,6 +55,7 @@ type AppAdminTabContentProps = {
 };
 
 export function AppAdminTabContent({
+  requesterId,
   isUsersSyncing,
   syncUsersFromApi,
   ticketAdminSettings,
@@ -161,6 +164,7 @@ export function AppAdminTabContent({
         <TabsTrigger value="tickets">Tickets</TabsTrigger>
         <TabsTrigger value="rubriques">Rubriques</TabsTrigger>
         <TabsTrigger value="operations">Opérations</TabsTrigger>
+        <TabsTrigger value="systeme">Système</TabsTrigger>
       </TabsList>
 
       <TabsContent value="tickets" className="space-y-4">
@@ -244,7 +248,7 @@ export function AppAdminTabContent({
                     technicianFallbackEmail: event.target.value,
                   }))
                 }
-                placeholder="kevine.test242@gmail.com"
+                placeholder="noc@siliconeconnect.com"
                 disabled={ticketAdminSettingsLoading || ticketAdminSettingsSaving}
               />
             </div>
@@ -762,6 +766,27 @@ export function AppAdminTabContent({
           </CardContent>
         </Card>
       </TabsContent>
+
+      {/* ── Système & SMTP ── */}
+      <TabsContent value="systeme" className="space-y-4">
+        <Card>
+          <CardHeader className="pb-2 pt-4">
+            <CardTitle className="text-base">Système & SMTP</CardTitle>
+            <CardDescription>
+              Configurez le serveur d'envoi d'emails, la boîte NOC de référence, et les destinataires des notifications.
+              Les modifications prennent effet immédiatement sans redémarrage.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pb-4">
+            {requesterId ? (
+              <AdminSmtpSettingsPanel requesterId={requesterId} />
+            ) : (
+              <p className="text-sm text-muted-foreground">Chargement…</p>
+            )}
+          </CardContent>
+        </Card>
+      </TabsContent>
+
     </Tabs>
   );
 }

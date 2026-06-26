@@ -1,0 +1,99 @@
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_password_change_me}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-noc_activity}
+      MYSQL_USER: ${MYSQL_USER:-noc_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-noc_password_change_me}
+    command:
+      # --default-authentication-plugin supprime dans MySQL 8.4 — supprimer
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      # Prisma/mysql2 supporte caching_sha2_password (defaut MySQL 8)
+      # Pour re-activer l'ancien plugin si necessaire : --mysql-native-password=ON
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - mysqladmin ping -h 127.0.0.1 -u$$MYSQL_USER -p$$MYSQL_PASSWORD --silent
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 25s
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database/noc_activities_final.sql:/docker-entrypoint-initdb.d/01-noc-activities-final.sql:ro
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: mysql://${MYSQL_USER:-noc_user}:${MYSQL_PASSWORD:-noc_password_change_me}@mysql:3306/${MYSQL_DATABASE:-noc_activity}
+      JWT_SECRET: ${JWT_SECRET:-change_me_jwt_secret}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-change_me_nextauth_secret}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost}
+      NEXT_PUBLIC_BASE_URL: ${NEXT_PUBLIC_BASE_URL:-http://localhost}
+      SMTP_HOST: ${SMTP_HOST:-host.docker.internal}
+      SMTP_PORT: ${SMTP_PORT:-25}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-NOC Silicone Connect <noc@siliconeconnect.com>}
+      NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${NEXT_PUBLIC_VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      CALLCENTER_INGEST_TOKEN: ${CALLCENTER_INGEST_TOKEN:-}
+      ADMIN_BOOTSTRAP_PASSWORD: ${ADMIN_BOOTSTRAP_PASSWORD:-@Adminsc2026@}
+      ZABBIX_API_URL: ${ZABBIX_API_URL:-}
+      ZABBIX_API_TOKEN: ${ZABBIX_API_TOKEN:-}
+      LIBRENMS_API_URL: ${LIBRENMS_API_URL:-}
+      LIBRENMS_API_TOKEN: ${LIBRENMS_API_TOKEN:-}
+      LIBRENMS_API_USER: ${LIBRENMS_API_USER:-}
+      NEXT_PUBLIC_ZABBIX_WEB_URL: ${NEXT_PUBLIC_ZABBIX_WEB_URL:-}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_API_KEY: ${TWILIO_API_KEY:-}
+      TWILIO_API_SECRET: ${TWILIO_API_SECRET:-}
+      TWILIO_TWIML_APP_SID: ${TWILIO_TWIML_APP_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_QUEUE_NAME: ${TWILIO_QUEUE_NAME:-noc-queue}
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    volumes:
+      - app_data:/app/data
+      - app_upload:/app/upload
+      - app_public_upload:/app/public/upload
+      - app_profile_avatars:/app/public/profile-avatars
+      - app_chat_media:/app/public/chat-media
+      - app_approval_stamps:/app/public/approval-stamps
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ > /dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    volumes:
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+
+volumes:
+  mysql_data:
+  app_data:
+  app_upload:
+  app_public_upload:
+  app_profile_avatars:
+  app_chat_media:
+  app_approval_stamps:

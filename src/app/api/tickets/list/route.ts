@@ -42,7 +42,14 @@ type TicketSettingsLite = {
   trashRetentionDays?: number;
 };
 
+type SmtpSettingsLite = {
+  from: string;
+  nocMailbox: string;
+  extraNotificationEmails: string[];
+};
+
 const TICKET_SETTINGS_FILE = path.join(process.cwd(), 'data', 'ticket_settings.json');
+const SMTP_SETTINGS_FILE = path.join(process.cwd(), 'data', 'smtp_settings.json');
 const DEFAULT_DUE_DAYS = 3;
 const LIST_MAINTENANCE_MIN_INTERVAL_MS = 5 * 60 * 1000;
 let lastListMaintenanceRunAt = 0;
@@ -60,13 +67,13 @@ async function loadTicketSettings(): Promise<TicketSettingsLite> {
         : 100000000,
       notificationEmails: Array.isArray(parsed.notificationEmails)
         ? parsed.notificationEmails.map((item) => String(item).trim()).filter(Boolean)
-        : ['kevinebauer7@gmail.com'],
+        : ['noc@siliconeconnect.com'],
       supportCopyEmail: typeof parsed.supportCopyEmail === 'string' && parsed.supportCopyEmail.trim()
         ? parsed.supportCopyEmail.trim()
         : 'support@siliconeconnect.com',
       technicianFallbackEmail: typeof parsed.technicianFallbackEmail === 'string' && parsed.technicianFallbackEmail.trim()
         ? parsed.technicianFallbackEmail.trim()
-        : 'kevinebauer7@gmail.com',
+        : 'noc@siliconeconnect.com',
       lifecycleEmailEvents: {
         creation: Boolean((parsed as any)?.lifecycleEmailEvents?.creation ?? true),
         pending: Boolean((parsed as any)?.lifecycleEmailEvents?.pending ?? true),
@@ -95,9 +102,9 @@ async function loadTicketSettings(): Promise<TicketSettingsLite> {
     return {
       numberFormat: '#SC{date}-{seq}',
       numberSeed: 100000000,
-      notificationEmails: ['kevinebauer7@gmail.com'],
+      notificationEmails: ['noc@siliconeconnect.com'],
       supportCopyEmail: 'support@siliconeconnect.com',
-      technicianFallbackEmail: 'kevinebauer7@gmail.com',
+      technicianFallbackEmail: 'noc@siliconeconnect.com',
       lifecycleEmailEvents: {
         creation: true,
         pending: true,
@@ -108,6 +115,27 @@ async function loadTicketSettings(): Promise<TicketSettingsLite> {
       defaultSlaHours: 24,
       slaByCategory: {},
       trashRetentionDays: 30,
+    };
+  }
+}
+
+async function loadSmtpSettingsLite(): Promise<SmtpSettingsLite> {
+  try {
+    const raw = await fs.readFile(SMTP_SETTINGS_FILE, 'utf8');
+    const parsed = JSON.parse(raw) as Partial<SmtpSettingsLite>;
+    const nocMailbox = String(parsed.nocMailbox ?? 'noc@siliconeconnect.com').trim().toLowerCase() || 'noc@siliconeconnect.com';
+    return {
+      from: String(parsed.from ?? `NOC Silicone Connect <${nocMailbox}>`).trim() || `NOC Silicone Connect <${nocMailbox}>`,
+      nocMailbox,
+      extraNotificationEmails: Array.isArray(parsed.extraNotificationEmails)
+        ? parsed.extraNotificationEmails.map((item) => String(item).trim().toLowerCase()).filter(Boolean)
+        : [],
+    };
+  } catch {
+    return {
+      from: 'NOC Silicone Connect <noc@siliconeconnect.com>',
+      nocMailbox: 'noc@siliconeconnect.com',
+      extraNotificationEmails: [],
     };
   }
 }
@@ -529,6 +557,7 @@ export async function POST(req: NextRequest) {
     }
 
     const settings = await loadTicketSettings();
+    const smtpSettings = await loadSmtpSettingsLite();
     const now = new Date(startDate ?? new Date());
     const resolvedDueDate = dueDate
       ? new Date(dueDate)
@@ -545,19 +574,46 @@ export async function POST(req: NextRequest) {
       ? parsedSla
       : Number(settings.slaByCategory?.[String(categoryKey ?? '')] ?? settings.defaultSlaHours ?? 24);
 
-    const numericClientIds = Array.isArray(clientIds)
-      ? (clientIds as string[])
-          .map((id) => Number(id))
-          .filter((n) => Number.isFinite(n))
+    const clientIdTokens = Array.isArray(clientIds)
+      ? [...new Set((clientIds as string[]).map((id) => String(id).trim()).filter(Boolean))]
       : [];
 
-    const selectedClients = numericClientIds.length > 0
-      ? await db.$queryRawUnsafe<Array<{ id_client: bigint; client_name: string; service_type: string | null }>>(
-          `SELECT id_client, client_name, service_type
-           FROM noc_clients
-           WHERE id_client IN (${numericClientIds.join(',')})`
+    const numericClientIds = clientIdTokens
+      .map((id) => Number(id))
+      .filter((n) => Number.isFinite(n));
+
+    const ticketClients = clientIdTokens.length > 0
+      ? await db.$queryRawUnsafe<Array<{ id: string; name: string; service_type: string | null; email: string | null }>>(
+          `SELECT id, name, service_type, email
+           FROM noc_ticket_clients
+           WHERE id IN (${clientIdTokens.map(() => '?').join(',')})`,
+          ...clientIdTokens
         ).catch(() => [])
       : [];
+
+    const nocClients = numericClientIds.length > 0
+      ? await db.$queryRawUnsafe<Array<{ id_client: bigint; client_name: string; service_type: string | null; contact_email: string | null }>>(
+          `SELECT id_client, client_name, service_type, contact_email
+           FROM noc_clients
+           WHERE id_client IN (${numericClientIds.map(() => '?').join(',')})`,
+          ...numericClientIds
+        ).catch(() => [])
+      : [];
+
+    const selectedClients = [
+      ...ticketClients.map((client) => ({
+        id: String(client.id),
+        name: String(client.name ?? '').trim(),
+        serviceType: client.service_type ?? null,
+        email: String(client.email ?? '').trim().toLowerCase() || null,
+      })),
+      ...nocClients.map((client) => ({
+        id: String(client.id_client),
+        name: String(client.client_name ?? '').trim(),
+        serviceType: client.service_type ?? null,
+        email: String(client.contact_email ?? '').trim().toLowerCase() || null,
+      })),
+    ].filter((client) => client.id && client.name);
 
     const selectedTechnicians = Array.isArray(technicianIds) && technicianIds.length > 0
       ? await (db as any).user.findMany({
@@ -610,9 +666,10 @@ export async function POST(req: NextRequest) {
     const allLocalities = [...new Set([...normalizedLocalities, ...siteLocalities])];
 
     const clientPayload = selectedClients.map((client) => ({
-      id: String(client.id_client),
-      name: client.client_name,
-      serviceType: client.service_type ?? undefined,
+      id: client.id,
+      name: client.name,
+      serviceType: client.serviceType ?? undefined,
+      email: client.email ?? undefined,
     }));
 
     const technicianPayload = selectedTechnicians.map((tech: { id: string; name: string; email: string | null }) => ({
@@ -744,8 +801,8 @@ export async function POST(req: NextRequest) {
     const supportCopyEmail = String(settings.supportCopyEmail ?? '').trim();
     const fallbackTechEmail = String(settings.technicianFallbackEmail ?? '').trim();
     const adminNotificationRecipients = uniqueEmails(settings.notificationEmails ?? []);
-    const nocMailbox = 'noc@siliconeconnect.com';
-    const nocFromAddress = 'NOC Silicone Connect <noc@siliconeconnect.com>';
+    const nocMailbox = smtpSettings.nocMailbox;
+    const nocFromAddress = smtpSettings.from;
 
     if (lifecycleCreationEnabled && !hasExactTicketDateAtCreation) {
       const assignedTechNames = technicianPayload.map((tech) => tech.name).filter(Boolean);
@@ -764,13 +821,15 @@ export async function POST(req: NextRequest) {
       );
 
       // Always build recipients from assigned technicians so each assignee gets a personalized notification.
-      // If a technician has no email, we route the notification to the NOC fallback mailbox.
+      // If a technician has no email, route to fallback mailbox so the assignment is never silently dropped.
       const techRecipients = technicianPayload
         .map((tech) => {
           const normalizedId = String(tech.id ?? '').trim();
           const directEmail = selectedTechEmailById.get(normalizedId) ?? '';
+          const fallbackEmail = String(fallbackTechEmail || nocMailbox).trim().toLowerCase();
+          const resolvedEmail = directEmail || fallbackEmail;
           return {
-            email: directEmail,
+            email: resolvedEmail,
             name: String(tech.name ?? '').trim() || 'Technicien',
             hasDirectEmail: Boolean(directEmail),
           };
@@ -805,7 +864,12 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      const adminRecipients = uniqueEmails([nocMailbox, ...adminNotificationRecipients, fallbackTechEmail]);
+      const adminRecipients = uniqueEmails([
+        nocMailbox,
+        ...adminNotificationRecipients,
+        ...smtpSettings.extraNotificationEmails,
+        fallbackTechEmail,
+      ]);
       if (adminRecipients.length > 0) {
         const { html, text } = buildTicketMessageContent({
           greeting: 'NOC SILICONE CONNECT,\nBonjour !,',
@@ -843,7 +907,18 @@ export async function POST(req: NextRequest) {
         || categoryKeyLower === 'maintenance';
       const allowClientCopy = settings.sendClientCopyForIncidentMaintenance === true;
       const shouldSendClientCopy = allowClientCopy && isIncidentOrMaintenance && Boolean(sendCopyToClient);
-      const clientReceiver = String(contactEmail ?? '').trim().toLowerCase();
+      const selectedClientReceiver = String(selectedClients.find((client) => client.email)?.email ?? '').trim().toLowerCase();
+      const clientReceiver = selectedClientReceiver || String(contactEmail ?? '').trim().toLowerCase();
+
+      if (shouldSendClientCopy && !clientReceiver) {
+        return NextResponse.json(
+          {
+            error: 'client_email_missing',
+            message: "Impossible d'envoyer le mail a ce client, car son adresse mail n'est pas renseignee.",
+          },
+          { status: 400 }
+        );
+      }
 
       if (shouldSendClientCopy && clientReceiver) {
         const sitesForClient = siteNames.length > 0 ? siteNames : ['N/A'];
@@ -857,6 +932,7 @@ export async function POST(req: NextRequest) {
           actionAt,
           receiver: clientReceiver,
           cc: supportCopyEmail,
+          fromOverride: nocFromAddress,
           subjectOverride: `Incident Information - ${ticketNumber}`,
           htmlBody: buildIncidentClientTableHtml({
             ticketNumber,

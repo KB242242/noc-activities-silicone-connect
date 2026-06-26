@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { getJwtClaims } from '@/lib/auth/request-auth';
 import { loadAllowedEmailDomains } from '@/lib/users/emailDomains';
 import {
   getUserEmailDomainPolicy,
@@ -8,8 +9,9 @@ import {
   UserEmailDomainPolicyMode,
 } from '@/lib/users/emailDomainPolicies';
 
-async function ensureAdmin(adminId: string | null | undefined) {
-  const id = String(adminId ?? '').trim();
+async function ensureAdmin(request: NextRequest) {
+  const claims = getJwtClaims(request);
+  const id = String(claims?.id ?? '').trim();
   if (!id) return null;
   const user = await db.user.findUnique({ where: { id }, select: { id: true, role: true } }).catch(() => null);
   if (!user) return null;
@@ -17,9 +19,9 @@ async function ensureAdmin(adminId: string | null | undefined) {
   return user;
 }
 
-async function ensureViewer(params: { actorId?: string | null; userId?: string | null; adminId?: string | null }) {
-  const actorId = String(params.actorId ?? params.adminId ?? '').trim();
-  const userId = String(params.userId ?? '').trim();
+async function ensureViewer(request: NextRequest, userId: string) {
+  const claims = getJwtClaims(request);
+  const actorId = String(claims?.id ?? '').trim();
   if (!actorId || !userId) return null;
 
   const actor = await db.user.findUnique({ where: { id: actorId }, select: { id: true, role: true } }).catch(() => null);
@@ -31,10 +33,8 @@ async function ensureViewer(params: { actorId?: string | null; userId?: string |
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const adminId = searchParams.get('adminId');
-  const actorId = searchParams.get('actorId');
   const userId = String(searchParams.get('userId') ?? '').trim();
-  const viewer = await ensureViewer({ actorId, adminId, userId });
+  const viewer = await ensureViewer(request, userId);
   if (!viewer) {
     return NextResponse.json({ success: false, error: 'Non autorisé' }, { status: 403 });
   }
@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const admin = await ensureAdmin(body?.adminId);
+    const admin = await ensureAdmin(request);
     if (!admin) {
       return NextResponse.json({ success: false, error: 'Non autorisé' }, { status: 403 });
     }

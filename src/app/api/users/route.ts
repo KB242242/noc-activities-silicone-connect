@@ -5,6 +5,7 @@ import { publishChatEvent } from '@/lib/chatRealtime';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { randomUUID } from 'crypto';
+import { getJwtClaims } from '@/lib/auth/request-auth';
 import { isEmailDomainAllowed, loadAllowedEmailDomains } from '@/lib/users/emailDomains';
 import {
   getUserEmailDomainPolicy,
@@ -12,6 +13,12 @@ import {
   resolveUserAllowedDomains,
 } from '@/lib/users/emailDomainPolicies';
 import { isDisallowedRosterUser } from '@/features/app-shell/core/users/user-roster-policy';
+
+async function getAuthenticatedActor(request: NextRequest) {
+  const claims = getJwtClaims(request);
+  if (!claims?.id) return null;
+  return db.user.findUnique({ where: { id: claims.id } }).catch(() => null);
+}
 
 function getImageExtension(mimeType: string) {
   if (mimeType.includes('png')) return 'png';
@@ -48,6 +55,11 @@ async function persistAvatarDataUrlIfNeeded(avatar: string, userId: string) {
 // GET /api/users - Get all users (with filters)
 export async function GET(request: NextRequest) {
   try {
+    const actor = await getAuthenticatedActor(request);
+    if (!actor) {
+      return NextResponse.json({ success: false, error: 'Non authentifie' }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const role = searchParams.get('role');
     const shiftId = searchParams.get('shiftId');
@@ -137,9 +149,13 @@ export async function GET(request: NextRequest) {
 // POST /api/users - Create new user (Super Admin only)
 export async function POST(request: NextRequest) {
   try {
+    const actor = await getAuthenticatedActor(request);
+    if (!actor) {
+      return NextResponse.json({ success: false, error: 'Non authentifie' }, { status: 401 });
+    }
+
     const body = await request.json();
     const { 
-      adminId,
       email, 
       name, 
       firstName, 
@@ -152,7 +168,7 @@ export async function POST(request: NextRequest) {
     } = body;
 
     // Verify admin permissions
-    const admin = await db.user.findUnique({ where: { id: adminId } });
+    const admin = actor;
     if (!admin || (admin.role !== 'SUPER_ADMIN' && admin.role !== 'ADMIN')) {
       return NextResponse.json(
         { success: false, error: 'Non autorisé' },
@@ -283,9 +299,13 @@ export async function POST(request: NextRequest) {
 // PUT /api/users - Update user
 export async function PUT(request: NextRequest) {
   try {
+    const actor = await getAuthenticatedActor(request);
+    if (!actor) {
+      return NextResponse.json({ success: false, error: 'Non authentifie' }, { status: 401 });
+    }
+
     const body = await request.json();
     const { 
-      adminId,
       userId,
       name, 
       firstName, 
@@ -300,7 +320,7 @@ export async function PUT(request: NextRequest) {
     } = body;
 
     // Verify admin permissions
-    const admin = await db.user.findUnique({ where: { id: adminId } });
+    const admin = actor;
     if (!admin || (admin.role !== 'SUPER_ADMIN' && admin.role !== 'ADMIN')) {
       return NextResponse.json(
         { success: false, error: 'Non autorisé' },
@@ -454,11 +474,14 @@ export async function PUT(request: NextRequest) {
 // PATCH /api/users - Self profile update (and avatar upload)
 export async function PATCH(request: NextRequest) {
   try {
+    const authenticatedActor = await getAuthenticatedActor(request);
+    if (!authenticatedActor) {
+      return NextResponse.json({ success: false, error: 'Non authentifie' }, { status: 401 });
+    }
+
     const body = await request.json();
     const {
       userId,
-      actorId,
-      adminId,
       targetUserId,
       newPassword,
       forceResetPassword,
@@ -472,8 +495,8 @@ export async function PATCH(request: NextRequest) {
     } = body;
 
     // Admin password reset path
-    if (adminId && targetUserId && typeof newPassword === 'string' && forceResetPassword === true) {
-      const admin = await db.user.findUnique({ where: { id: adminId } });
+    if (targetUserId && typeof newPassword === 'string' && forceResetPassword === true) {
+      const admin = authenticatedActor;
       if (!admin || (admin.role !== 'SUPER_ADMIN' && admin.role !== 'ADMIN')) {
         return NextResponse.json(
           { success: false, error: 'Non autorisé' },
@@ -558,8 +581,8 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Self password change path
-    if (userId && actorId && typeof newPassword === 'string' && changePassword === true) {
-      const actor = await db.user.findUnique({ where: { id: actorId } });
+    if (userId && typeof newPassword === 'string' && changePassword === true) {
+      const actor = authenticatedActor;
       if (!actor || actor.id !== userId) {
         return NextResponse.json(
           { success: false, error: 'Non autorisé' },
@@ -651,14 +674,14 @@ export async function PATCH(request: NextRequest) {
       });
     }
 
-    if (!userId || !actorId) {
+    if (!userId) {
       return NextResponse.json(
-        { success: false, error: 'userId et actorId requis' },
+        { success: false, error: 'userId requis' },
         { status: 400 }
       );
     }
 
-    const actor = await db.user.findUnique({ where: { id: actorId } });
+    const actor = authenticatedActor;
     if (!actor) {
       return NextResponse.json(
         { success: false, error: 'Acteur non autorisé' },
@@ -825,13 +848,17 @@ export async function PATCH(request: NextRequest) {
 // DELETE /api/users - Delete/Deactivate user
 export async function DELETE(request: NextRequest) {
   try {
+    const actor = await getAuthenticatedActor(request);
+    if (!actor) {
+      return NextResponse.json({ success: false, error: 'Non authentifie' }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
-    const adminId = searchParams.get('adminId');
     const userId = searchParams.get('userId');
     const permanent = searchParams.get('permanent') === 'true';
 
     // Verify admin permissions
-    const admin = await db.user.findUnique({ where: { id: adminId || '' } });
+    const admin = actor;
     if (!admin || admin.role !== 'SUPER_ADMIN') {
       return NextResponse.json(
         { success: false, error: 'Non autorisé' },

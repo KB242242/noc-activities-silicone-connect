@@ -1,0 +1,25 @@
+# Postfix main.cf configuration example for NOC Activities relay
+
+# Enable IPv4 only
+inet_interfaces = localhost
+inet_protocols = ipv4
+
+# Relay configuration
+mydestination = localhost.localdomain, localhost
+mynetworks = 127.0.0.0/8, [::1]/128
+
+# Performance tuning
+default_process_limit = 100
+smtpd_client_connection_count_limit = 10
+
+# Queue and delivery
+queue_directory = /var/spool/postfix
+maximal_queue_lifetime = 5d
+bounce_queue_lifetime = 1d
+
+# TLS setup (optional, for relay to external mailhost)
+# smtp_tls_security_level = may
+# smtp_tls_session_cache_database = btree:${data_directory}/smtp_scache
+
+# Logging
+maillog_file = /var/log/maillog

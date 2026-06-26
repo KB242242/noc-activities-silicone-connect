@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { compare, hash } from 'bcryptjs';
+import { timingSafeEqual } from 'crypto';
 import { users_role } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 import { sign } from 'jsonwebtoken';
@@ -8,6 +9,50 @@ import { sign } from 'jsonwebtoken';
 const JWT_SECRET = process.env.NEXTAUTH_SECRET || 'noc-activities-secret-key-2026';
 const SESSION_DURATION_HOURS = 24;
 const ADMIN_BOOTSTRAP_PASSWORD = process.env.ADMIN_BOOTSTRAP_PASSWORD || '@Adminsc2026@';
+
+// ─── Protection brute-force par IP ────────────────────────────────────────────
+// Limite 30 tentatives par IP sur une fenêtre glissante de 15 minutes.
+const IP_MAX = 30;
+const IP_WINDOW_MS = 15 * 60 * 1000;
+const ipAttempts = new Map<string, { count: number; resetAt: number }>();
+
+function getClientIp(req: NextRequest): string {
+  const xff = req.headers.get('x-forwarded-for');
+  if (xff) return xff.split(',')[0].trim();
+  return req.headers.get('x-real-ip') ?? 'unknown';
+}
+
+function isIpRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const rec = ipAttempts.get(ip);
+  if (!rec || rec.resetAt < now) {
+    ipAttempts.set(ip, { count: 1, resetAt: now + IP_WINDOW_MS });
+    return false;
+  }
+  rec.count++;
+  return rec.count > IP_MAX;
+}
+
+// Hash bcrypt factice pour normaliser le temps de réponse quand l'utilisateur n'existe pas.
+// Empêche l'énumération de comptes par différence de timing.
+const TIMING_DUMMY_HASH = '$2b$12$invalidsaltsoinvalidhashXXXXXXXXXXXXXXXXXXXXXXXXXX';
+
+// Comparaison à temps constant pour les mots de passe plain-text hérités
+function safeStringEqual(a: string, b: string): boolean {
+  try {
+    const ba = Buffer.from(a);
+    const bb = Buffer.from(b);
+    if (ba.length !== bb.length) {
+      // Même longueur factice pour éviter le circuit court natif
+      const dummy = Buffer.alloc(ba.length);
+      timingSafeEqual(ba, dummy);
+      return false;
+    }
+    return timingSafeEqual(ba, bb);
+  } catch {
+    return false;
+  }
+}
 const LEGACY_ADMIN_ALIASES = [
   'admin',
   'admin sc',
@@ -33,6 +78,15 @@ function getAdminAliasCandidates(login: string) {
 // POST /api/auth/login - User login
 export async function POST(request: NextRequest) {
   try {
+    // ── Rate limiting par IP ──────────────────────────────────────────────────
+    const clientIp = getClientIp(request);
+    if (isIpRateLimited(clientIp)) {
+      return NextResponse.json(
+        { success: false, error: 'Trop de tentatives. Réessayez dans 15 minutes.' },
+        { status: 429 }
+      );
+    }
+
     const body = await request.json();
     const { login, password } = body;
     const normalizedLogin = typeof login === 'string' ? login.trim() : '';
@@ -56,6 +110,10 @@ export async function POST(request: NextRequest) {
           { username: normalizedLogin },
           { username: lowerLogin },
           { name: normalizedLogin },
+          { firstName: normalizedLogin },
+          { firstName: lowerLogin },
+          { lastName: normalizedLogin },
+          { lastName: lowerLogin },
           ...(adminAliasCandidates.length > 0
             ? [{
                 OR: [
@@ -86,8 +144,10 @@ export async function POST(request: NextRequest) {
     });
 
     if (!user) {
+      // Normalisation du temps de réponse pour éviter l'énumération par timing
+      await compare(String(password), TIMING_DUMMY_HASH).catch(() => {});
       return NextResponse.json(
-        { success: false, error: 'Utilisateur non trouvé' },
+        { success: false, error: 'Identifiants incorrects' },
         { status: 401 }
       );
     }
@@ -118,8 +178,8 @@ export async function POST(request: NextRequest) {
       if (user.passwordHash.startsWith('$2')) {
         passwordValid = await compare(password, user.passwordHash);
       } else {
-        // For legacy plain text passwords (migration)
-        passwordValid = password === user.passwordHash;
+        // Héritage: comparaison à temps constant (évite timing attack)
+        passwordValid = safeStringEqual(String(password), user.passwordHash);
       }
     } else if (
       (user.role === 'SUPER_ADMIN' || user.role === 'ADMIN') &&
@@ -171,7 +231,7 @@ export async function POST(request: NextRequest) {
       });
 
       return NextResponse.json(
-        { success: false, error: 'Mot de passe incorrect' },
+        { success: false, error: 'Identifiants incorrects' },
         { status: 401 }
       );
     }

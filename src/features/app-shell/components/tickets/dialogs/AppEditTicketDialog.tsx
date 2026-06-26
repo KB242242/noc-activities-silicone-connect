@@ -1,4 +1,4 @@
-import type { Dispatch, SetStateAction } from 'react';
+import { useMemo, type Dispatch, type SetStateAction } from 'react';
 
 import { TICKET_COUNTRIES } from '@/features/app-shell/core/config/ticket-constants';
 import { renderTicketCountryLabel } from '@/features/app-shell/core/tickets/ticket-ui';
@@ -18,10 +18,15 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import { detectTechnicianSimilarities, mergeTechnicianCandidates } from '@/lib/tickets/technicianIdentity';
 
 type TicketOption = {
   id: string;
   name: string;
+  email?: string | null;
+  hasEmail?: boolean;
+  isActive?: boolean;
+  role?: string | null;
 };
 
 type OptionItem = {
@@ -70,6 +75,35 @@ export function AppEditTicketDialog({
   onCancel,
   onSave,
 }: AppEditTicketDialogProps) {
+  const normalizedTechnicianBundle = useMemo(
+    () => mergeTechnicianCandidates(ticketTechnicianOptions),
+    [ticketTechnicianOptions]
+  );
+
+  const normalizedTechnicianOptions = useMemo(
+    () => normalizedTechnicianBundle.options.map((entry) => ({
+      id: String(entry.id ?? '').trim(),
+      name: String(entry.name ?? '').trim(),
+      email: String(entry.email ?? '').trim() || null,
+      hasEmail: Boolean(entry.hasEmail),
+      isActive: Boolean(entry.isActive),
+      role: String(entry.role ?? '').trim() || null,
+    })),
+    [normalizedTechnicianBundle]
+  );
+
+  const technicianSimilarityMessage = useMemo(() => {
+    const pairs = [
+      ...normalizedTechnicianBundle.similarityPairs,
+      ...detectTechnicianSimilarities(normalizedTechnicianOptions),
+    ]
+      .filter((pair) => pair.canonicalName && pair.similarName)
+      .slice(0, 3);
+    if (pairs.length === 0) return '';
+    const examples = pairs.map((pair) => `${pair.canonicalName} / ${pair.similarName}`).join(' ; ');
+    return `Nous avons detecte que ces noms ${examples} ont une forte ressemblance. Confirmez s'il s'agit de la meme personne ou supprimez les comptes dupliques. L'identification prioritaire se fait par adresse mail.`;
+  }, [normalizedTechnicianBundle, normalizedTechnicianOptions]);
+
   return (
     <Dialog key="edit-ticket-dialog" open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl bg-white dark:bg-slate-900 border-2 dark:border-slate-700">
@@ -167,11 +201,16 @@ export function AppEditTicketDialog({
                     <SelectValue placeholder="Sélectionner un technicien" />
                   </SelectTrigger>
                   <SelectContent className="bg-white dark:bg-slate-800">
-                    {ticketTechnicianOptions.map((technician) => (
+                    {normalizedTechnicianOptions.map((technician) => (
                       <SelectItem key={technician.id} value={technician.name}>{technician.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {technicianSimilarityMessage ? (
+                  <p className="rounded-md border border-amber-300 bg-amber-50 px-2.5 py-2 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-200">
+                    {technicianSimilarityMessage}
+                  </p>
+                ) : null}
               </div>
             </div>
             <div className="grid gap-2">

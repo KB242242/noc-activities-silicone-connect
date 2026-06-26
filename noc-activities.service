@@ -1,0 +1,23 @@
+[Unit]
+Description=NOC Activities - Next.js Application
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=noc
+WorkingDirectory=/opt/noc-activities
+Environment="NODE_ENV=production"
+Environment="SMTP_HOST=127.0.0.1"
+Environment="SMTP_PORT=25"
+Environment="SMTP_SECURE=false"
+Environment="SMTP_FROM=NOC Silicone Connect <noc@siliconeconnect.com>"
+ExecStart=/usr/bin/bun start
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=noc-activities
+
+[Install]
+WantedBy=multi-user.target

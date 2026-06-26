@@ -27,9 +27,9 @@ const STORE_FILE = path.join(process.cwd(), 'data', 'ticket_settings.json');
 const DEFAULT_SETTINGS: TicketSettings = {
   numberFormat: '#SC{date}-{seq}',
   numberSeed: 100000000,
-  notificationEmails: ['kevinebauer7@gmail.com'],
+  notificationEmails: ['noc@siliconeconnect.com'],
   supportCopyEmail: 'support@siliconeconnect.com',
-  technicianFallbackEmail: 'kevinebauer7@gmail.com',
+  technicianFallbackEmail: 'noc@siliconeconnect.com',
   lifecycleEmailEvents: {
     creation: true,
     pending: true,
